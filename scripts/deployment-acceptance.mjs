@@ -6,6 +6,11 @@ import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { inspectProductionBuild } from "./production-build.mjs";
 import { collectReleaseEvidence } from "./release-evidence.mjs";
+import {
+  CONTENT_SECURITY_POLICY,
+  DENIED_PERMISSION_FEATURES,
+  PERMISSIONS_POLICY,
+} from "./http-security.mjs";
 
 const HOST = "127.0.0.1";
 
@@ -166,14 +171,21 @@ function expectDeploymentVerificationCli(evidence, port) {
 
 function expectSecurityHeaders(response, label) {
   const csp = response.headers["content-security-policy"] ?? "";
+  expect(csp === CONTENT_SECURITY_POLICY, `${label} changed the exact production CSP.`);
   for (const directive of [
-    "default-src 'self'",
+    "default-src 'none'",
     "base-uri 'none'",
     "object-src 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
+    "font-src 'none'",
+    "frame-src 'none'",
+    "manifest-src 'none'",
+    "media-src 'none'",
     "script-src 'self'",
     "connect-src 'self' https: wss:",
+    "trusted-types 'none'",
+    "require-trusted-types-for 'script'",
   ]) {
     expect(csp.includes(directive), `${label} omitted CSP directive: ${directive}`);
   }
@@ -184,8 +196,9 @@ function expectSecurityHeaders(response, label) {
   expect(response.headers["x-content-type-options"] === "nosniff", `${label} permitted MIME sniffing.`);
   expect(response.headers["x-frame-options"] === "DENY", `${label} permitted framing.`);
   const permissions = response.headers["permissions-policy"] ?? "";
-  for (const feature of ["camera=()", "clipboard-read=()", "clipboard-write=()", "geolocation=()", "microphone=()", "payment=()", "usb=()"]) {
-    expect(permissions.includes(feature), `${label} did not disable ${feature}.`);
+  expect(permissions === PERMISSIONS_POLICY, `${label} changed the exact production Permissions-Policy.`);
+  for (const feature of DENIED_PERMISSION_FEATURES) {
+    expect(permissions.includes(`${feature}=()`), `${label} did not disable ${feature}.`);
   }
 }
 

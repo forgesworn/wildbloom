@@ -29,8 +29,11 @@ the finish line.
   after failed local decryption, swarm-consent withdrawal and source change,
   before browser closure. A failed recovery exposes no save link and a correct
   retry must complete through a new peer session.
-- Response CSP, framing, referrer, permissions and MIME-sniffing headers,
-  including denial of Clipboard API access.
+- Exact response CSP, framing, referrer, permissions and MIME-sniffing headers:
+  fail-closed resource defaults, explicit denial of unused fonts, frames,
+  manifests and media, Trusted Types enforcement where implemented, and denial
+  of every declared unused browser capability. Browser acceptance confirms
+  that supported declared features are actually unavailable.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,
   traversal, source-map and repository-file rejection.

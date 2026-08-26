@@ -86,9 +86,12 @@ The TLS reverse proxy must:
 - expose `/healthz` without weakening the application headers;
 - provide atomic release switching and a tested rollback.
 
-The CSP permits arbitrary HTTPS/WSS because users select their own Nostr,
-Blossom and tracker endpoints. Runtime validation still restricts schemes,
-credentials, endpoint counts, onion addresses and redirects.
+The CSP is fail-closed for resource types Wildbloom does not use and permits
+arbitrary HTTPS/WSS connections because users select their own Nostr, Blossom
+and tracker endpoints. Runtime validation still restricts schemes,
+credentials, endpoint counts, onion addresses and redirects. Do not replace
+the exact CSP or Permissions-Policy with a hosting provider's broader defaults;
+deployment verification treats any policy drift as a failure.
 
 Wildbloom configures WebTorrent with no public ICE servers. Do not add STUN or
 TURN defaults at the hosting edge or by patching the bundle. An operator ICE

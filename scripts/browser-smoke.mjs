@@ -11,6 +11,11 @@ import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
 import {
+  CONTENT_SECURITY_POLICY,
+  DENIED_PERMISSION_FEATURES,
+  PERMISSIONS_POLICY,
+} from "./http-security.mjs";
+import {
   generateKnownAnswerEnvelope,
   generateMultiRecordKnownAnswerEnvelope,
 } from "./encryption-vector.mjs";
@@ -506,11 +511,11 @@ try {
 
   const headersResponse = await fetch(ORIGIN);
   const csp = headersResponse.headers.get("content-security-policy") ?? "";
-  if (!csp.includes("frame-ancestors 'none'") || headersResponse.headers.get("x-frame-options") !== "DENY") {
+  if (csp !== CONTENT_SECURITY_POLICY || headersResponse.headers.get("x-frame-options") !== "DENY") {
     throw new Error("Production response security headers are missing.");
   }
   const permissionsPolicy = headersResponse.headers.get("permissions-policy") ?? "";
-  if (!["camera=()", "clipboard-read=()", "clipboard-write=()"].every((feature) => permissionsPolicy.includes(feature))) {
+  if (permissionsPolicy !== PERMISSIONS_POLICY) {
     throw new Error("Production response Permissions-Policy is missing.");
   }
   if ((await fetch(`${ORIGIN}/healthz`, { method: "POST" })).status !== 405) {
@@ -586,6 +591,37 @@ try {
 
   await page.goto(ORIGIN, { waitUntil: "networkidle" });
   if (remoteRequests.length !== 0) throw new Error(`Page made ambient remote requests: ${remoteRequests.join(", ")}`);
+  const browserPolicy = await page.evaluate((deniedFeatures) => {
+    const policy = document.permissionsPolicy ?? document.featurePolicy;
+    const supported = typeof policy?.features === "function" ? new Set(policy.features()) : new Set();
+    const allowed = deniedFeatures.filter(
+      (feature) => supported.has(feature) && policy.allowsFeature(feature),
+    );
+    let trustedTypesEnforced = null;
+    let trustedTypesPoliciesBlocked = null;
+    if (window.trustedTypes) {
+      const probe = document.createElement("div");
+      try {
+        probe.innerHTML = "<span>blocked probe</span>";
+        trustedTypesEnforced = false;
+      } catch (error) {
+        trustedTypesEnforced = error instanceof TypeError;
+      }
+      try {
+        window.trustedTypes.createPolicy("wildbloom-acceptance-probe", { createHTML: (value) => value });
+        trustedTypesPoliciesBlocked = false;
+      } catch (error) {
+        trustedTypesPoliciesBlocked = error instanceof TypeError;
+      }
+    }
+    return { allowed, supportedCount: supported.size, trustedTypesEnforced, trustedTypesPoliciesBlocked };
+  }, DENIED_PERMISSION_FEATURES);
+  if (browserPolicy.allowed.length > 0) {
+    throw new Error(`Browser allowed denied capabilities: ${browserPolicy.allowed.join(", ")}`);
+  }
+  if (browserPolicy.trustedTypesEnforced === false || browserPolicy.trustedTypesPoliciesBlocked === false) {
+    throw new Error(`Browser did not enforce the Trusted Types boundary: ${JSON.stringify(browserPolicy)}`);
+  }
   const protectedControls = [
     "blossom-server",
     "relay-urls",
@@ -1024,7 +1060,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published one- and two-record known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: exact fail-closed response policy, supported browser capabilities denied, Trusted Types enforced when implemented, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published one- and two-record known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

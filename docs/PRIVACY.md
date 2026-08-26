@@ -95,11 +95,26 @@ setting from enabling dependency diagnostics in production.
 
 Secret and machine-formatted controls ask the browser not to autofill,
 autocapitalise, autocorrect, spellcheck or translate their values. The response
-Permissions-Policy denies Clipboard API reads and writes; ordinary deliberate
-copy and paste through browser or operating-system controls still works. These
-are browser hints and containment controls, not secure deletion: a browser,
-extension, input method, clipboard manager or operating system may retain or
-synchronise data outside Wildbloom's control. Close the tab after use.
+Permissions-Policy denies Clipboard API reads and writes and a broad explicit
+set of browser capabilities Wildbloom does not need, including camera,
+microphone, location, screen capture, local-font access, device APIs, federated
+credentials, payments and advertising surfaces. Ordinary deliberate copy and
+paste through browser or operating-system controls still works. Unsupported
+policy features are ignored by that browser, so the header is containment
+rather than a claim that every engine implements every control.
+
+The Content Security Policy starts from `default-src 'none'`, explicitly denies
+fonts, frames, manifests and media, and reopens only the scripts, styles,
+images, connections and workers the application needs. Supporting Chromium
+engines also enforce Trusted Types at DOM injection sinks while permitting no
+application policy to turn strings back into trusted markup. Firefox and
+WebKit rely on the remaining CSP boundaries where they do not implement
+Trusted Types.
+
+These are browser hints and containment controls, not secure deletion: a
+browser, extension, input method, clipboard manager or operating system may
+retain or synchronise data outside Wildbloom's control. Close the tab after
+use.
 
 Navigating away ends the page session: Wildbloom invalidates pending results,
 aborts active work, starts peer cleanup, clears file and endpoint selections,

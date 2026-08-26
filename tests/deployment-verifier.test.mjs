@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { sha3_256 } from "@noble/hashes/sha3.js";
 import { describe, expect, it } from "vitest";
-import { SECURITY_HEADERS } from "../scripts/http-security.mjs";
+import {
+  CONTENT_SECURITY_POLICY,
+  DENIED_PERMISSION_FEATURES,
+  META_CONTENT_SECURITY_POLICY,
+  PERMISSIONS_POLICY,
+  SECURITY_HEADERS,
+} from "../scripts/http-security.mjs";
 import {
   assertHsts,
   assertSecurityHeaders,
@@ -118,6 +125,47 @@ describe("release evidence validation", () => {
 });
 
 describe("deployed security-header validation", () => {
+  it("fails closed for unused resource types, DOM injection sinks and browser capabilities", () => {
+    for (const directive of [
+      "default-src 'none'",
+      "font-src 'none'",
+      "frame-src 'none'",
+      "manifest-src 'none'",
+      "media-src 'none'",
+      "trusted-types 'none'",
+      "require-trusted-types-for 'script'",
+    ]) {
+      expect(CONTENT_SECURITY_POLICY).toContain(directive);
+    }
+    expect(CONTENT_SECURITY_POLICY).not.toMatch(/'unsafe-(?:eval|inline)'/u);
+    expect(DENIED_PERMISSION_FEATURES).toEqual([...DENIED_PERMISSION_FEATURES].sort());
+    expect(new Set(DENIED_PERMISSION_FEATURES).size).toBe(DENIED_PERMISSION_FEATURES.length);
+    for (const feature of [
+      "attribution-reporting",
+      "camera",
+      "clipboard-read",
+      "digital-credentials-get",
+      "display-capture",
+      "geolocation",
+      "identity-credentials-get",
+      "local-fonts",
+      "microphone",
+      "payment",
+      "storage-access",
+      "tools",
+      "usb",
+    ]) {
+      expect(DENIED_PERMISSION_FEATURES).toContain(feature);
+      expect(PERMISSIONS_POLICY).toContain(`${feature}=()`);
+    }
+  });
+
+  it("keeps the static-document CSP aligned with the response policy", () => {
+    const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    const metaPolicy = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/u.exec(source)?.[1];
+    expect(metaPolicy).toBe(META_CONTENT_SECURITY_POLICY);
+  });
+
   it("requires the exact production policy and at least one year of HSTS", () => {
     const headers = new Headers(SECURITY_HEADERS);
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

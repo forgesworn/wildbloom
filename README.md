@@ -105,12 +105,15 @@ production build,
 adversarial deployment acceptance, a real headless-browser acceptance path and
 the local secret scanner. The deployment gate verifies the
 exact served build hashes, strict immutable asset names, no-store HTML, health
-and error responses, response security headers and hostile host, method and
-path rejection. CI runs the browser path in system Chromium on Windows, Linux
-and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
-response security headers, zero ambient network activity, protected browser
-input hints, and no cookies, persistent browser-store mutations or retained
-browser state after the journey. Each hosted browser engine also rejects a
+and error responses, exact fail-closed response security headers and hostile
+host, method and path rejection. CI runs the browser path in system Chromium on
+Windows, Linux and macOS, Playwright Firefox on Linux and Playwright WebKit on
+macOS. It proves response security headers, zero ambient network activity,
+denial of supported unused browser capabilities, protected browser input hints,
+and no cookies, persistent browser-store mutations or retained browser state
+after the journey. Chromium additionally proves that DOM injection sinks
+require Trusted Types while application-created policies are forbidden. Each
+hosted browser engine also rejects a
 wrong key for the published independent AES-GCM vectors without exposing a
 save link, then recovers both exact sources across the authenticated chunk
 boundary. The journey exercises encrypted upload, exact Blossom authority,
