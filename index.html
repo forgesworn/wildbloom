@@ -45,9 +45,12 @@
           </label>
         </fieldset>
         <p id="tor-boundary" class="privacy-boundary" hidden>
-          Wildbloom cannot prove that this browser is using Tor. Tor-only mode
-          refuses clearnet endpoints and disables WebRTC, but a NIP-07 add-on or
-          reused Nostr key can still fingerprint or identify you.
+          Use Tor Browser rather than SOCKS-proxying a normal browser. Wildbloom
+          cannot prove that this browser is using Tor; an ordinary browser lacks
+          Tor Browser's fingerprint protections and may not provide Web Crypto
+          on HTTP onion origins. Tor-only mode refuses clearnet endpoints and
+          disables WebRTC, but a NIP-07 add-on or reused Nostr key can still
+          fingerprint or identify you.
         </p>
 
         <div class="grid three">

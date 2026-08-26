@@ -439,6 +439,9 @@ try {
   if (!(await page.locator("#upload-consent-copy").textContent())?.includes("encrypted bytes")) {
     throw new Error("The default encryption choice is not reflected in the upload authority copy.");
   }
+  if (!(await page.locator("#tor-boundary").textContent())?.includes("Use Tor Browser rather than SOCKS-proxying a normal browser")) {
+    throw new Error("Tor boundary did not reject an ordinary proxied browser as an anonymity substitute.");
+  }
   await assertAccessible(page, "Initial production page");
   await assertKeyboardEntry(page, browserName);
   await assertAdaptivePresentation(page, browserName);

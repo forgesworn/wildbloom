@@ -47,11 +47,14 @@ the file.
 - **Tor-only encrypted delivery:** exact checksum-valid v3 onion services for
   Nostr and Blossom. Clearnet endpoints, trackers and WebRTC are refused.
 
-Tor-only mode does not prove that the browser is actually using Tor. The Tor
-Project also discourages both torrenting over Tor and installing extra Tor
-Browser add-ons. A NIP-07 add-on or reused Nostr identity therefore remains an
-identity and fingerprinting boundary. Read [`docs/PRIVACY.md`](docs/PRIVACY.md)
-before treating Tor as useful for a particular threat model.
+Use Tor Browser for Tor-only mode, not an ordinary browser pointed at a SOCKS
+proxy. Wildbloom cannot prove that the browser is actually using Tor, and a
+normal browser lacks Tor Browser's fingerprint protections and may not provide
+Web Crypto on HTTP onion origins. The Tor Project also discourages both
+torrenting over Tor and installing extra Tor Browser add-ons. A NIP-07 add-on
+or reused Nostr identity therefore remains an identity and fingerprinting
+boundary. Read [`docs/PRIVACY.md`](docs/PRIVACY.md) before treating Tor as
+useful for a particular threat model.
 
 ## Run it locally
 

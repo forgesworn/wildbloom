@@ -38,6 +38,12 @@ Tor onion services provide end-to-end encrypted TCP connections, but the app
 cannot inspect the browser's proxy configuration and therefore cannot prove
 that Tor is in use.
 
+Use Tor Browser rather than configuring an ordinary browser with a Tor SOCKS
+proxy. A normal browser does not acquire Tor Browser's anti-fingerprinting
+behaviour, and HTTP onion origins may not be treated as secure contexts with
+Web Crypto available. Wildbloom does not apply a production secure-origin
+override to disguise that failure.
+
 The automated transport gate does use a real Tor daemon and fresh v3 onion
 services for the app, Blossom and relay. It proves the application has no
 clearnet or WebRTC fallback in that controlled run. Because stock Chromium
