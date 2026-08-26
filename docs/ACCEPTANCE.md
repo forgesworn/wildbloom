@@ -17,9 +17,9 @@ the finish line.
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
   application network or signer, external-signature encrypted upload and
   two-event relay publication, exact Blossom and real WebRTC-peer recovery,
-  host-only ICE, peer cleanup after failed decryption and consent withdrawal,
-  an independently generated encrypted fixture, relay timeout, partial-body
-  cancellation and denied-service failure.
+  host-only ICE, peer cleanup after failed decryption, consent withdrawal and
+  page lifecycle teardown, an independently generated encrypted fixture, relay
+  timeout, partial-body cancellation and denied-service failure.
 - Two isolated Chromium contexts publishing and retrieving the encrypted file
   through a real, ephemeral TLS WebSocket tracker.
 - Exact source recovery while the controlled Blossom web seed refuses every
@@ -44,6 +44,10 @@ the finish line.
 - Peer journeys preserve but do not consume a hostile pre-existing
   `localStorage.debug` preference, emit no dependency debug diagnostics, then
   leave no browser state after the harness removes its fixture.
+- Page lifecycle teardown clears recovery material, file and endpoint
+  selections, signing handoff JSON, signer identity, object URLs and every
+  consent. Navigation away and back cannot restore network authority; an active
+  peer downloader must also leave the controlled tracker before page closure.
 - Randomised local encryption and recovery-key gate.
 - Blossom upload of ciphertext rather than source bytes.
 - Exact hash, server and 90-second BUD-11 upload authority.

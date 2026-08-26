@@ -343,6 +343,66 @@ async function assertAdaptivePresentation(page, browserName) {
   }
 }
 
+async function assertPageSessionCleared(page, label, requireLifecycleMessage = true) {
+  const state = await page.evaluate(() => ({
+    values: Object.fromEntries([
+      "blossom-server",
+      "relay-urls",
+      "tracker-urls",
+      "external-signer-pubkey",
+      "recovery-key-output",
+      "external-unsigned-event",
+      "external-signed-event",
+      "event-id",
+      "recovery-key-input",
+    ].map((id) => [id, document.querySelector(`#${id}`)?.value ?? null])),
+    consents: Object.fromEntries([
+      "tor-consent",
+      "upload-consent",
+      "key-saved-consent",
+      "seed-consent",
+      "publish-consent",
+      "download-swarm-consent",
+    ].map((id) => [id, document.querySelector(`#${id}`)?.checked ?? null])),
+    fileCount: document.querySelector("#publish-file")?.files?.length ?? null,
+    recoveryPanelHidden: document.querySelector("#recovery-key-panel")?.hidden ?? null,
+    recoveryFieldHidden: document.querySelector("#recovery-key-field")?.hidden ?? null,
+    externalPanelHidden: document.querySelector("#external-signing-panel")?.hidden ?? null,
+    signerStatus: document.querySelector("#signer-status")?.textContent ?? "",
+    publishStatus: document.querySelector("#publish-status")?.textContent ?? "",
+    publishLinks: document.querySelectorAll("#publish-links a, #recovery-links a, #external-signing-links a").length,
+    retrieveLinks: document.querySelectorAll("#retrieve-links a").length,
+    objectUrls: window.__wildbloomObservedObjectUrls?.size ?? null,
+    disabled: Object.fromEntries([
+      "upload-file",
+      "start-seeding",
+      "stop-seeding",
+      "sign-events",
+      "publish-events",
+      "fetch-blossom",
+      "fetch-swarm",
+      "cancel-download",
+    ].map((id) => [id, document.querySelector(`#${id}`)?.disabled ?? null])),
+  }));
+  const retainedValues = Object.entries(state.values).filter(([, value]) => value !== "");
+  const retainedConsents = Object.entries(state.consents).filter(([, checked]) => checked !== false);
+  const enabledAuthority = Object.entries(state.disabled).filter(([, disabled]) => disabled !== true);
+  if (retainedValues.length > 0
+    || retainedConsents.length > 0
+    || enabledAuthority.length > 0
+    || state.fileCount !== 0
+    || state.recoveryPanelHidden !== true
+    || state.recoveryFieldHidden !== true
+    || state.externalPanelHidden !== true
+    || !state.signerStatus.includes("not connected")
+    || (requireLifecycleMessage && !state.publishStatus.includes("session cleared"))
+    || state.publishLinks !== 0
+    || state.retrieveLinks !== 0
+    || state.objectUrls !== 0) {
+    throw new Error(`${label} retained page-session authority: ${JSON.stringify(state)}`);
+  }
+}
+
 async function waitForServer(server) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -827,6 +887,27 @@ try {
     throw new Error("A profile change retained external signer identity or publication authority.");
   }
 
+  const lifecycleRecoveryKey = await page.inputValue("#recovery-key-output");
+  if (!/^wbk1_[A-Za-z0-9_-]{43}$/u.test(lifecycleRecoveryKey)) {
+    throw new Error("Lifecycle acceptance did not begin with a live recovery key.");
+  }
+  await page.evaluate((recoveryKey) => {
+    document.querySelector("#recovery-key-input").value = recoveryKey;
+    document.querySelector("#external-signer-pubkey").value = "ab".repeat(32);
+    document.querySelector("#external-unsigned-event").value = "sensitive unsigned event";
+    document.querySelector("#external-signed-event").value = "sensitive signed event";
+    document.querySelector("#event-id").value = "cd".repeat(32);
+    for (const id of ["tor-consent", "upload-consent", "key-saved-consent", "seed-consent", "publish-consent", "download-swarm-consent"]) {
+      document.querySelector(`#${id}`).checked = true;
+    }
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  }, lifecycleRecoveryKey);
+  await assertPageSessionCleared(page, `${browserName} pagehide`);
+  await page.goto(`${ORIGIN}/healthz`);
+  await page.goBack({ waitUntil: "networkidle" });
+  await page.locator("#publish-status").waitFor();
+  await assertPageSessionCleared(page, `${browserName} navigation return`, false);
+
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
   if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
@@ -836,7 +917,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

@@ -445,6 +445,38 @@ try {
     throw new Error("Withdrawing swarm consent retained peer-download authority.");
   }
 
+  await downloader.page.fill("#recovery-key-input", recoveryKey);
+  await downloader.page.check("#download-swarm-consent");
+  await downloader.page.click("#fetch-swarm");
+  await downloader.page.locator("#retrieve-status").filter({ hasText: "Swarm ciphertext" }).waitFor({ timeout: 60_000 });
+  await waitFor(() => peerCount(tracker, infoHash) >= 2, 10_000, "The downloader did not rejoin before page-lifecycle teardown.");
+  await downloader.page.evaluate(() => {
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  });
+  await waitFor(() => peerCount(tracker, infoHash) <= 1, 10_000, "Page lifecycle teardown did not stop the downloading peer.");
+  const lifecycleState = await downloader.page.evaluate(() => ({
+    recoveryKey: document.querySelector("#recovery-key-input")?.value,
+    eventId: document.querySelector("#event-id")?.value,
+    blossom: document.querySelector("#blossom-server")?.value,
+    relay: document.querySelector("#relay-urls")?.value,
+    tracker: document.querySelector("#tracker-urls")?.value,
+    swarmConsent: document.querySelector("#download-swarm-consent")?.checked,
+    swarmDisabled: document.querySelector("#fetch-swarm")?.disabled,
+    links: document.querySelectorAll("#retrieve-links a").length,
+    status: document.querySelector("#retrieve-status")?.textContent,
+  }));
+  if (lifecycleState.recoveryKey !== ""
+    || lifecycleState.eventId !== ""
+    || lifecycleState.blossom !== ""
+    || lifecycleState.relay !== ""
+    || lifecycleState.tracker !== ""
+    || lifecycleState.swarmConsent !== false
+    || lifecycleState.swarmDisabled !== true
+    || lifecycleState.links !== 0
+    || !lifecycleState.status?.includes("session cleared")) {
+    throw new Error(`Page lifecycle teardown retained downloader state: ${JSON.stringify(lifecycleState)}`);
+  }
+
   await publisher.page.setInputFiles("#publish-file", {
     name: "replacement.txt",
     mimeType: "text/plain",
@@ -463,7 +495,7 @@ try {
   if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the downloader restored a withdrawn peer session.");
 
   process.stdout.write(
-    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE, stored-debug isolation, no retained browser state and confirmed peer cleanup after failed decryption, consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
+    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE, stored-debug isolation, no retained browser state and confirmed peer cleanup after failed decryption, consent withdrawal, page lifecycle teardown and source change (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } catch (error) {
   const diagnostics = [];

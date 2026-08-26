@@ -74,6 +74,7 @@
 | User withdraws swarm consent after verified bytes arrive | Confirm destruction of the retained peer session before reporting that participation stopped; if cleanup cannot be confirmed, instruct the user to close the tab |
 | Browser or dependency attempts to persist state | Production code uses no cookie or persistent browser store; acceptance instruments mutations and requires empty cookies, local/session storage, IndexedDB, Cache Storage and service-worker registrations after the journey |
 | A stale `localStorage.debug` preference enables WebTorrent diagnostics | Mask only that preference during the lazy dependency import, preserve the stored value unchanged, and prove that peer journeys emit no debug output |
+| Navigation or back-forward cache retains recovery material or network authority | On `pagehide`, invalidate pending results, abort work, clear page memory and controls, revoke object URLs and start peer cleanup; force a fresh document if BFCache restores the page |
 
 ## Before any public deployment
 

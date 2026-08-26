@@ -121,7 +121,10 @@ stops the publishing peer. Browser acceptance also
 interrupts a real hung upload and partial download, checks that cancellation closes the
 connection, removes stale output and permits a safe retry. It scans five
 dynamic states with axe-core WCAG A/AA rules and proves visible keyboard focus
-and keyboard-triggered reveal and cancellation actions. See
+and keyboard-triggered reveal and cancellation actions. Page lifecycle
+acceptance clears secrets, signer state, object URLs and network authority on
+navigation, proves an active downloader leaves the tracker, and prevents a
+back-forward-cache return from reviving the old heap. See
 [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) for the remaining human review.
 `ci` additionally audits dependencies. The audit script has one fail-closed
 exception for an `ip` advisory reachable only from WebTorrent's Node UDP-tracker
@@ -137,7 +140,8 @@ signer, external-signature encrypted upload and relay publication, exact
 recovery through both Blossom and a second real Firefox WebRTC peer, host-only
 ICE, peer cleanup after failed decryption and consent withdrawal, an
 independently generated fixture, timeout, cancellation and denied-service
-failure.
+failure. The active peer is also required to leave the tracker when the page
+session ends.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

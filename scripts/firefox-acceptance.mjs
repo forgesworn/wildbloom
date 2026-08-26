@@ -840,6 +840,47 @@ try {
     throw new Error(`Withdrawing genuine Firefox swarm consent retained authority: ${JSON.stringify(withdrawn)}.`);
   }
 
+  await setValue(downloaderRecord, "#recovery-key-input", prepared.recoveryKey);
+  await setChecked(downloaderRecord, "#download-swarm-consent", true);
+  await click(downloaderRecord, "#fetch-swarm");
+  await waitForText(downloaderRecord, "#retrieve-status", /Swarm ciphertext/iu, PEER_TIMEOUT_MS);
+  await waitFor(
+    () => peerCount(tracker, infoHash) >= 2,
+    ACTION_TIMEOUT_MS,
+    "The genuine Firefox downloader did not rejoin before page-lifecycle teardown.",
+  );
+  await evaluate(downloaderRecord, `(() => {
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+    return true;
+  })()`);
+  await waitFor(
+    () => peerCount(tracker, infoHash) <= 1,
+    ACTION_TIMEOUT_MS,
+    "Genuine Firefox page lifecycle teardown did not stop the downloading peer.",
+  );
+  const lifecycleCleared = await evaluate(downloaderRecord, `(() => ({
+    recoveryKey: document.querySelector("#recovery-key-input")?.value,
+    eventId: document.querySelector("#event-id")?.value,
+    blossom: document.querySelector("#blossom-server")?.value,
+    relay: document.querySelector("#relay-urls")?.value,
+    tracker: document.querySelector("#tracker-urls")?.value,
+    consent: document.querySelector("#download-swarm-consent")?.checked,
+    fetchDisabled: document.querySelector("#fetch-swarm")?.disabled,
+    links: document.querySelectorAll("#retrieve-links a").length,
+    status: document.querySelector("#retrieve-status")?.textContent ?? "",
+  }))()`);
+  if (lifecycleCleared.recoveryKey !== ""
+    || lifecycleCleared.eventId !== ""
+    || lifecycleCleared.blossom !== ""
+    || lifecycleCleared.relay !== ""
+    || lifecycleCleared.tracker !== ""
+    || lifecycleCleared.consent !== false
+    || lifecycleCleared.fetchDisabled !== true
+    || lifecycleCleared.links !== 0
+    || !lifecycleCleared.status.includes("session cleared")) {
+    throw new Error(`Genuine Firefox page lifecycle retained retrieval authority: ${JSON.stringify(lifecycleCleared)}.`);
+  }
+
   await evaluate(record, `(() => {
     const input = document.querySelector("#publish-file");
     if (!(input instanceof HTMLInputElement)) throw new Error("Publication file input is missing.");
@@ -951,7 +992,7 @@ try {
     throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors, ...trackerErrors].join("; ")}`);
   }
   process.stdout.write(
-    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption and consent withdrawal, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
+    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption, consent withdrawal and page lifecycle teardown, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } finally {
   await closeFirefox(downloaderRecord).catch(() => undefined);

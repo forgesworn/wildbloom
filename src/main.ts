@@ -113,6 +113,7 @@ let downloadTransport: "blossom" | "swarm" | null = null;
 let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
+let pageSessionEnded = false;
 const objectUrls = new Set<string>();
 const SAFE_DOWNLOAD_MIME_TYPE = "application/octet-stream";
 type SigningMethod = "nip07" | "external";
@@ -997,16 +998,38 @@ cancelDownloadButton.addEventListener("click", () => {
   setStatus(retrieveStatus, "Cancelling the active download…");
 });
 
-window.addEventListener("beforeunload", () => {
-  if (seedSession) void seedSession.stop().catch(() => undefined);
-  if (downloadSession) void downloadSession.stop().catch(() => undefined);
-  inspectionController?.abort();
-  uploadController?.abort();
-  lookupController?.abort();
-  publishController?.abort();
-  downloadController?.abort();
-  seedController?.abort();
+function endPageSession(): void {
+  if (pageSessionEnded) return;
+  pageSessionEnded = true;
+  profileRevision += 1;
+  const peerSessions = [seedSession, downloadSession].filter((session): session is StopHandle => session !== null);
+  seedSession = null;
+  downloadSession = null;
+  resetInspection();
+  resetResolution();
+  pubkey = null;
+  fileInput.value = "";
+  blossomInput.value = "";
+  relayInput.value = "";
+  trackerInput.value = "";
+  eventIdInput.value = "";
+  externalPubkeyInput.value = "";
+  torConsent.checked = false;
+  signerStatus.textContent = "Signer not connected; the previous page session ended";
   for (const url of objectUrls) URL.revokeObjectURL(url);
+  objectUrls.clear();
+  applyProfile();
+  applySigningMethod();
+  setStatus(publishStatus, "Previous page session cleared during navigation. Re-enter the file, endpoints and signer to begin again.");
+  setStatus(retrieveStatus, "Previous page session cleared during navigation. Resolve the signed event again to begin a new retrieval.");
+  for (const session of peerSessions) void session.stop().catch(() => undefined);
+}
+
+window.addEventListener("pagehide", endPageSession);
+window.addEventListener("pageshow", (event) => {
+  // A restored page would otherwise keep the old JavaScript heap. Recreate the
+  // document after clearing it so a BFCache return always starts a new session.
+  if (event.persisted) window.location.reload();
 });
 
 applyProfile();

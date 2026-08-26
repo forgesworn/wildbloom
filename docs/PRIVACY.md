@@ -101,6 +101,15 @@ are browser hints and containment controls, not secure deletion: a browser,
 extension, input method, clipboard manager or operating system may retain or
 synchronise data outside Wildbloom's control. Close the tab after use.
 
+Navigating away ends the page session: Wildbloom invalidates pending results,
+aborts active work, starts peer cleanup, clears file and endpoint selections,
+recovery material, external-signing JSON, signer identity and every consent,
+then revokes its object URLs. A browser that restores the document from its
+back-forward cache is forced to create a fresh document rather than reviving
+the old JavaScript heap. Browser acceptance exercises both the page-lifecycle
+event and a real navigation away and back. Browser, operating-system and
+extension copies remain outside Wildbloom's secure-deletion control.
+
 ## Operational rules
 
 - Do not send the event ID and recovery key through the same observable
