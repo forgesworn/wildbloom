@@ -66,7 +66,7 @@ function requestedBrowser() {
   const inline = process.argv.find((argument) => argument.startsWith("--browser="));
   if (index >= 0 && !process.argv[index + 1]) throw new Error("--browser requires a value.");
   const value = index >= 0 ? process.argv[index + 1] : inline?.slice("--browser=".length) ?? "system-chromium";
-  if (value !== "system-chromium" && value !== "chromium") throw new Error(`Unsupported Tor acceptance browser: ${value}`);
+  if (value !== "system-chromium") throw new Error(`Unsupported Tor acceptance browser: ${value}`);
   return value;
 }
 
@@ -384,7 +384,7 @@ try {
   const browserName = requestedBrowser();
   browser = await chromium.launch({
     headless: true,
-    ...(browserName === "system-chromium" ? { executablePath: findChrome() } : {}),
+    executablePath: findChrome(),
     // Chromium does not classify HTTP onion origins as potentially trustworthy.
     // This override lets Chromium exercise the required Web Crypto path while
     // branded Tor Browser behaviour remains a separate manual release gate.

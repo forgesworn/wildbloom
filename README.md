@@ -94,14 +94,14 @@ audits dependencies. The audit script has one fail-closed exception for an
 Wildbloom imports the prebuilt browser bundle, and the exception fails if the
 package's browser exclusions change. Every other advisory still fails CI.
 
-`acceptance:tor` requires a local Tor executable and installed Playwright
-Chromium. It creates fresh disposable v3 onion services for the app, Blossom
-and a Nostr relay, then performs encrypted publication and exact recovery
-through a real Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only
-secure-origin override for Web Crypto on HTTP onion origins. This proves onion
-transport and fail-closed behaviour, not interaction in branded Tor Browser;
-that remains a manual release gate. The separate GitHub
-`tor-acceptance` workflow runs this gate on demand.
+`acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
+It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
+relay, then performs encrypted publication and exact recovery through a real
+Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only secure-origin
+override for Web Crypto on HTTP onion origins. This proves onion transport and
+fail-closed behaviour, not interaction in branded Tor Browser; that remains a
+manual release gate. The separate GitHub `tor-acceptance` workflow runs this
+gate on demand.
 
 ## What publication reveals
 

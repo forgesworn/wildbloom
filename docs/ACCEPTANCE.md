@@ -64,12 +64,11 @@ macOS CI job.
 
 ## Real Tor transport gate
 
-Run this separately with Tor and Playwright Chromium installed:
+Run this separately with Tor and system Chrome or Chromium installed:
 
 ```sh
-npx playwright-core install chromium
 npm run build
-npm run acceptance:tor -- --browser chromium
+npm run acceptance:tor -- --browser system-chromium
 ```
 
 The gate launches a fresh Tor daemon with cookie-authenticated loopback

@@ -19,6 +19,5 @@ jobs:
           cache: npm
       - run: sudo apt-get update && sudo apt-get install --yes tor
       - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
       - run: npm run build
-      - run: npm run acceptance:tor -- --browser chromium
+      - run: npm run acceptance:tor -- --browser system-chromium
