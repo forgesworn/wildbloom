@@ -86,6 +86,12 @@ npm run build
 npm run acceptance:tor -- --browser system-chromium
 ```
 
+Where a branded Tor Browser binary is installed, run the extended gate:
+
+```sh
+npm run acceptance:tor-browser
+```
+
 The gate launches a fresh Tor daemon with cookie-authenticated loopback
 control and disposable v3 onion services for the production app, Blossom and
 Nostr relay. It publishes only ciphertext, receives the exact relay
@@ -104,11 +110,21 @@ After `NEWNYM`, the fresh browser context must independently re-establish both
 controlled service onions before the one-shot signed-event lookup begins; the
 product's bounded relay timeout is not weakened or silently retried.
 
-Chromium does not treat HTTP onion origins as secure contexts, so the harness
-uses Chromium's test-only secure-origin override to exercise Wildbloom's Web
-Crypto path. The branded Tor Browser path is expected to supply that secure
-context, but remains part of its manual release gate. The automated gate is
-real Tor transport evidence, not branded Tor Browser interaction.
+The extended gate requests another `NEWNYM`, launches the actual Tor Project
+Firefox binary with a disposable profile and loopback-only WebDriver BiDi,
+and uses the controlled Tor daemon as its SOCKS transport. No signer extension
+or privileged browser access is enabled. It proves secure-context loading,
+exact onion authorities, a bounded relay timeout, cancellation of a partial
+Blossom response, exact signer-free recovery, absence of WebRTC and fail-closed
+service denial. The on-demand `tor-browser-acceptance` workflow downloads a
+pinned Linux Tor Browser archive and verifies its Tor Browser Developers
+signature before running the same gate.
+
+Chromium does not treat HTTP onion origins as secure contexts, so the base
+harness uses Chromium's test-only secure-origin override to exercise
+Wildbloom's Web Crypto path. Branded Tor Browser supplies the onion secure
+context without that override. Headless remote-control evidence is still not a
+human usability, fingerprint-equivalence or extension-free publication claim.
 
 ## Maximum source round-trip gate
 
@@ -132,10 +148,10 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 ## Release gates not yet satisfied
 
 - Independent cryptographic and browser security review.
-- Branded Tor Browser exercise against disposable real v3 onion Nostr and
-  Blossom services, including denial, cancellation, timeout and identity-change
-  behaviour. The automated Chromium gate proves real onion transport and
-  `NEWNYM`, but Playwright cannot drive the branded Tor Browser binary.
+- Human Tor Browser publication and retrieval review, including browser chrome,
+  security-level changes, new-identity behaviour, cancellation and timeout UI.
+  The automated headless branded-browser gate covers the content-engine
+  retrieval ceremony, not human usability or fingerprint equivalence.
 - A supported extension-free signer path for high-anonymity Tor publication.
 - Two-device WebTorrent seeding and retrieval across the intended production
   network boundary, with host-candidate and any future operator ICE traffic

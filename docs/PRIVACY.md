@@ -41,8 +41,11 @@ that Tor is in use.
 The automated transport gate does use a real Tor daemon and fresh v3 onion
 services for the app, Blossom and relay. It proves the application has no
 clearnet or WebRTC fallback in that controlled run. Because stock Chromium
-needs a test-only secure-origin override and is not Tor Browser, branded Tor
-Browser interaction remains separate acceptance evidence.
+needs a test-only secure-origin override, an extended gate rotates identity and
+repeats signer-free retrieval in a signed branded Tor Browser binary. The
+browser runs with a disposable profile, no signer extension and loopback-only
+WebDriver BiDi. This is automated content-engine evidence, not a claim that
+headless automation has the same fingerprint as ordinary Tor Browser use.
 
 Primary guidance:
 
@@ -60,7 +63,8 @@ discouraged from installing extra add-ons.
 
 Until Wildbloom has an independently reviewed extension-free signing path,
 Tor-only publication is a network-transport control rather than a claim of
-anonymous publication. Tor-only retrieval does not need a signer.
+anonymous publication. Tor-only retrieval does not need a signer and is covered
+by the extended branded-browser gate.
 
 Changing network profile or withdrawing Tor confirmation clears Wildbloom's
 connected signer identity and requires an explicit connection again. A signer

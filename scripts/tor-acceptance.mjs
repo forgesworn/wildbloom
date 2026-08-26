@@ -1,6 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createConnection } from "node:net";
 import { platform, tmpdir } from "node:os";
@@ -8,9 +8,11 @@ import { join } from "node:path";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium } from "playwright-core";
 import { WebSocketServer } from "ws";
+import { WebDriverBiDi } from "./webdriver-bidi.mjs";
 
 const HOST = "127.0.0.1";
 const ONION_ACTION_TIMEOUT_MS = 3 * 60 * 1000;
+const TOR_BOOTSTRAP_TIMEOUT_MS = 5 * 60 * 1000;
 const SOURCE_BYTES = Buffer.from("real onion transport proof", "utf8");
 const SECRET = new Uint8Array(32).fill(19);
 const PUBKEY = getPublicKey(SECRET);
@@ -62,6 +64,40 @@ function findChrome() {
   return executable(candidates, "Chrome or Chromium executable");
 }
 
+function findTorBrowser() {
+  const operatingSystem = platform();
+  const candidates = operatingSystem === "darwin"
+    ? [process.env.WILDBLOOM_TOR_BROWSER_PATH, "/Applications/Tor Browser.app/Contents/MacOS/firefox"]
+    : operatingSystem === "linux"
+      ? [
+          process.env.WILDBLOOM_TOR_BROWSER_PATH,
+          join(process.cwd(), ".artifacts", "tor-browser", "Browser", "firefox"),
+        ]
+      : [];
+  const binary = executable(candidates, "Branded Tor Browser executable");
+  const version = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 10_000 });
+  const output = `${version.stdout ?? ""}${version.stderr ?? ""}`.trim();
+  if (version.status !== 0 || !/Tor Project Firefox [0-9]/u.test(output)) {
+    throw new Error(`The selected executable did not identify as a branded Tor Browser build: ${output || "no version output"}`);
+  }
+  return { binary, version: output };
+}
+
+function brandedTorBrowserRequested() {
+  return process.argv.includes("--branded-tor-browser");
+}
+
+function brandedRequestAllowed(request, allowedOrigins) {
+  const actual = new URL(request);
+  return [...allowedOrigins].some((origin) => {
+    const allowed = new URL(origin);
+    if (actual.hostname !== allowed.hostname || actual.port !== allowed.port) return false;
+    if (actual.protocol === allowed.protocol) return true;
+    return (actual.protocol === "http:" && allowed.protocol === "ws:")
+      || (actual.protocol === "https:" && allowed.protocol === "wss:");
+  });
+}
+
 function requestedBrowser() {
   const index = process.argv.indexOf("--browser");
   const inline = process.argv.find((argument) => argument.startsWith("--browser="));
@@ -98,7 +134,7 @@ async function waitFor(predicate, milliseconds, message, intervalMs = 100) {
     if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  throw new Error(message);
+  throw new Error(typeof message === "function" ? message() : message);
 }
 
 function onionHostname(directory) {
@@ -150,6 +186,9 @@ async function stopChild(child) {
 let blossomOnionOrigin;
 let uploadedBytes;
 let uploadedHash;
+let blossomRetrievalMode = "normal";
+let hangingRetrievalStarted = 0;
+let hangingRetrievalClosed = 0;
 const blossomErrors = [];
 const blossomHosts = [];
 const blossom = createHttpServer((request, response) => {
@@ -193,6 +232,26 @@ const blossom = createHttpServer((request, response) => {
       return;
     }
     if (request.method === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
+      if (blossomRetrievalMode === "hanging") {
+        hangingRetrievalStarted += 1;
+        let counted = false;
+        const countClosure = () => {
+          if (counted) return;
+          counted = true;
+          hangingRetrievalClosed += 1;
+        };
+        request.once("aborted", countClosure);
+        response.once("close", () => {
+          if (!response.writableEnded) countClosure();
+        });
+        response.writeHead(200, {
+          ...cors,
+          "Content-Type": "application/vnd.wildbloom.encrypted",
+          "Content-Length": String(uploadedBytes.length),
+        });
+        response.write(uploadedBytes.subarray(0, Math.min(1024, uploadedBytes.length - 1)));
+        return;
+      }
       response.writeHead(200, {
         ...cors,
         "Content-Type": "application/vnd.wildbloom.encrypted",
@@ -211,6 +270,7 @@ const blossom = createHttpServer((request, response) => {
 });
 
 const relayEvents = new Map();
+let relaySilent = false;
 const relayErrors = [];
 const relayHosts = [];
 const relay = new WebSocketServer({ host: HOST, port: 0, maxPayload: 1024 * 1024 });
@@ -226,6 +286,7 @@ relay.on("connection", (socket, request) => {
         socket.send(JSON.stringify(["OK", event.id, true, "stored by real-onion relay"]));
       }
       if (message[0] === "REQ") {
+        if (relaySilent) return;
         const subscription = message[1];
         const event = relayEvents.get(message[2]?.ids?.[0]);
         if (event) socket.send(JSON.stringify(["EVENT", subscription, event]));
@@ -360,14 +421,370 @@ async function navigateOnionPage(page, label, appOrigin) {
   throw new Error(`${label} onion origin did not become reachable within three minutes after ${attempts} attempts: ${lastError}`);
 }
 
+async function brandedEvaluate(record, expression, timeoutMs) {
+  return record.bidi.evaluateJson(record.context, expression, timeoutMs);
+}
+
+async function brandedClick(record, selector) {
+  const literal = JSON.stringify(selector);
+  return brandedEvaluate(record, `(() => {
+    const element = document.querySelector(${literal});
+    if (!(element instanceof HTMLElement)) throw new Error("Missing control: " + ${literal});
+    if ("disabled" in element && element.disabled) throw new Error("Disabled control: " + ${literal});
+    element.click();
+    return true;
+  })()`);
+}
+
+async function brandedSetValue(record, selector, value) {
+  const selectorLiteral = JSON.stringify(selector);
+  const valueLiteral = JSON.stringify(value);
+  return brandedEvaluate(record, `(() => {
+    const element = document.querySelector(${selectorLiteral});
+    if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)) {
+      throw new Error("Missing value control: " + ${selectorLiteral});
+    }
+    element.value = ${valueLiteral};
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    return element.value;
+  })()`);
+}
+
+async function brandedSetChecked(record, selector, checked) {
+  const selectorLiteral = JSON.stringify(selector);
+  return brandedEvaluate(record, `(() => {
+    const element = document.querySelector(${selectorLiteral});
+    if (!(element instanceof HTMLInputElement)) throw new Error("Missing checkable control: " + ${selectorLiteral});
+    if (element.disabled) throw new Error("Disabled checkable control: " + ${selectorLiteral});
+    if (element.checked !== ${Boolean(checked)}) element.click();
+    if (element.checked !== ${Boolean(checked)}) throw new Error("Checkable control did not change: " + ${selectorLiteral});
+    return element.checked;
+  })()`);
+}
+
+async function brandedSnapshot(record, selector) {
+  const selectorLiteral = JSON.stringify(selector);
+  return brandedEvaluate(record, `(() => {
+    const element = document.querySelector(${selectorLiteral});
+    if (!(element instanceof HTMLElement)) return null;
+    return {
+      text: element.textContent ?? "",
+      error: element.classList.contains("error"),
+      hidden: element.hidden,
+      disabled: "disabled" in element ? Boolean(element.disabled) : false,
+      links: element.querySelectorAll("a").length,
+    };
+  })()`);
+}
+
+async function waitForBrandedText(record, selector, pattern, timeoutMs = ONION_ACTION_TIMEOUT_MS) {
+  let latest = "";
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const snapshot = await brandedSnapshot(record, selector);
+    latest = snapshot?.text ?? "";
+    if (pattern.test(latest)) return;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`${record.label} did not show ${pattern}; latest text was ${JSON.stringify(latest)}.`);
+}
+
+async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
+  const blossomLiteral = JSON.stringify(blossomOrigin);
+  const relayLiteral = JSON.stringify(relayUrl);
+  await waitFor(async () => {
+    try {
+      return await brandedEvaluate(record, `(async () => {
+        const response = await fetch(${blossomLiteral}, {
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (response.status !== 404) return false;
+        return new Promise((resolve) => {
+          const socket = new WebSocket(${relayLiteral});
+          const finish = (ready) => {
+            clearTimeout(timer);
+            socket.close();
+            resolve(ready);
+          };
+          const timer = setTimeout(() => finish(false), 10_000);
+          socket.addEventListener("open", () => finish(true), { once: true });
+          socket.addEventListener("error", () => finish(false), { once: true });
+        });
+      })()`, 20_000);
+    } catch {
+      return false;
+    }
+  }, ONION_ACTION_TIMEOUT_MS, "Branded Tor Browser did not reach the controlled Blossom and relay onions.", 1_000);
+}
+
+async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins) {
+  const profileDirectory = join(tempRoot, "branded-tor-browser-profile");
+  const browserDataDirectory = join(tempRoot, "branded-tor-browser-data");
+  mkdirSync(profileDirectory, { mode: 0o700 });
+  mkdirSync(browserDataDirectory, { mode: 0o700 });
+  const remotePort = await availablePort();
+  writeFileSync(join(profileDirectory, "user.js"), [
+    'user_pref("browser.shell.checkDefaultBrowser", false);',
+    'user_pref("browser.startup.page", 0);',
+    'user_pref("browser.startup.homepage", "about:blank");',
+    'user_pref("network.proxy.type", 1);',
+    `user_pref("network.proxy.socks", ${JSON.stringify(HOST)});`,
+    `user_pref("network.proxy.socks_port", ${socksPort});`,
+    'user_pref("network.proxy.socks_version", 5);',
+    'user_pref("network.proxy.socks_remote_dns", true);',
+    'user_pref("network.proxy.no_proxies_on", "");',
+  ].join("\n") + "\n", { mode: 0o600 });
+
+  let output = "";
+  const processHandle = spawn(torBrowser.binary, [
+    "--headless",
+    "--no-remote",
+    "--profile", profileDirectory,
+    "--remote-debugging-port", String(remotePort),
+    "about:blank",
+  ], {
+    env: {
+      ...process.env,
+      MOZ_CRASHREPORTER_DISABLE: "1",
+      TOR_BROWSER_DATA_DIR: browserDataDirectory,
+      TOR_SKIP_LAUNCH: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const recordOutput = (chunk) => { output = `${output}${chunk.toString("utf8")}`.slice(-128 * 1024); };
+  processHandle.stdout.on("data", recordOutput);
+  processHandle.stderr.on("data", recordOutput);
+
+  let bidi;
+  await waitFor(async () => {
+    if (processHandle.exitCode !== null) throw new Error(`Branded Tor Browser exited before WebDriver BiDi opened: ${output}`);
+    try {
+      bidi = await WebDriverBiDi.connect(`ws://localhost:${remotePort}/session`, 1_000);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 30_000, `Branded Tor Browser did not expose loopback WebDriver BiDi: ${output}`, 250);
+  if (!bidi) throw new Error("Branded Tor Browser BiDi connection disappeared.");
+
+  const created = await bidi.command("session.new", { capabilities: { alwaysMatch: { acceptInsecureCerts: false } } });
+  const expectedEngine = /Firefox ([0-9.]+)/u.exec(torBrowser.version)?.[1];
+  if (!expectedEngine || created.capabilities?.browserVersion !== expectedEngine) {
+    throw new Error(`Tor Browser capability version ${created.capabilities?.browserVersion ?? "missing"} did not match ${torBrowser.version}.`);
+  }
+  await bidi.command("session.subscribe", {
+    events: ["network.beforeRequestSent"],
+  });
+  await bidi.command("script.addPreloadScript", {
+    functionDeclaration: `() => {
+      window.__wildbloomTorWebRtcUsed = false;
+      window.__wildbloomPageErrors = [];
+      window.addEventListener("error", (event) => {
+        window.__wildbloomPageErrors.push(event.error?.message ?? event.message ?? "unknown page error");
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        window.__wildbloomPageErrors.push(event.reason?.message ?? String(event.reason ?? "unknown rejected promise"));
+      });
+      const objectUrls = new Map();
+      Object.defineProperty(window, "__wildbloomObservedObjectUrls", {
+        configurable: false,
+        value: objectUrls,
+      });
+      const createObjectUrl = URL.createObjectURL.bind(URL);
+      const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+      URL.createObjectURL = (object) => {
+        const url = createObjectUrl(object);
+        objectUrls.set(url, object);
+        return url;
+      };
+      URL.revokeObjectURL = (url) => {
+        objectUrls.delete(url);
+        revokeObjectUrl(url);
+      };
+      const NativePeerConnection = window.RTCPeerConnection;
+      if (typeof NativePeerConnection !== "function") return;
+      Object.defineProperty(window, "RTCPeerConnection", {
+        configurable: false,
+        value: class TorForbiddenPeerConnection extends NativePeerConnection {
+          constructor(...arguments_) {
+            super(...arguments_);
+            window.__wildbloomTorWebRtcUsed = true;
+          }
+        },
+      });
+    }`,
+  });
+  const { context } = await bidi.command("browsingContext.create", { type: "tab" });
+  const requests = [];
+  bidi.onEvent((event) => {
+    if (event.method === "network.beforeRequestSent" && event.params?.context === context) {
+      requests.push(event.params.request?.url ?? "missing request URL");
+    }
+  });
+  const record = {
+    label: `branded ${torBrowser.version}`,
+    bidi,
+    context,
+    output: () => output,
+    process: processHandle,
+    requests,
+  };
+
+  let lastNavigationError = "no navigation attempted";
+  await waitFor(async () => {
+    try {
+      await bidi.command("browsingContext.navigate", { context, url: appOrigin, wait: "complete" }, 30_000);
+      const ready = await brandedEvaluate(record, `(() => ({
+        marker: Boolean(document.querySelector("#inspect-file")),
+        origin: location.origin,
+        secureContext: window.isSecureContext,
+        subtleCrypto: Boolean(window.crypto?.subtle),
+      }))()`);
+      if (!ready.marker || ready.origin !== appOrigin || !ready.secureContext || !ready.subtleCrypto) {
+        throw new Error(`unexpected app readiness ${JSON.stringify(ready)}`);
+      }
+      return true;
+    } catch (error) {
+      lastNavigationError = error instanceof Error ? error.message : String(error);
+      return false;
+    }
+  }, ONION_ACTION_TIMEOUT_MS, () => `Branded Tor Browser did not load the exact secure app onion: ${lastNavigationError}`, 1_000);
+
+  const state = await brandedEvaluate(record, `(() => ({
+    hasSigner: Boolean(window.nostr),
+    userAgent: navigator.userAgent,
+    webRtcUsed: window.__wildbloomTorWebRtcUsed,
+  }))()`);
+  if (state.hasSigner) throw new Error("Branded Tor Browser unexpectedly exposed a Nostr signer extension.");
+  if (state.webRtcUsed) throw new Error("Branded Tor Browser created WebRTC state while opening Wildbloom.");
+  const expectedUserAgent = new RegExp(`Firefox/${expectedEngine.split(".")[0]}\\.0`, "u");
+  if (!expectedUserAgent.test(state.userAgent)) throw new Error(`Unexpected Tor Browser user agent: ${state.userAgent}`);
+  for (const request of requests) {
+    const url = new URL(request);
+    if (["http:", "https:", "ws:", "wss:"].includes(url.protocol) && !brandedRequestAllowed(request, allowedOrigins)) {
+      throw new Error(`Branded Tor Browser made an undeclared application request to ${request}.`);
+    }
+  }
+  return record;
+}
+
+async function closeBrandedTorBrowser(record) {
+  if (!record) return;
+  await record.bidi.close().catch(() => undefined);
+  await stopChild(record.process);
+}
+
+async function exerciseBrandedRetriever(record, blossomOrigin, relayUrl, eventId, recoveryKey) {
+  await warmBrandedOnionTargets(record, blossomOrigin, relayUrl);
+  await brandedSetChecked(record, 'input[name="network-profile"][value="tor"]', true);
+  await brandedSetValue(record, "#blossom-server", blossomOrigin);
+  await brandedSetValue(record, "#relay-urls", relayUrl);
+  await brandedSetChecked(record, "#tor-consent", true);
+  await brandedSetValue(record, "#event-id", eventId);
+  const torState = await brandedEvaluate(record, `(() => ({
+    hasSigner: Boolean(window.nostr),
+    seedHidden: document.querySelector("#seed-gate")?.hidden,
+    swarmDisabled: document.querySelector("#fetch-swarm")?.disabled,
+    trackerHidden: document.querySelector("#tracker-field")?.hidden,
+  }))()`);
+  if (torState.hasSigner || !torState.seedHidden || !torState.swarmDisabled || !torState.trackerHidden) {
+    throw new Error(`Branded Tor Browser did not retain the signer-free Tor-only boundary: ${JSON.stringify(torState)}`);
+  }
+
+  relaySilent = true;
+  try {
+    await brandedClick(record, "#resolve-event");
+    await waitForBrandedText(record, "#retrieve-status", /lookup timed out/iu, 30_000);
+    const timedOut = await brandedEvaluate(record, `(() => ({
+      blossomDisabled: document.querySelector("#fetch-blossom")?.disabled,
+      links: document.querySelectorAll("#retrieve-links a").length,
+      resolveDisabled: document.querySelector("#resolve-event")?.disabled,
+    }))()`);
+    if (timedOut.blossomDisabled !== true || timedOut.links !== 0 || timedOut.resolveDisabled !== false) {
+      throw new Error(`A timed-out branded relay lookup retained authority: ${JSON.stringify(timedOut)}`);
+    }
+  } finally {
+    relaySilent = false;
+  }
+
+  await brandedClick(record, "#resolve-event");
+  await waitForBrandedText(record, "#retrieve-status", /separately received recovery key/iu);
+
+  const startedBefore = hangingRetrievalStarted;
+  const closedBefore = hangingRetrievalClosed;
+  blossomRetrievalMode = "hanging";
+  try {
+    await brandedSetValue(record, "#recovery-key-input", recoveryKey);
+    await brandedClick(record, "#fetch-blossom");
+    await waitFor(
+      () => hangingRetrievalStarted > startedBefore,
+      30_000,
+      "Branded Tor Browser did not begin the controlled partial onion retrieval.",
+    );
+    await brandedClick(record, "#cancel-download");
+    await waitForBrandedText(record, "#retrieve-status", /retrieval cancelled/iu, 30_000);
+    await waitFor(
+      () => hangingRetrievalClosed > closedBefore,
+      30_000,
+      "Cancelling the branded Tor Browser retrieval did not close the onion response.",
+    );
+    const cancelled = await brandedEvaluate(record, `(() => ({
+      cancelDisabled: document.querySelector("#cancel-download")?.disabled,
+      links: document.querySelectorAll("#retrieve-links a").length,
+    }))()`);
+    if (!cancelled.cancelDisabled || cancelled.links !== 0) {
+      throw new Error(`Cancelled branded retrieval retained stale output: ${JSON.stringify(cancelled)}`);
+    }
+  } finally {
+    blossomRetrievalMode = "normal";
+  }
+
+  await brandedSetValue(record, "#recovery-key-input", recoveryKey);
+  await brandedClick(record, "#fetch-blossom");
+  await waitForBrandedText(record, "#retrieve-status", /locally decrypted bytes/iu);
+  const recovered = await brandedEvaluate(record, `(async () => {
+    const link = document.querySelector("#retrieve-links a");
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Verified branded download link is missing.");
+    const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
+    if (!(blob instanceof Blob)) throw new Error("Verified branded download Blob was not observed.");
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return { bytes: Array.from(bytes), name: link.download };
+  })()`);
+  if (recovered.name !== "onion-proof.txt" || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
+    throw new Error("Branded Tor Browser recovery did not reproduce the exact source file.");
+  }
+  const finalState = await brandedEvaluate(record, `(() => ({
+    hasSigner: Boolean(window.nostr),
+    webRtcUsed: window.__wildbloomTorWebRtcUsed,
+  }))()`);
+  if (finalState.hasSigner || finalState.webRtcUsed) {
+    throw new Error(`Branded recovery crossed its signer or WebRTC boundary: ${JSON.stringify(finalState)}`);
+  }
+}
+
+async function assertBrandedPageClean(record, allowedOrigins) {
+  const errors = await brandedEvaluate(record, `(() => [...window.__wildbloomPageErrors])()`);
+  if (errors.length > 0) throw new Error(`Branded Tor Browser uncaught page errors: ${errors.join("; ")}`);
+  for (const request of record.requests) {
+    const url = new URL(request);
+    if (["http:", "https:", "ws:", "wss:"].includes(url.protocol) && !brandedRequestAllowed(request, allowedOrigins)) {
+      throw new Error(`Branded Tor Browser made an undeclared application request to ${request}.`);
+    }
+  }
+}
+
 let torProcess;
 let production;
 let browser;
 let publisherContext;
 let retrieverContext;
+let brandedRecord;
 let blossomClosed = false;
 let torLog = "";
 try {
+  const torBrowser = brandedTorBrowserRequested() ? findTorBrowser() : null;
   await Promise.all([listen(blossom), new Promise((resolve, reject) => {
     relay.once("listening", resolve);
     relay.once("error", reject);
@@ -400,15 +817,18 @@ try {
   torProcess.stdout.on("data", recordTorOutput);
   torProcess.stderr.on("data", recordTorOutput);
   const controlCookie = join(torData, "control_auth_cookie");
+  let bootstrapTranscript = "no control transcript";
   await waitFor(async () => {
     if (torProcess.exitCode !== null) throw new Error(`Tor exited before bootstrap with code ${torProcess.exitCode}: ${torLog}`);
     try {
       const transcript = await controlTranscript(controlPort, controlCookie, ["GETINFO status/bootstrap-phase"]);
+      bootstrapTranscript = transcript;
       return /PROGRESS=100(?:\s|$)/u.test(transcript);
-    } catch {
+    } catch (error) {
+      bootstrapTranscript = error instanceof Error ? error.message : String(error);
       return false;
     }
-  }, 180_000, `Tor control port did not report 100% bootstrap within three minutes: ${torLog || "no Tor log output"}`, 500);
+  }, TOR_BOOTSTRAP_TIMEOUT_MS, () => `Tor control port did not report 100% bootstrap within five minutes. Latest control result: ${bootstrapTranscript}. Tor log: ${torLog || "no Tor log output"}`, 2_000);
   await waitFor(() => onionHostname(appService) && onionHostname(blossomService) && onionHostname(relayService), 10_000, "Tor did not create all v3 onion hostnames.");
   process.stdout.write("Tor bootstrap reached 100% and three disposable v3 service identities are ready.\n");
   const appHost = onionHostname(appService);
@@ -438,11 +858,11 @@ try {
     executablePath: findChrome(),
     // Chromium does not classify HTTP onion origins as potentially trustworthy.
     // This override lets Chromium exercise the required Web Crypto path while
-    // branded Tor Browser behaviour remains a separate manual release gate.
+    // branded Tor Browser behaviour is exercised separately below when asked.
     args: [`--unsafely-treat-insecure-origin-as-secure=${appOrigin}`],
     proxy: { server: `socks5://${HOST}:${socksPort}` },
   });
-  const allowedOrigins = new Set([appOrigin, blossomOnionOrigin]);
+  const allowedOrigins = new Set([appOrigin, blossomOnionOrigin, new URL(relayUrl).origin]);
   publisherContext = await browser.newContext({ acceptDownloads: true });
   const publisher = await createPage(publisherContext, "onion publisher", appOrigin, allowedOrigins, true);
   if (publisher.undeclaredRequests.length > 0) throw new Error(`Opening the onion app made ambient requests: ${publisher.undeclaredRequests.join("; ")}`);
@@ -502,12 +922,32 @@ try {
   if (await retriever.page.evaluate(() => window.__wildbloomTorWebRtcUsed)) throw new Error("Tor-only retrieval created WebRTC state.");
   if (retriever.page.url() !== `${appOrigin}/`) throw new Error("Retriever left the exact app onion origin.");
 
+  if (torBrowser) {
+    await signalNewIdentity(controlPort, controlCookie);
+    process.stdout.write(`Tor acknowledged NEWNYM before the ${torBrowser.version} extension-free retrieval ceremony.\n`);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    brandedRecord = await launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins);
+    await exerciseBrandedRetriever(brandedRecord, blossomOnionOrigin, relayUrl, eventId, recoveryKey);
+    process.stdout.write(`${torBrowser.version} recovered the exact encrypted source without a signer extension after bounded relay timeout and download-cancellation checks.\n`);
+  }
+
   await closeServer(blossom);
   blossomClosed = true;
   await retriever.page.fill("#recovery-key-input", recoveryKey);
   await retriever.page.click("#fetch-blossom");
   await retriever.page.locator("#retrieve-status.error").waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   if (await retriever.page.locator("#retrieve-links a").count() !== 0) throw new Error("Denied onion retrieval retained a stale verified download.");
+  if (brandedRecord) {
+    await brandedSetValue(brandedRecord, "#recovery-key-input", recoveryKey);
+    await brandedClick(brandedRecord, "#fetch-blossom");
+    await waitForBrandedText(brandedRecord, "#retrieve-status", /retrieval failed|network|fetch/iu);
+    const deniedLinks = await brandedSnapshot(brandedRecord, "#retrieve-links");
+    const deniedStatus = await brandedSnapshot(brandedRecord, "#retrieve-status");
+    if (deniedLinks?.links !== 0 || deniedStatus?.error !== true) {
+      throw new Error(`Denied branded Tor Browser retrieval retained stale or non-error state: ${JSON.stringify({ deniedLinks, deniedStatus })}.`);
+    }
+    await assertBrandedPageClean(brandedRecord, allowedOrigins);
+  }
 
   assertCleanPage(publisher);
   assertCleanPage(retriever);
@@ -520,10 +960,14 @@ try {
   if (blossomErrors.length > 0) throw new Error(`Real-onion Blossom errors: ${blossomErrors.join("; ")}`);
   if (relayErrors.length > 0) throw new Error(`Real-onion relay errors: ${relayErrors.join("; ")}`);
 
+  const brandedResult = torBrowser
+    ? ` ${torBrowser.version} also completed signer-free exact recovery, relay timeout, cancellation and denied-service checks through a throwaway profile; headless WebDriver BiDi evidence is not a manual Tor Browser usability review.`
+    : " Branded Tor Browser interaction remains a separate release gate.";
   process.stdout.write(
-    `Tor transport acceptance passed in ${browserName} with a harness-only secure-origin override through Tor ${/(?:Tor version |Tor )([0-9]+(?:\.[0-9]+)+)/u.exec(torLog)?.[1] ?? "unknown"}: disposable v3 onion app, Blossom and Nostr relay completed encrypted publication and exact recovery after NEWNYM, refused WebRTC and failed closed after the Blossom target was denied. Branded Tor Browser interaction remains a manual release gate.\n`,
+    `Tor transport acceptance passed in ${browserName} with a harness-only secure-origin override through Tor ${/(?:Tor version |Tor )([0-9]+(?:\.[0-9]+)+)/u.exec(torLog)?.[1] ?? "unknown"}: disposable v3 onion app, Blossom and Nostr relay completed encrypted publication and exact recovery after NEWNYM, refused WebRTC and failed closed after the Blossom target was denied.${brandedResult}\n`,
   );
 } finally {
+  await closeBrandedTorBrowser(brandedRecord).catch(() => undefined);
   if (retrieverContext) await retrieverContext.close().catch(() => undefined);
   if (publisherContext) await publisherContext.close().catch(() => undefined);
   if (browser) await browser.close().catch(() => undefined);

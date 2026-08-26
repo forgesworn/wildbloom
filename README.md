@@ -19,9 +19,9 @@ not claim to create a new storage network.
 
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
-branded Tor Browser interaction, branded-browser testing and cross-network
-packet evidence remain release gates. See
-[`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
+human Tor Browser usability review, extension-free Tor publication,
+branded-browser testing and cross-network packet evidence remain release
+gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
 Linux and macOS. It is not currently a native desktop application; native
@@ -73,6 +73,7 @@ npm run check
 npm run ci
 npm run smoke:swarm
 npm run acceptance:tor
+npm run acceptance:tor-browser
 npm run acceptance:maximum
 ```
 
@@ -107,10 +108,13 @@ CI.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
 relay, then performs encrypted publication and exact recovery through a real
 Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only secure-origin
-override for Web Crypto on HTTP onion origins. This proves onion transport and
-fail-closed behaviour, not interaction in branded Tor Browser; that remains a
-manual release gate. The separate GitHub `tor-acceptance` workflow runs this
-gate on demand.
+override for Web Crypto on HTTP onion origins. The extended
+`acceptance:tor-browser` gate rotates identity again and drives a signed Tor
+Project Firefox build through a disposable profile and loopback WebDriver BiDi.
+It proves signer-free exact retrieval, relay timeout, partial-download
+cancellation, no WebRTC and denied-service failure without adding a signer
+extension. The separate GitHub workflows run both gates on demand. Headless
+automation is not a manual usability or extension-free publication claim.
 
 `acceptance:maximum` drives the exact 256 MiB source limit through encryption,
 Blossom upload, signed relay publication, exact-ID resolution, ciphertext

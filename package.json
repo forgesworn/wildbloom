@@ -17,6 +17,7 @@
     "smoke:browser:webkit": "node scripts/browser-smoke.mjs --browser webkit",
     "smoke:swarm": "node scripts/swarm-acceptance.mjs",
     "acceptance:tor": "node scripts/tor-acceptance.mjs",
+    "acceptance:tor-browser": "node scripts/tor-acceptance.mjs --browser system-chromium --branded-tor-browser",
     "acceptance:maximum": "node scripts/maximum-file-acceptance.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

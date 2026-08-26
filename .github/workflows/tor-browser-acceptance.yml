@@ -1,0 +1,62 @@
+name: tor-browser-acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branded-onion-retrieval:
+    name: signed branded Tor Browser through disposable v3 onions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      TOR_BROWSER_VERSION: 15.0.20
+      TOR_BROWSER_SIGNING_FINGERPRINT: EF6E286DDA85EA2A4BA7DE684E2C6E8793298290
+      WILDBLOOM_TOR_BROWSER_PATH: ${{ github.workspace }}/.artifacts/tor-browser/Browser/firefox
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Tor and signature-verification tools
+        run: sudo apt-get update && sudo apt-get install --yes gnupg tor xz-utils
+      - name: Download and verify the pinned Tor Browser build
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_dir="$PWD/.artifacts/tor-browser-download"
+          browser_dir="$PWD/.artifacts/tor-browser"
+          archive="tor-browser-linux-x86_64-${TOR_BROWSER_VERSION}.tar.xz"
+          base_url="https://dist.torproject.org/torbrowser/${TOR_BROWSER_VERSION}"
+          mkdir -p "$download_dir" "$browser_dir"
+          attempt=0
+          until curl --proto '=https' --tlsv1.2 --location --fail --silent --show-error \
+            --continue-at - "$base_url/$archive" --output "$download_dir/$archive"; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 20 ]; then
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --proto '=https' --tlsv1.2 --location --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            "$base_url/$archive.asc" --output "$download_dir/$archive.asc"
+          curl --proto '=https' --tlsv1.2 --location --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            "https://keys.openpgp.org/vks/v1/by-fingerprint/${TOR_BROWSER_SIGNING_FINGERPRINT}" \
+            --output "$download_dir/tor-browser-developers.asc"
+          actual_fingerprint="$(gpg --batch --show-keys --with-colons "$download_dir/tor-browser-developers.asc" \
+            | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test "$actual_fingerprint" = "$TOR_BROWSER_SIGNING_FINGERPRINT"
+          gpg --batch --no-default-keyring --keyring "$download_dir/tor-browser-keyring.gpg" \
+            --import "$download_dir/tor-browser-developers.asc"
+          gpgv --keyring "$download_dir/tor-browser-keyring.gpg" \
+            "$download_dir/$archive.asc" "$download_dir/$archive"
+          tar -xJf "$download_dir/$archive" -C "$browser_dir" --strip-components=1
+          test -x "$WILDBLOOM_TOR_BROWSER_PATH"
+      - run: npm ci
+      - run: npm run build
+      - run: npm run acceptance:tor-browser

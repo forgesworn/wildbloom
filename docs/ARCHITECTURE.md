@@ -95,7 +95,12 @@ gate runs the production app, controlled Blossom service and controlled Nostr
 relay as three disposable v3 onion services, rotates identity between fresh
 browser contexts and requires exact encrypted recovery. Its Chromium
 secure-origin override is test scaffolding, not part of the production build
-and not branded Tor Browser evidence.
+and not branded Tor Browser evidence. An extended gate rotates identity again
+and drives an actual signed Tor Project Firefox build through loopback-only
+WebDriver BiDi and a disposable profile. That second browser performs
+signer-free exact retrieval, relay-timeout, download-cancellation and denied
+service checks without WebRTC; it does not prove extension-free publication or
+manual Tor Browser usability.
 
 ## Retrieval
 
