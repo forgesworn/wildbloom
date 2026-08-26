@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer, request as httpRequest } from "node:http";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { sha3_256 } from "@noble/hashes/sha3.js";
@@ -89,9 +89,10 @@ const blossom = createServer((request, response) => {
       uploadAuthorisations.push(JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8")));
       uploadedBytes = body;
       uploadedHash = hash;
+      const descriptorOrigin = request.headers["x-wildbloom-test-origin"] === ONION_BLOSSOM ? ONION_BLOSSOM : blossomOrigin;
       response.writeHead(201, { ...cors, "Content-Type": "application/json" });
       response.end(JSON.stringify({
-        url: `${blossomOrigin}/${hash}.wbenc`,
+        url: `${descriptorOrigin}/${hash}.wbenc`,
         sha256: hash,
         size: body.length,
         type: "application/vnd.wildbloom.encrypted",
@@ -117,6 +118,45 @@ const blossom = createServer((request, response) => {
   });
 });
 blossom.listen(0, HOST);
+
+const onionProxyErrors = [];
+const onionProxyRequests = [];
+const onionProxy = createServer((request, response) => {
+  let target;
+  try {
+    target = new URL(request.url ?? "");
+    if (target.origin !== ONION_BLOSSOM) {
+      response.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Controlled proxy refused non-onion target");
+      return;
+    }
+    onionProxyRequests.push(`${request.method} ${target.pathname}`);
+    const blossomAddress = blossom.address();
+    if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom server is not listening.");
+    const headers = { ...request.headers, host: `${HOST}:${blossomAddress.port}`, "x-wildbloom-test-origin": ONION_BLOSSOM };
+    const upstream = httpRequest({
+      host: HOST,
+      port: blossomAddress.port,
+      method: request.method,
+      path: `${target.pathname}${target.search}`,
+      headers,
+    }, (upstreamResponse) => {
+      response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+      upstreamResponse.pipe(response);
+    });
+    upstream.on("error", (error) => {
+      onionProxyErrors.push(error.message);
+      if (!response.headersSent) response.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Controlled proxy failure");
+    });
+    request.pipe(upstream);
+  } catch (error) {
+    onionProxyErrors.push(error instanceof Error ? error.message : String(error));
+    response.writeHead(502, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Controlled proxy refusal");
+  }
+});
+onionProxy.listen(0, HOST);
 
 function findChrome() {
   const operatingSystem = platform();
@@ -159,12 +199,13 @@ function requestedBrowser() {
   return value;
 }
 
-async function launchBrowser(name) {
+async function launchBrowser(name, proxyServer) {
+  const options = { headless: true, proxy: { server: proxyServer, bypass: HOST } };
   if (name === "system-chromium") {
-    return chromium.launch({ executablePath: findChrome(), headless: true });
+    return chromium.launch({ ...options, executablePath: findChrome() });
   }
   const browserType = name === "chromium" ? chromium : name === "firefox" ? firefox : webkit;
-  return browserType.launch({ headless: true });
+  return browserType.launch(options);
 }
 
 async function within(promise, milliseconds, message) {
@@ -226,13 +267,16 @@ const production = spawn(process.execPath, ["scripts/serve-production.mjs", "--h
 
 let browser;
 try {
-  await Promise.all([waitForServer(production), listen(relay), listen(blossom)]);
+  await Promise.all([waitForServer(production), listen(relay), listen(blossom), listen(onionProxy)]);
   const relayAddress = relay.address();
   if (!relayAddress || typeof relayAddress === "string") throw new Error("Controlled relay did not expose a TCP port.");
   const relayUrl = `ws://${HOST}:${relayAddress.port}`;
   const blossomAddress = blossom.address();
   if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom server did not expose a TCP port.");
   blossomOrigin = `http://${HOST}:${blossomAddress.port}`;
+  const proxyAddress = onionProxy.address();
+  if (!proxyAddress || typeof proxyAddress === "string") throw new Error("Controlled onion proxy did not expose a TCP port.");
+  const proxyOrigin = `http://${HOST}:${proxyAddress.port}`;
 
   const headersResponse = await fetch(ORIGIN);
   const csp = headersResponse.headers.get("content-security-policy") ?? "";
@@ -250,7 +294,7 @@ try {
   }
 
   const browserName = requestedBrowser();
-  browser = await launchBrowser(browserName);
+  browser = await launchBrowser(browserName, proxyOrigin);
   const page = await within(browser.newPage(), 30_000, `${browserName} did not create a page within 30 seconds.`);
   const pageErrors = [];
   const remoteRequests = [];
@@ -280,28 +324,8 @@ try {
       await route.continue();
       return;
     }
-    if (url.origin !== ONION_BLOSSOM) {
-      await route.abort("blockedbyclient");
-      return;
-    }
-    const cors = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-SHA-256",
-      "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
-    };
-    if (request.method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: cors });
-      return;
-    }
-    if (request.method() === "PUT" && url.pathname === "/upload") {
-      const forwarded = await route.fetch({ url: `${blossomOrigin}/upload` });
-      if (!forwarded.ok()) throw new Error(`Controlled onion forwarding failed with HTTP ${forwarded.status()}.`);
-      const descriptor = await forwarded.json();
-      await route.fulfill({
-        status: 201,
-        headers: { ...cors, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...descriptor, url: `${url.origin}/${descriptor.sha256}.wbenc` }),
-      });
+    if (url.origin === ONION_BLOSSOM) {
+      await route.continue();
       return;
     }
     await route.abort("blockedbyclient");
@@ -418,11 +442,14 @@ try {
   if (!(await page.isHidden("#recovery-key-panel"))) throw new Error("Plaintext opt-out displayed a misleading recovery key.");
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
   if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
+  if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
+  if (!onionProxyRequests.includes("PUT /upload")) throw new Error("Tor-only upload did not traverse the controlled onion proxy.");
 
   process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));
   await new Promise((resolve) => blossom.close(resolve));
+  await new Promise((resolve) => onionProxy.close(resolve));
   production.kill("SIGTERM");
 }
