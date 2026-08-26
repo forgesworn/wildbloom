@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run ci
 
   browser-engine:
@@ -45,8 +45,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npx playwright-core install --with-deps ${{ matrix.browser }}
+      - run: npm ci --ignore-scripts
+      - run: npm exec --offline -- playwright-core install --with-deps ${{ matrix.browser }}
       - run: npm run build
       - run: npm run smoke:browser:${{ matrix.browser }}
 
@@ -60,8 +60,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
+      - run: npm ci --ignore-scripts
+      - run: npm exec --offline -- playwright-core install --with-deps chromium
       - run: npm run build
       - run: npm run smoke:swarm -- --browser chromium
 
@@ -76,6 +76,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: firefox --version
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run acceptance:firefox

@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.11.0",
   "description": "A local-first Nostr, Blossom and BitTorrent interoperability prototype.",
   "engines": {
     "node": ">=24 <25"
@@ -26,10 +27,11 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "install:policy": "node scripts/install-policy.mjs",
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
+    "check": "npm run install:policy && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {

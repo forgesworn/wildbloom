@@ -12,6 +12,11 @@ npm run release:evidence -- --require-clean --output ../wildbloom-release-eviden
 npm run serve:production -- --host 127.0.0.1 --port 8080
 ```
 
+The committed `.npmrc` makes `npm ci` refuse unsupported Node engines and peer
+conflicts and prevents dependency `preinstall`, `install` and `postinstall`
+hooks. Keep that policy enabled on the build host. Wildbloom's browser build
+does not require the native Node hooks present in WebTorrent's dependency tree.
+
 The production server exposes `/healthz`, serves only `index.html` and
 eight-character content-hashed JavaScript and CSS assets, rejects source maps
 and symbolic links, accepts only `GET` and `HEAD`, applies no-store to HTML,

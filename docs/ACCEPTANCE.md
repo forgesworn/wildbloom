@@ -83,6 +83,8 @@ the finish line.
   scalar event tags; bounded upload authority; relay split views, cancellation
   and fan-out limits.
 - Secret scan and guarded dependency audit.
+- Dependency lifecycle scripts disabled for local and hosted clean installs,
+  with strict engine and peer resolution and a pinned npm toolchain policy.
 
 Run the complete gate with:
 

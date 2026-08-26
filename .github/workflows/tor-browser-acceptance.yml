@@ -57,6 +57,6 @@ jobs:
             "$download_dir/$archive.asc" "$download_dir/$archive"
           tar -xJf "$download_dir/$archive" -C "$browser_dir" --strip-components=1
           test -x "$WILDBLOOM_TOR_BROWSER_PATH"
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run acceptance:tor-browser
