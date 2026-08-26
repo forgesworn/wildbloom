@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:*; worker-src 'self' blob:"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>Wildbloom</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <p class="eyebrow">ForgeSworn experiment · local-first</p>
+        <h1>Wildbloom</h1>
+        <p class="lede">Files that outlive their host.</p>
+        <p class="boundary">
+          This prototype keeps signing keys in your NIP-07 extension. Publishing
+          to Nostr, uploading to Blossom and joining a torrent swarm are public
+          network actions. Nothing starts automatically.
+        </p>
+      </header>
+
+      <section class="panel" aria-labelledby="connection-heading">
+        <div class="panel-heading">
+          <span>01</span>
+          <div>
+            <h2 id="connection-heading">Choose your infrastructure</h2>
+            <p>No endorsed defaults. You decide which services learn about the file.</p>
+          </div>
+        </div>
+
+        <div class="grid three">
+          <label>
+            Blossom server
+            <input id="blossom-server" type="url" placeholder="https://cdn.example.com" autocomplete="off" />
+          </label>
+          <label>
+            Nostr relays <small>one per line</small>
+            <textarea id="relay-urls" rows="3" placeholder="wss://relay.example.com"></textarea>
+          </label>
+          <label>
+            WebTorrent trackers <small>one per line</small>
+            <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com"></textarea>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button id="connect-signer" type="button">Connect NIP-07 signer</button>
+          <output id="signer-status" class="quiet">Signer not connected</output>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="publish-heading">
+        <div class="panel-heading">
+          <span>02</span>
+          <div>
+            <h2 id="publish-heading">Publish a file</h2>
+            <p>Inspect locally first. Every network step remains separate.</p>
+          </div>
+        </div>
+
+        <label class="file-picker">
+          File
+          <input id="publish-file" type="file" />
+        </label>
+        <div class="actions">
+          <button id="inspect-file" type="button">Inspect locally</button>
+        </div>
+        <dl id="file-facts" class="facts" aria-live="polite"></dl>
+
+        <div class="gate">
+          <label class="check">
+            <input id="upload-consent" type="checkbox" />
+            <span>I understand this sends the complete file to the chosen Blossom server.</span>
+          </label>
+          <button id="upload-file" type="button" disabled>Upload and build torrent metadata</button>
+        </div>
+
+        <div class="gate">
+          <label class="check">
+            <input id="seed-consent" type="checkbox" />
+            <span>I understand trackers and peers can observe my IP address and torrent activity.</span>
+          </label>
+          <button id="start-seeding" type="button" disabled>Start peer seeding</button>
+        </div>
+
+        <div class="gate">
+          <p>Signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.</p>
+          <button id="sign-events" type="button" disabled>Review and sign events</button>
+        </div>
+
+        <div class="gate danger">
+          <label class="check">
+            <input id="publish-consent" type="checkbox" />
+            <span>I understand these signed events will be public and difficult to retract.</span>
+          </label>
+          <button id="publish-events" type="button" disabled>Publish signed events</button>
+        </div>
+
+        <output id="publish-status" class="status" aria-live="polite">Waiting for a file.</output>
+        <div id="publish-links" class="downloads"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="retrieve-heading">
+        <div class="panel-heading">
+          <span>03</span>
+          <div>
+            <h2 id="retrieve-heading">Retrieve and verify</h2>
+            <p>Resolve a signed NIP-94 event, then choose HTTP or peer delivery.</p>
+          </div>
+        </div>
+
+        <label>
+          Nostr event ID
+          <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" />
+        </label>
+        <div class="actions">
+          <button id="resolve-event" type="button">Resolve signed event</button>
+        </div>
+        <dl id="resolved-facts" class="facts" aria-live="polite"></dl>
+
+        <div class="actions split">
+          <button id="fetch-blossom" type="button" disabled>Fetch and verify from Blossom</button>
+          <label class="check compact">
+            <input id="download-swarm-consent" type="checkbox" />
+            <span>I accept the swarm IP-address disclosure.</span>
+          </label>
+          <button id="fetch-swarm" type="button" disabled>Join swarm and verify</button>
+        </div>
+        <output id="retrieve-status" class="status" aria-live="polite">No event resolved.</output>
+        <div id="retrieve-links" class="downloads"></div>
+      </section>
+
+      <footer>
+        Prototype, not a privacy system. Verify the threat model before using real or sensitive material.
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

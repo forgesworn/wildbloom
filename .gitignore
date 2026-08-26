@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+.idea/
+.DS_Store
+
+# Wildbloom does not use environment-held signing keys. Keep common secret
+# material out of the repository if local experiments add any.
+.env
+.env.*
+!.env.example
+*.nsec
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision

@@ -1,0 +1,34 @@
+declare module "webtorrent/dist/webtorrent.min.js" {
+  interface TorrentFile {
+    readonly name: string;
+    readonly length: number;
+    getBlob(callback: (error: Error | null, blob?: Blob) => void): void;
+  }
+
+  interface Torrent {
+    readonly infoHash: string;
+    readonly magnetURI: string;
+    readonly length: number;
+    readonly progress: number;
+    readonly downloadSpeed: number;
+    readonly files: TorrentFile[];
+    on(event: "download" | "done" | "error", listener: (...args: unknown[]) => void): void;
+  }
+
+  interface TorrentOptions {
+    announce?: string[];
+    announceList?: string[][];
+    urlList?: string[];
+    name?: string;
+    private?: boolean;
+  }
+
+  class WebTorrent {
+    seed(input: File, options: TorrentOptions, callback: (torrent: Torrent) => void): Torrent;
+    add(input: string, options: TorrentOptions, callback: (torrent: Torrent) => void): Torrent;
+    on(event: "error", listener: (error: Error) => void): void;
+    destroy(callback?: (error?: Error) => void): void;
+  }
+
+  export default WebTorrent;
+}
