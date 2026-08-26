@@ -1,10 +1,32 @@
 version: 2
+
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Europe/London
     open-pull-requests-limit: 5
+    groups:
+      production-minor-and-patch:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development-minor-and-patch:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Runtime and type majors move together only after the complete platform
+      # matrix has been deliberately retargeted from Node 24.
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

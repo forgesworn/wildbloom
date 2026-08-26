@@ -25,3 +25,11 @@ file or personal data in an issue or relay event.
 
 The repository being private does not make protocol activity private. Read the
 threat model before testing with live infrastructure.
+
+## Supply-chain boundary
+
+Production and CI use Node 24.x. Dependabot groups routine minor and patch
+updates, while the Node runtime and `@types/node` major move together only after
+the complete Windows, Linux and macOS matrix has been deliberately retargeted.
+GitHub Actions is restricted at repository level to GitHub-owned actions pinned
+to full commit SHAs.

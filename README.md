@@ -59,7 +59,9 @@ useful for a particular threat model.
 
 ## Run it locally
 
-Requirements: Node.js 24 or newer and a browser with a NIP-07 extension.
+Requirements: Node.js 24.x and a browser with a NIP-07 extension. Later Node
+majors require a deliberate platform-matrix upgrade rather than an assumed
+compatibility claim.
 
 ```sh
 npm ci
