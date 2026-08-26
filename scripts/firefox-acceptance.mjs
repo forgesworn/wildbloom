@@ -517,9 +517,17 @@ try {
     if (!(link instanceof HTMLAnchorElement)) throw new Error("Verified Firefox download link is missing.");
     const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
     if (!(blob instanceof Blob)) throw new Error("Verified Firefox download Blob was not observed.");
-    return { bytes: Array.from(new Uint8Array(await blob.arrayBuffer())), name: link.download };
+    return {
+      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+      name: link.download,
+      type: blob.type,
+      rel: link.rel,
+    };
   })()`);
-  if (recovered.name !== "branded-firefox.txt" || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
+  if (recovered.name !== "branded-firefox.txt"
+    || recovered.type !== "application/octet-stream"
+    || !recovered.rel.includes("noopener")
+    || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
     throw new Error("Mozilla Firefox did not recover the exact source bytes.");
   }
 
@@ -552,7 +560,7 @@ try {
     throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors].join("; ")}`);
   }
   process.stdout.write(
-    `${firefox.version} acceptance passed through a disposable profile: trustworthy production origin, no ambient network or signer, local encrypted preparation, exact signer-free recovery, relay timeout, download cancellation, denied-service failure and no WebRTC.\n`,
+    `${firefox.version} acceptance passed through a disposable profile: trustworthy production origin, no ambient network or signer, local encrypted preparation, exact signer-free recovery through an inert save, relay timeout, download cancellation, denied-service failure and no WebRTC.\n`,
   );
 } finally {
   await closeFirefox(record).catch(() => undefined);

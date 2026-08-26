@@ -103,6 +103,7 @@ let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
 const objectUrls = new Set<string>();
+const SAFE_DOWNLOAD_MIME_TYPE = "application/octet-stream";
 
 function profile(): NetworkProfile {
   const selected = document.querySelector<HTMLInputElement>('input[name="network-profile"]:checked');
@@ -176,10 +177,14 @@ function clearDownloads(target: HTMLDivElement): void {
 
 function addDownload(target: HTMLDivElement, blob: Blob, fileName: string, label: string): void {
   const anchor = document.createElement("a");
-  const url = URL.createObjectURL(blob);
+  // Blob URLs inherit this application's origin. Keep even a signed, verified
+  // HTML or SVG payload inert if a browser navigates instead of downloading it.
+  const inertBlob = new Blob([blob], { type: SAFE_DOWNLOAD_MIME_TYPE });
+  const url = URL.createObjectURL(inertBlob);
   objectUrls.add(url);
   anchor.href = url;
   anchor.download = fileName;
+  anchor.rel = "noopener noreferrer";
   anchor.textContent = label;
   anchor.addEventListener("click", () => window.setTimeout(() => {
     URL.revokeObjectURL(url);

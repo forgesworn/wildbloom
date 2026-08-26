@@ -11,7 +11,19 @@ import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 
 const HOST = "127.0.0.1";
-const PORT = 4173;
+async function availablePort() {
+  const reservation = createServer();
+  await new Promise((resolve, reject) => {
+    reservation.once("error", reject);
+    reservation.listen(0, HOST, resolve);
+  });
+  const address = reservation.address();
+  if (!address || typeof address === "string") throw new Error("Could not reserve a production acceptance port.");
+  await new Promise((resolve, reject) => reservation.close((error) => error ? reject(error) : resolve()));
+  return address.port;
+}
+
+const PORT = await availablePort();
 const ORIGIN = `http://${HOST}:${PORT}`;
 const BYTES = Buffer.from("hello wildbloom", "utf8");
 const SOURCE_HASH = createHash("sha256").update(BYTES).digest("hex");
@@ -406,6 +418,19 @@ try {
     return finalizeEvent(template, SECRET);
   });
   await page.addInitScript(() => {
+    const objectUrls = new Map();
+    Object.defineProperty(window, "__wildbloomObservedObjectUrls", { configurable: false, value: objectUrls });
+    const createObjectUrl = URL.createObjectURL.bind(URL);
+    const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (object) => {
+      const url = createObjectUrl(object);
+      objectUrls.set(url, object);
+      return url;
+    };
+    URL.revokeObjectURL = (url) => {
+      objectUrls.delete(url);
+      revokeObjectUrl(url);
+    };
     Object.defineProperty(window, "nostr", {
       configurable: false,
       value: {
@@ -536,6 +561,13 @@ try {
   await page.fill("#recovery-key-input", recoveryKey);
   await page.click("#fetch-blossom");
   await page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor();
+  const safeDownload = await page.getByRole("link", { name: "Save verified hello.txt" }).evaluate((anchor) => ({
+    mimeType: window.__wildbloomObservedObjectUrls?.get(anchor.href)?.type,
+    rel: anchor.rel,
+  }));
+  if (safeDownload.mimeType !== "application/octet-stream" || !safeDownload.rel.includes("noopener")) {
+    throw new Error(`Verified remote bytes retained an executable object-URL context: ${JSON.stringify(safeDownload)}`);
+  }
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: "Save verified hello.txt" }).click();
   const download = await downloadPromise;
@@ -641,7 +673,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery with an inert verified save, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

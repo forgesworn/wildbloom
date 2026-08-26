@@ -1,6 +1,11 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { assertPrototypeFileSize, assertPrototypeTransferSize, sanitiseFileName } from "./security.js";
-import { WILDBLOOM_ENCRYPTION, type EncryptionScheme } from "./types.js";
+import {
+  WILDBLOOM_ENCRYPTED_FILE_NAME,
+  WILDBLOOM_ENCRYPTED_MIME_TYPE,
+  WILDBLOOM_ENCRYPTION,
+  type EncryptionScheme,
+} from "./types.js";
 
 const HEX = "0123456789abcdef";
 const ENVELOPE_MAGIC = new TextEncoder().encode("WBLMENC1");
@@ -10,8 +15,6 @@ const ENVELOPE_TAG_BYTES = 16;
 const MAX_ENVELOPE_METADATA_BYTES = 4096;
 const MIN_PADDING_BUCKET_BYTES = 64 * 1024;
 const RECOVERY_KEY_PREFIX = "wbk1_";
-const PUBLIC_ENVELOPE_NAME = "wildbloom.wbenc";
-const PUBLIC_ENVELOPE_TYPE = "application/vnd.wildbloom.encrypted";
 
 interface EnvelopeMetadata {
   readonly name: string;
@@ -216,7 +219,10 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
     parts.push(ciphertext);
   }
 
-  const encrypted = new File(parts, PUBLIC_ENVELOPE_NAME, { type: PUBLIC_ENVELOPE_TYPE, lastModified: 0 });
+  const encrypted = new File(parts, WILDBLOOM_ENCRYPTED_FILE_NAME, {
+    type: WILDBLOOM_ENCRYPTED_MIME_TYPE,
+    lastModified: 0,
+  });
   assertPrototypeTransferSize(encrypted.size);
   return {
     file: encrypted,

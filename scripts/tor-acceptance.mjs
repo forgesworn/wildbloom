@@ -813,9 +813,12 @@ async function exerciseBrandedRetriever(record, blossomOrigin, relayUrl, eventId
     const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
     if (!(blob instanceof Blob)) throw new Error("Verified branded download Blob was not observed.");
     const bytes = new Uint8Array(await blob.arrayBuffer());
-    return { bytes: Array.from(bytes), name: link.download };
+    return { bytes: Array.from(bytes), name: link.download, type: blob.type, rel: link.rel };
   })()`);
-  if (recovered.name !== "onion-proof.txt" || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
+  if (recovered.name !== "onion-proof.txt"
+    || recovered.type !== "application/octet-stream"
+    || !recovered.rel.includes("noopener")
+    || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
     throw new Error("Branded Tor Browser recovery did not reproduce the exact source file.");
   }
   const finalState = await brandedEvaluate(record, `(() => ({

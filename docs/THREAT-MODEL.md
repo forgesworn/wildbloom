@@ -39,6 +39,7 @@
 | Attack | Behaviour |
 | --- | --- |
 | NIP-07 signer mutates reviewed fields | Reject unless the returned valid signature covers the exact template |
+| Validly signed event claims Wildbloom encryption around non-canonical public metadata | Reject unless `x` and `ox` identify the same unchanged envelope and its public filename, MIME type and accessibility label are canonical |
 | Upload token replayed elsewhere | Exact scalar `server` and `x` tags constrain it; duplicate scopes are rejected, the human-readable purpose is canonical, and Wildbloom issues a 90-second signed lifetime (the encoder rejects stale authority or anything beyond a five-minute hard cap) |
 | Encrypted event identifies known source bytes | Both NIP-94 `x` and pre-upload-server-transformation `ox` hash only the randomised encrypted envelope, never the plaintext source |
 | Blossom descriptor points at different bytes | Reject URL/hash/size mismatch |
@@ -60,6 +61,7 @@
 | File changes while the browser is seeding | Stop the seeding client and clear swarm consent before the replacement can be prepared |
 | Upload or retrieval stalls | Bound the operation by a deadline; explicit cancellation aborts fetches and destroys in-flight peer clients |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
+| Verified remote bytes contain executable HTML, SVG or script content | Offer only an `application/octet-stream`, `noopener` object-URL download; never navigate to or render the remote MIME type inside Wildbloom's origin |
 | User changes file, endpoint or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority |
 | Local crypto, signer or relay result finishes after that state change | Abort local hashing/crypto where possible and discard every result whose monotonic state revision is stale |
 | Direct-mode signer approval finishes after a switch to Tor-only mode | Discard the signature, clear the signer identity and require a fresh Tor-profile connection |

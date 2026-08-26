@@ -15,6 +15,7 @@ function fileEvent(): SignedNostrEvent {
       ["url", `https://cdn.example.com/${sha256}.txt`],
       ["m", "text/plain"],
       ["x", sha256],
+      ["ox", sha256],
       ["size", "5"],
       ["magnet", `magnet:?xt=urn%3Abtih%3A${infoHash}&dn=hello.txt&xl=5&tr=wss%3A%2F%2Ftracker.example.com%2F&ws=https%3A%2F%2Fcdn.example.com%2F${sha256}.txt`],
       ["i", infoHash],

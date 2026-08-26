@@ -106,8 +106,9 @@ manual Tor Browser usability.
 
 1. Query chosen relays by an exact 64-hex event ID.
 2. Accept only a valid kind `1063` event with a valid Nostr signature.
-3. Require exactly one URL, MIME type, SHA-256 and byte count. Magnet and info
-   hash must either both be absent or both be present.
+3. Require exactly one URL, MIME type, `x`, `ox` and byte count, with both
+   SHA-256 tags identifying the same unchanged bytes. Magnet and info hash must
+   either both be absent or both be present.
 4. When present, rebuild the magnet from the signed hash, exact byte count,
    exact Blossom web seed and validated trackers. Ignore no extra transport
    parameters.
@@ -116,6 +117,9 @@ manual Tor Browser usability.
    byte count, then verify the resulting file's SHA-256 too.
 7. For an encrypted envelope, authenticate every chunk and reveal the source
    filename and bytes only after the complete envelope succeeds.
+8. Offer verified bytes only through an octet-stream, `noopener` save link.
+   Blob URLs inherit the creating page's origin, so remote MIME types are never
+   allowed to become navigable HTML or SVG within Wildbloom's authority.
 
 ## Deliberate omissions
 

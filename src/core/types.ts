@@ -19,6 +19,8 @@ export interface SignerPort {
 export type NetworkProfile = "direct" | "tor";
 
 export const WILDBLOOM_ENCRYPTION = "wildbloom-aes-256-gcm-chunked-v1" as const;
+export const WILDBLOOM_ENCRYPTED_FILE_NAME = "wildbloom.wbenc" as const;
+export const WILDBLOOM_ENCRYPTED_MIME_TYPE = "application/vnd.wildbloom.encrypted" as const;
 export type EncryptionScheme = typeof WILDBLOOM_ENCRYPTION;
 
 export interface BlobDescriptor {

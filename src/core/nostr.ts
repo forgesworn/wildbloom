@@ -10,7 +10,11 @@ import type {
   TorrentPlan,
   EncryptionScheme,
 } from "./types.js";
-import { WILDBLOOM_ENCRYPTION } from "./types.js";
+import {
+  WILDBLOOM_ENCRYPTED_FILE_NAME,
+  WILDBLOOM_ENCRYPTED_MIME_TYPE,
+  WILDBLOOM_ENCRYPTION,
+} from "./types.js";
 import {
   assertHex40,
   assertHex64,
@@ -130,6 +134,12 @@ export function encodeNostrAuthorisation(
 
 export function buildFileEvent(publication: HybridPublication, nowSeconds = Math.floor(Date.now() / 1000)): EventTemplate {
   const { inspected, descriptor, torrent } = publication;
+  if (publication.encryption && (
+    inspected.name !== WILDBLOOM_ENCRYPTED_FILE_NAME
+    || inspected.type !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+  )) {
+    throw new Error("Encrypted Wildbloom events must describe the canonical public envelope.");
+  }
   const alt = publication.encryption ? "Encrypted Wildbloom file" : `File: ${inspected.name}`;
   const torrentTags = torrent ? [
     ["magnet", torrent.magnetUri],
@@ -251,18 +261,28 @@ export function resolveHybridEvent(
   validateEventBounds(event);
 
   const sha256 = assertHex64(uniqueTag(event.tags, "x"), "File SHA-256");
+  const originalSha256 = assertHex64(uniqueTag(event.tags, "ox"), "Original file SHA-256");
+  if (originalSha256 !== sha256) {
+    throw new Error("Wildbloom requires the NIP-94 x and ox hashes to identify the same untransformed bytes.");
+  }
   const url = normaliseBlossomUrl(uniqueTag(event.tags, "url"), sha256, profile);
-  const mimeType = uniqueTag(event.tags, "m", 255).toLowerCase();
+  const mimeTypeTag = uniqueTag(event.tags, "m", 255);
+  const mimeType = mimeTypeTag.toLowerCase();
   if (!mimeType || mimeType.length > 255 || /[\u0000-\u001f\u007f]/u.test(mimeType)) throw new Error("Invalid MIME type.");
   const size = Number(uniqueTag(event.tags, "size"));
   if (!Number.isSafeInteger(size) || size <= 0) throw new Error("Invalid file size.");
   assertPrototypeTransferSize(size);
-  optionalUniqueTag(event.tags, "alt", 280);
+  const alt = optionalUniqueTag(event.tags, "alt", 280);
   const name = sanitiseFileName(event.content);
   const encryptionValue = optionalUniqueTag(event.tags, "encryption", 80);
   let encryption: EncryptionScheme | undefined;
   if (encryptionValue !== undefined) {
     if (encryptionValue !== WILDBLOOM_ENCRYPTION) throw new Error("The event uses an unsupported encryption scheme.");
+    if (event.content !== WILDBLOOM_ENCRYPTED_FILE_NAME
+      || mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+      || alt !== "Encrypted Wildbloom file") {
+      throw new Error("The encrypted event does not use Wildbloom's canonical public envelope metadata.");
+    }
     encryption = encryptionValue;
   }
   const infoHashTag = optionalUniqueTag(event.tags, "i", 40);

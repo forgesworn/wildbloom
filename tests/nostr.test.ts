@@ -42,6 +42,21 @@ const publication: HybridPublication = {
     webSeed: `https://cdn.example.com/${sha256}.txt`,
   },
 };
+const encryptedPublication: HybridPublication = {
+  inspected: {
+    ...publication.inspected,
+    file: new File(["hello"], "wildbloom.wbenc", { type: "application/vnd.wildbloom.encrypted" }),
+    name: "wildbloom.wbenc",
+    extension: "wbenc",
+    type: "application/vnd.wildbloom.encrypted",
+  },
+  descriptor: {
+    ...publication.descriptor,
+    url: `https://cdn.example.com/${sha256}.wbenc`,
+    type: "application/vnd.wildbloom.encrypted",
+  },
+  encryption: WILDBLOOM_ENCRYPTION,
+};
 
 const signer: SignerPort = {
   async getPublicKey() { return pubkey; },
@@ -153,11 +168,6 @@ describe("hybrid Nostr events", () => {
   });
 
   it("supports an encrypted Blossom-only event without inventing swarm support", () => {
-    const encryptedPublication: HybridPublication = {
-      inspected: publication.inspected,
-      descriptor: publication.descriptor,
-      encryption: WILDBLOOM_ENCRYPTION,
-    };
     const template = buildFileEvent(encryptedPublication, 2_000);
     expect(template.tags).toContainEqual(["encryption", WILDBLOOM_ENCRYPTION]);
     expect(template.tags).toContainEqual(["alt", "Encrypted Wildbloom file"]);
@@ -183,6 +193,44 @@ describe("hybrid Nostr events", () => {
       tags: [...template.tags, ["encryption", "unknown-scheme"]],
     }, secret) as SignedNostrEvent;
     expect(() => resolveHybridEvent(unsupportedEncryption)).toThrow(/unsupported encryption/u);
+  });
+
+  it("rejects validly signed transformed hashes and false Wildbloom privacy metadata", () => {
+    const plaintextTemplate = buildFileEvent(publication, 2_000);
+    const transformed = finalizeEvent({
+      ...plaintextTemplate,
+      tags: plaintextTemplate.tags.map((tag) => tag[0] === "ox" ? ["ox", "ef".repeat(32)] : tag),
+    }, secret) as SignedNostrEvent;
+    expect(() => resolveHybridEvent(transformed)).toThrow(/same untransformed bytes/u);
+    for (const tags of [
+      plaintextTemplate.tags.filter((tag) => tag[0] !== "ox"),
+      [...plaintextTemplate.tags, ["ox", sha256]],
+    ]) {
+      expect(() => resolveHybridEvent(finalizeEvent({ ...plaintextTemplate, tags }, secret) as SignedNostrEvent))
+        .toThrow(/scalar ox/u);
+    }
+
+    const encryptedTemplate = buildFileEvent(encryptedPublication, 2_000);
+    for (const mutation of [
+      { content: "private-plan.txt", tags: encryptedTemplate.tags },
+      {
+        content: encryptedTemplate.content,
+        tags: encryptedTemplate.tags.map((tag) => tag[0] === "m" ? ["m", "text/plain"] : tag),
+      },
+      {
+        content: encryptedTemplate.content,
+        tags: encryptedTemplate.tags.map((tag) => tag[0] === "alt" ? ["alt", "Private plan"] : tag),
+      },
+      { content: encryptedTemplate.content, tags: encryptedTemplate.tags.filter((tag) => tag[0] !== "alt") },
+    ]) {
+      const signed = finalizeEvent({ ...encryptedTemplate, ...mutation }, secret) as SignedNostrEvent;
+      expect(() => resolveHybridEvent(signed)).toThrow(/canonical public envelope metadata/u);
+    }
+  });
+
+  it("refuses to build an encrypted event around non-canonical public metadata", () => {
+    expect(() => buildFileEvent({ ...publication, encryption: WILDBLOOM_ENCRYPTION }, 2_000))
+      .toThrow(/canonical public envelope/u);
   });
 });
 

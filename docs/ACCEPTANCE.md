@@ -37,6 +37,9 @@ the finish line.
   event validation.
 - Blossom ciphertext retrieval, signed size/hash verification and local
   authenticated decryption back to the original file.
+- Validly signed transformed `ox` hashes and false Wildbloom encrypted-envelope
+  metadata are rejected; verified save links expose only inert octet-stream
+  object URLs rather than executable remote MIME types in Wildbloom's origin.
 - Consent invalidation when the file or network profile changes.
 - Superseded local encryption cannot restore stale file facts or recovery
   material after the selected file changes.

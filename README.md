@@ -94,7 +94,10 @@ response security headers and zero ambient network activity, then exercises
 encrypted upload, exact Blossom authority,
 NIP-07 signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
-fallback. It also supersedes an active local encryption, holds a signer request
+fallback. It rejects validly signed transformed hashes and false
+encrypted-envelope metadata, while verified saves use inert octet-stream object
+URLs rather than executable remote MIME types. It also supersedes an active
+local encryption, holds a signer request
 across a direct-to-Tor profile change, and proves that neither older operation
 can restore stale recovery, identity or publication state. Withdrawing Tor
 confirmation clears signer identity and downstream network authority. A
