@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { sha3_256 } from "@noble/hashes/sha3.js";
@@ -11,7 +12,6 @@ import { WebSocketServer } from "ws";
 const HOST = "127.0.0.1";
 const PORT = 4173;
 const ORIGIN = `http://${HOST}:${PORT}`;
-const BLOSSOM = "https://cdn.example.com";
 const BYTES = Buffer.from("hello wildbloom", "utf8");
 const SOURCE_HASH = createHash("sha256").update(BYTES).digest("hex");
 const SECRET = new Uint8Array(32).fill(11);
@@ -50,6 +50,73 @@ function onionHostname() {
 
 const ONION_HOST = onionHostname();
 const ONION_BLOSSOM = `http://${ONION_HOST}`;
+const uploadAuthorisations = [];
+const blossomErrors = [];
+let blossomOrigin;
+let uploadedBytes;
+let uploadedHash;
+
+const blossom = createServer((request, response) => {
+  void (async () => {
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-SHA-256",
+      "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+    };
+    const url = new URL(request.url ?? "/", blossomOrigin ?? `http://${HOST}`);
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, cors);
+      response.end();
+      return;
+    }
+    if (request.method === "PUT" && url.pathname === "/upload") {
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of request) {
+        const bytes = Buffer.from(chunk);
+        size += bytes.length;
+        if (size > 2 * 1024 * 1024) throw new Error("Controlled Blossom upload exceeded its acceptance cap.");
+        chunks.push(bytes);
+      }
+      const body = Buffer.concat(chunks);
+      if (body.length === 0) throw new Error("Browser upload omitted its request body.");
+      if (body.includes(BYTES)) throw new Error("Browser upload exposed plaintext source bytes.");
+      const hash = createHash("sha256").update(body).digest("hex");
+      if (request.headers["x-sha-256"] !== hash) throw new Error("Browser upload sent the wrong X-SHA-256.");
+      if (request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") throw new Error("Browser upload exposed the source MIME type.");
+      const authorisation = request.headers.authorization;
+      if (!authorisation?.startsWith("Nostr ")) throw new Error("Browser upload omitted Blossom authorisation.");
+      uploadAuthorisations.push(JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8")));
+      uploadedBytes = body;
+      uploadedHash = hash;
+      response.writeHead(201, { ...cors, "Content-Type": "application/json" });
+      response.end(JSON.stringify({
+        url: `${blossomOrigin}/${hash}.wbenc`,
+        sha256: hash,
+        size: body.length,
+        type: "application/vnd.wildbloom.encrypted",
+        uploaded: 1_700_000_000,
+      }));
+      return;
+    }
+    if (request.method === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
+      response.writeHead(200, {
+        ...cors,
+        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Length": String(uploadedBytes.length),
+      });
+      response.end(uploadedBytes);
+      return;
+    }
+    response.writeHead(404, { ...cors, "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+  })().catch((error) => {
+    blossomErrors.push(error instanceof Error ? error.message : String(error));
+    if (!response.headersSent) response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Controlled Blossom failure");
+  });
+});
+blossom.listen(0, HOST);
 
 function findChrome() {
   const operatingSystem = platform();
@@ -159,10 +226,13 @@ const production = spawn(process.execPath, ["scripts/serve-production.mjs", "--h
 
 let browser;
 try {
-  await Promise.all([waitForServer(production), listen(relay)]);
+  await Promise.all([waitForServer(production), listen(relay), listen(blossom)]);
   const relayAddress = relay.address();
   if (!relayAddress || typeof relayAddress === "string") throw new Error("Controlled relay did not expose a TCP port.");
   const relayUrl = `ws://${HOST}:${relayAddress.port}`;
+  const blossomAddress = blossom.address();
+  if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom server did not expose a TCP port.");
+  blossomOrigin = `http://${HOST}:${blossomAddress.port}`;
 
   const headersResponse = await fetch(ORIGIN);
   const csp = headersResponse.headers.get("content-security-policy") ?? "";
@@ -184,9 +254,6 @@ try {
   const page = await within(browser.newPage(), 30_000, `${browserName} did not create a page within 30 seconds.`);
   const pageErrors = [];
   const remoteRequests = [];
-  const uploadAuthorisations = [];
-  let uploadedBytes;
-  let uploadedHash;
 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.exposeFunction("__wildbloomGetPublicKey", () => PUBKEY);
@@ -209,8 +276,11 @@ try {
       return;
     }
     remoteRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
-    const recognisedOrigin = url.origin === BLOSSOM || url.origin === ONION_BLOSSOM;
-    if (!recognisedOrigin) {
+    if (url.origin === blossomOrigin) {
+      await route.continue();
+      return;
+    }
+    if (url.origin !== ONION_BLOSSOM) {
       await route.abort("blockedbyclient");
       return;
     }
@@ -224,35 +294,13 @@ try {
       return;
     }
     if (request.method() === "PUT" && url.pathname === "/upload") {
-      const headers = request.headers();
-      const body = request.postDataBuffer();
-      if (!body) throw new Error("Browser upload omitted its request body.");
-      if (body.includes(BYTES)) throw new Error("Browser upload exposed plaintext source bytes.");
-      const hash = createHash("sha256").update(body).digest("hex");
-      if (headers["x-sha-256"] !== hash) throw new Error("Browser upload sent the wrong X-SHA-256.");
-      if (headers["content-type"] !== "application/vnd.wildbloom.encrypted") throw new Error("Browser upload exposed the source MIME type.");
-      if (!headers.authorization?.startsWith("Nostr ")) throw new Error("Browser upload omitted Blossom authorisation.");
-      uploadAuthorisations.push(JSON.parse(Buffer.from(headers.authorization.slice(6), "base64url").toString("utf8")));
-      uploadedBytes = body;
-      uploadedHash = hash;
+      const forwarded = await route.fetch({ url: `${blossomOrigin}/upload` });
+      if (!forwarded.ok()) throw new Error(`Controlled onion forwarding failed with HTTP ${forwarded.status()}.`);
+      const descriptor = await forwarded.json();
       await route.fulfill({
         status: 201,
         headers: { ...cors, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: `${url.origin}/${hash}.wbenc`,
-          sha256: hash,
-          size: body.length,
-          type: "application/vnd.wildbloom.encrypted",
-          uploaded: 1_700_000_000,
-        }),
-      });
-      return;
-    }
-    if (request.method() === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
-      await route.fulfill({
-        status: 200,
-        headers: { ...cors, "Content-Type": "application/vnd.wildbloom.encrypted", "Content-Length": String(uploadedBytes.length) },
-        body: uploadedBytes,
+        body: JSON.stringify({ ...descriptor, url: `${url.origin}/${descriptor.sha256}.wbenc` }),
       });
       return;
     }
@@ -265,7 +313,7 @@ try {
     throw new Error("The default encryption choice is not reflected in the upload authority copy.");
   }
 
-  await page.fill("#blossom-server", BLOSSOM);
+  await page.fill("#blossom-server", blossomOrigin);
   await page.fill("#relay-urls", relayUrl);
   await page.fill("#tracker-urls", "wss://tracker.example.com/announce");
   await page.click("#connect-signer");
@@ -293,7 +341,7 @@ try {
   if (uploadAuthorisations.length !== 1 || !uploadedHash) throw new Error("Browser did not send one signed Blossom upload.");
   const directAuth = uploadAuthorisations[0];
   const scopedTags = directAuth.tags.filter((tag) => ["t", "server", "x"].includes(tag[0]));
-  if (JSON.stringify(scopedTags) !== JSON.stringify([["t", "upload"], ["server", "cdn.example.com"], ["x", uploadedHash]])) {
+  if (JSON.stringify(scopedTags) !== JSON.stringify([["t", "upload"], ["server", HOST], ["x", uploadedHash]])) {
     throw new Error("Browser upload authorisation was not exactly scoped.");
   }
   const expiration = Number(directAuth.tags.find((tag) => tag[0] === "expiration")?.[1]);
@@ -336,7 +384,7 @@ try {
   if (uploadAuthorisations.length !== 1) throw new Error("Tor-only mode used the network before Tor confirmation.");
 
   await page.check("#tor-consent");
-  await page.fill("#blossom-server", BLOSSOM);
+  await page.fill("#blossom-server", blossomOrigin);
   await page.click("#upload-file");
   await page.locator("#publish-status").filter({ hasText: "Tor-only mode" }).waitFor();
   if (uploadAuthorisations.length !== 1) throw new Error("Tor-only mode attempted a clearnet upload.");
@@ -369,10 +417,12 @@ try {
   }
   if (!(await page.isHidden("#recovery-key-panel"))) throw new Error("Plaintext opt-out displayed a misleading recovery key.");
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
+  if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
 
   process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));
+  await new Promise((resolve) => blossom.close(resolve));
   production.kill("SIGTERM");
 }
