@@ -30,9 +30,9 @@ function availablePort() {
   });
 }
 
-function exchange(port, { method = "GET", path = "/", host = "wildbloom.test", body } = {}) {
+function exchange(port, { method = "GET", path = "/", host = "wildbloom.test", headers = {}, body } = {}) {
   return new Promise((resolveResponse, reject) => {
-    const call = request({ hostname: HOST, port, method, path, headers: { Host: host } }, (response) => {
+    const call = request({ hostname: HOST, port, method, path, headers: { Host: host, ...headers } }, (response) => {
       const chunks = [];
       response.on("data", (chunk) => chunks.push(chunk));
       response.on("end", () => resolveResponse({
@@ -89,6 +89,43 @@ function expectReleaseEvidenceCli(evidence) {
     expect(publicOutput.status !== 0 && publicOutput.stderr.includes("public build directory"), "Release evidence could be written into the public build.");
   } finally {
     rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+function expectProductionServerCli() {
+  const cases = [
+    {
+      args: ["--porrt", "8080"],
+      expected: "Unknown production-server argument",
+      label: "unknown argument",
+    },
+    {
+      args: ["--port", "8080", "--port", "8081"],
+      expected: "--port may be supplied only once",
+      label: "duplicate argument",
+    },
+    {
+      args: ["--host", "--port", "8080"],
+      expected: "--host requires a value",
+      label: "missing argument value",
+    },
+    {
+      args: [],
+      env: { WILDBLOOM_ALLOWED_HOSTS: "wildbloom.test/path" },
+      expected: "Host allowlist contains an invalid hostname",
+      label: "URL-shaped Host allowlist",
+    },
+  ];
+  for (const testCase of cases) {
+    const result = spawnSync(process.execPath, ["scripts/serve-production.mjs", ...testCase.args], {
+      encoding: "utf8",
+      env: { ...process.env, ...testCase.env },
+      timeout: 10_000,
+    });
+    expect(
+      result.status !== 0 && result.stderr.includes(testCase.expected),
+      `Production server accepted ${testCase.label}: ${result.stderr}`,
+    );
   }
 }
 
@@ -234,6 +271,7 @@ function stopChild(child) {
 
 const evidence = collectReleaseEvidence();
 expectReleaseEvidenceCli(evidence);
+expectProductionServerCli();
 expectRejectedBuild(
   (build) => writeFileSync(join(build, "assets", "source.js.map"), "private source"),
   "not a hashed JavaScript or CSS file",
@@ -247,6 +285,9 @@ const production = spawn(process.execPath, ["scripts/serve-production.mjs", "--h
   env: { ...process.env, WILDBLOOM_ALLOWED_HOSTS: `wildbloom.test,${HOST}` },
   stdio: ["ignore", "pipe", "pipe"],
 });
+const productionOutput = [];
+production.stdout.on("data", (chunk) => productionOutput.push(Buffer.from(chunk)));
+production.stderr.on("data", (chunk) => productionOutput.push(Buffer.from(chunk)));
 
 try {
   await waitForServer(production, port);
@@ -270,7 +311,7 @@ try {
   expect(indexHead.headers["content-length"] === String(expectedIndex.length), "HEAD did not report the exact HTML length.");
 
   for (const file of evidence.files.filter((item) => item.path !== "index.html")) {
-    const response = await exchange(port, { path: `/${file.path}?release-probe=1` });
+    const response = await exchange(port, { path: `/${file.path}` });
     expect(response.status === 200, `Hashed asset was not served: ${file.path}`);
     expect(response.headers["cache-control"] === "public, max-age=31536000, immutable", `Hashed asset was not immutable: ${file.path}`);
     expect(response.headers["content-length"] === String(file.bytes), `Hashed asset length drifted: ${file.path}`);
@@ -290,6 +331,9 @@ try {
     { path: "/assets/%5c..%5cindex.html", status: 400, label: "encoded backslash traversal" },
     { path: "/bad%zz", status: 400, label: "malformed encoding" },
     { path: "http://attacker.invalid/", status: 400, label: "absolute-form target" },
+    { path: "/?private-query-marker", status: 400, label: "root query string" },
+    { path: "/healthz?private-query-marker", status: 400, label: "health query string" },
+    { path: `/${evidence.files.find((item) => item.path !== "index.html").path}?private-query-marker`, status: 400, label: "asset query string" },
   ];
   for (const probe of rejected) {
     const response = await exchange(port, { path: probe.path });
@@ -306,11 +350,46 @@ try {
   }
   const post = await exchange(port, { method: "POST", path: "/healthz", body: "not accepted" });
   expect(post.status === 405 && post.headers.allow === "GET, HEAD", "Production server accepted a request body or omitted its method boundary.");
+  expect(post.headers.connection === "close", "Production server retained a rejected method connection.");
+  for (const bodyProbe of [
+    { headers: { "Content-Length": "19" }, body: "private-body-marker", label: "length-framed GET body" },
+    { headers: { "Transfer-Encoding": "chunked" }, body: "private-body-marker", label: "chunked GET body" },
+  ]) {
+    const response = await exchange(port, { path: "/", ...bodyProbe });
+    expect(response.status === 400 && response.body.equals(Buffer.from("Bad request\n")), `Production server accepted ${bodyProbe.label}.`);
+    expect(response.headers.connection === "close", `Production server retained ${bodyProbe.label} connection.`);
+    expectSecurityHeaders(response, `Rejected ${bodyProbe.label}`);
+  }
+  for (const expectationProbe of [
+    {
+      headers: { "Content-Length": "19", Expect: "100-continue" },
+      body: "private-body-marker",
+      label: "100-continue request",
+    },
+    {
+      headers: { Expect: "private-expectation-marker" },
+      label: "unsupported expectation",
+    },
+  ]) {
+    const response = await exchange(port, { path: "/", ...expectationProbe });
+    expect(response.status === 417 && response.body.equals(Buffer.from("Expectation failed\n")), `Production server accepted ${expectationProbe.label}.`);
+    expect(response.headers.connection === "close", `Production server retained ${expectationProbe.label} connection.`);
+    expectSecurityHeaders(response, `Rejected ${expectationProbe.label}`);
+  }
+
+  await new Promise((resolveTurn) => setImmediate(resolveTurn));
+  const observedOutput = Buffer.concat(productionOutput).toString("utf8");
+  expect(
+    !observedOutput.includes("private-query-marker")
+      && !observedOutput.includes("private-body-marker")
+      && !observedOutput.includes("private-expectation-marker"),
+    "Production server logged a private request marker.",
+  );
 
   expectDeploymentVerificationCli(evidence, port);
 
   process.stdout.write(
-    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, hostile host/method/path rejection and independent release-evidence verification.\n`,
+    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, strict configuration, hostile host/method/path/query/body rejection, no private request logging and independent release-evidence verification.\n`,
   );
 } finally {
   await stopChild(production);

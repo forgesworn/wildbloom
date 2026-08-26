@@ -25,7 +25,17 @@ eight-character content-hashed JavaScript and CSS assets, rejects source maps
 and symbolic links, accepts only `GET` and `HEAD`, applies no-store to HTML,
 health and error responses, and applies immutable caching to hashed assets.
 It validates the complete build before listening, so `/healthz` cannot report
-ready for a missing or malformed build.
+ready for a missing or malformed build. Unknown or repeated command-line
+options fail closed. The Host allowlist accepts hostnames only; ports, paths,
+credentials and other URL syntax are configuration errors.
+
+Every request target containing a query string is rejected, including requests
+for hashed assets and `/healthz`. `GET` and `HEAD` requests carrying a framed
+body are also rejected and their connection is closed. The server logs only
+its listening address: it does not log or reflect request targets, headers or
+bodies. This keeps accidental recovery keys and other private input out of the
+origin process output, but it cannot stop an upstream proxy from observing or
+logging a request before rejection.
 
 The release-evidence JSON contains no secret material. It records the full
 source commit, whether the source tree was clean, the exact Node and npm build
@@ -90,7 +100,8 @@ The TLS reverse proxy must:
 - preserve the repository CSP, Permissions-Policy, Referrer-Policy,
   Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy,
   X-Content-Type-Options and frame denial;
-- avoid request bodies and query strings in logs;
+- reject request bodies and query strings without reflecting them, and disable
+  request-target, header and body logging;
 - minimise IP and user-agent retention;
 - expose `/healthz` without weakening the application headers;
 - provide atomic release switching and a tested rollback.
@@ -101,6 +112,10 @@ and tracker endpoints. Runtime validation still restricts schemes,
 credentials, endpoint counts, onion addresses and redirects. Do not replace
 the exact CSP or Permissions-Policy with a hosting provider's broader defaults;
 deployment verification treats any policy drift as a failure.
+
+Do not rely on the origin server's no-request-logging policy to sanitise proxy,
+load-balancer, CDN or platform logs. Confirm the complete request path and its
+retention settings with a private marker that never contains a real key.
 
 Wildbloom configures WebTorrent with no public ICE servers. Do not add STUN or
 TURN defaults at the hosting edge or by patching the bundle. An operator ICE

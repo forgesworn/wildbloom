@@ -137,6 +137,10 @@ extension copies remain outside Wildbloom's secure-deletion control.
   model calls for circuit and state separation.
 - Treat server, relay and reverse-proxy logs as sensitive even when content is
   encrypted.
+- Keep recovery keys and other private input out of URLs and request bodies.
+  The bundled origin rejects both without logging them, but upstream proxies,
+  CDNs and hosting platforms see the request first and need their own verified
+  no-request-logging policy.
 
 ## Not promised
 

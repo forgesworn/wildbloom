@@ -108,7 +108,9 @@ adversarial deployment acceptance, a real headless-browser acceptance path and
 the local secret scanner. The deployment gate verifies the
 exact served build hashes, strict immutable asset names, no-store HTML, health
 and error responses, exact fail-closed response security headers and hostile
-host, method and path rejection. CI runs the browser path in system Chromium on
+configuration, host, method, path, query-string and request-body rejection. It
+also proves that private rejection markers do not reach the origin server's
+output. CI runs the browser path in system Chromium on
 Windows, Linux and macOS, Playwright Firefox on Linux and Playwright WebKit on
 macOS. It proves response security headers, zero ambient network activity,
 denial of supported unused browser capabilities, protected browser input hints,
@@ -210,7 +212,9 @@ and [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 ## Production serving
 
 `npm run build && npm run serve:production` serves the built application on
-loopback with the repository's response security headers and `/healthz`.
+loopback with the repository's response security headers and `/healthz`. The
+server fails closed on unknown configuration, refuses all query strings and
+request bodies, and does not log request targets, headers or bodies.
 Production TLS, HSTS, host allowlisting, reverse-proxy logging and onion-service
 configuration are deployment responsibilities. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

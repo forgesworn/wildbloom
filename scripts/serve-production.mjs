@@ -5,18 +5,52 @@ import { SECURITY_HEADERS } from "./http-security.mjs";
 import { inspectProductionBuild, isProductionAssetPath } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
-function argument(name, fallback) {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : fallback;
+function argumentsFrom(argv) {
+  const values = { host: "127.0.0.1", port: "8080" };
+  const seen = new Set();
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument !== "--host" && argument !== "--port") {
+      throw new Error("Unknown production-server argument.");
+    }
+    if (seen.has(argument)) throw new Error(`${argument} may be supplied only once.`);
+    const value = argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
+    seen.add(argument);
+    values[argument.slice(2)] = value;
+    index += 1;
+  }
+  return values;
 }
 
-const host = argument("--host", "127.0.0.1");
-const port = Number(argument("--port", "8080"));
+const options = argumentsFrom(args);
+const host = options.host;
+if (host.length > 253 || /[\s/?#@\\]/u.test(host)) throw new Error("Production bind host is invalid.");
+if (!/^[0-9]{1,5}$/u.test(options.port)) throw new Error("Production port must be between 1 and 65535.");
+const port = Number(options.port);
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("Production port must be between 1 and 65535.");
 const root = resolve(process.cwd(), "dist");
 inspectProductionBuild(root);
+
+function normaliseAllowedHost(value) {
+  const raw = value.trim().toLowerCase();
+  if (!raw || /[\s/?#@\\]/u.test(raw)) throw new Error("Production Host allowlist contains an invalid hostname.");
+  const authority = raw.includes(":") && !raw.startsWith("[") ? `[${raw}]` : raw;
+  let parsed;
+  try {
+    parsed = new URL(`http://${authority}`);
+  } catch {
+    throw new Error("Production Host allowlist contains an invalid hostname.");
+  }
+  if (parsed.username || parsed.password || parsed.port || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+    throw new Error("Production Host allowlist accepts hostnames only, without ports or URL syntax.");
+  }
+  return parsed.hostname.toLowerCase();
+}
+
 const allowedHosts = new Set((process.env.WILDBLOOM_ALLOWED_HOSTS ?? `localhost,127.0.0.1,${host}`)
-  .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
+  .split(",").map(normaliseAllowedHost));
+if (allowedHosts.size === 0) throw new Error("Production Host allowlist must name at least one hostname.");
 
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -41,22 +75,35 @@ function respond(response, status, headers, body = "") {
   response.end(body);
 }
 
+function hasRequestBody(request) {
+  if (request.headers["transfer-encoding"] !== undefined) return true;
+  const contentLength = request.headers["content-length"];
+  return contentLength !== undefined && contentLength !== "0";
+}
+
 const server = createServer((request, response) => {
   if (!hostAllowed(request)) {
     respond(response, 421, { "Content-Type": "text/plain; charset=utf-8" }, "Misdirected request\n");
     return;
   }
   if (request.method !== "GET" && request.method !== "HEAD") {
-    respond(response, 405, { Allow: "GET, HEAD", "Content-Type": "text/plain; charset=utf-8" }, "Method not allowed\n");
+    request.resume();
+    respond(response, 405, { Allow: "GET, HEAD", Connection: "close", "Content-Type": "text/plain; charset=utf-8" }, "Method not allowed\n");
+    return;
+  }
+  if (hasRequestBody(request)) {
+    request.resume();
+    respond(response, 400, { Connection: "close", "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
     return;
   }
   const target = request.url ?? "";
-  const rawPath = target.split("?", 1)[0] ?? "";
+  const rawPath = target;
   if (
     !target.startsWith("/")
     || target.startsWith("//")
     || rawPath.includes("\\")
     || rawPath.includes("%")
+    || target.includes("?")
     || target.includes("#")
     || rawPath.split("/").some((segment) => segment === "." || segment === "..")
   ) {
@@ -106,6 +153,15 @@ const server = createServer((request, response) => {
   });
   if (request.method === "HEAD") response.end();
   else createReadStream(file).pipe(response);
+});
+
+server.on("checkContinue", (request, response) => {
+  request.resume();
+  respond(response, 417, { Connection: "close", "Content-Type": "text/plain; charset=utf-8" }, "Expectation failed\n");
+});
+server.on("checkExpectation", (request, response) => {
+  request.resume();
+  respond(response, 417, { Connection: "close", "Content-Type": "text/plain; charset=utf-8" }, "Expectation failed\n");
 });
 
 server.listen(port, host, () => process.stdout.write(`Wildbloom production server listening on http://${host}:${port}\n`));
