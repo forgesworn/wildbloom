@@ -191,6 +191,7 @@ let hangingRetrievalStarted = 0;
 let hangingRetrievalClosed = 0;
 const blossomErrors = [];
 const blossomHosts = [];
+const blossomRequests = [];
 const blossom = createHttpServer((request, response) => {
   void (async () => {
     const cors = {
@@ -200,6 +201,8 @@ const blossom = createHttpServer((request, response) => {
     };
     blossomHosts.push(request.headers.host ?? "");
     const url = new URL(request.url ?? "/", blossomOnionOrigin ?? "http://placeholder.onion");
+    blossomRequests.push(`${request.method ?? "UNKNOWN"} ${url.pathname}`);
+    if (blossomRequests.length > 100) blossomRequests.shift();
     if (request.method === "OPTIONS") {
       response.writeHead(204, cors);
       response.end();
@@ -301,9 +304,15 @@ relay.on("connection", (socket, request) => {
 async function createPage(context, label, appOrigin, allowedOrigins, signer) {
   const page = await context.newPage();
   const errors = [];
+  const failedRequests = [];
   const undeclaredRequests = [];
   const webSockets = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("requestfailed", (request) => {
+    const url = new URL(request.url());
+    failedRequests.push(`${request.method()} ${url.origin}${url.pathname}: ${request.failure()?.errorText ?? "unknown failure"}`);
+    if (failedRequests.length > 100) failedRequests.shift();
+  });
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (!allowedOrigins.has(url.origin)) undeclaredRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
@@ -351,7 +360,44 @@ async function createPage(context, label, appOrigin, allowedOrigins, signer) {
       + `(secureContext=${capabilities.secureContext}, subtleCrypto=${capabilities.subtleCrypto}).`,
     );
   }
-  return { label, page, errors, undeclaredRequests, webSockets };
+  return { label, page, errors, failedRequests, undeclaredRequests, webSockets };
+}
+
+function patternMatches(pattern, value) {
+  pattern.lastIndex = 0;
+  return pattern.test(value);
+}
+
+function pageTransportDiagnostic(record, snapshot) {
+  return JSON.stringify({
+    status: snapshot,
+    pageErrors: record.errors,
+    failedRequests: record.failedRequests.slice(-10),
+    undeclaredRequests: record.undeclaredRequests,
+    webSockets: record.webSockets.slice(-10),
+    blossomRequests: blossomRequests.slice(-20),
+    blossomErrors,
+    relayErrors,
+  });
+}
+
+async function waitForPageText(record, selector, pattern, timeoutMs = ONION_ACTION_TIMEOUT_MS) {
+  let latest = null;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    latest = await record.page.locator(selector).evaluate((element) => ({
+      text: element.textContent ?? "",
+      error: element.classList.contains("error"),
+      hidden: element.hidden,
+      links: element.querySelectorAll("a").length,
+    }));
+    if (patternMatches(pattern, latest.text)) return;
+    if (latest.error) {
+      throw new Error(`${record.label} entered an error state before showing ${pattern}: ${pageTransportDiagnostic(record, latest)}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`${record.label} did not show ${pattern} within ${timeoutMs}ms: ${pageTransportDiagnostic(record, latest)}`);
 }
 
 async function warmOnionTargets(page, blossomOrigin, relayUrl) {
@@ -478,15 +524,32 @@ async function brandedSnapshot(record, selector) {
 }
 
 async function waitForBrandedText(record, selector, pattern, timeoutMs = ONION_ACTION_TIMEOUT_MS) {
-  let latest = "";
+  let latest = null;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const snapshot = await brandedSnapshot(record, selector);
-    latest = snapshot?.text ?? "";
-    if (pattern.test(latest)) return;
+    latest = await brandedSnapshot(record, selector);
+    const text = latest?.text ?? "";
+    if (patternMatches(pattern, text)) return;
+    if (latest?.error) {
+      throw new Error(`${record.label} entered an error state before showing ${pattern}: ${JSON.stringify({
+        status: latest,
+        requests: record.requests.slice(-20),
+        browserOutput: record.output().slice(-2_000),
+        blossomRequests: blossomRequests.slice(-20),
+        blossomErrors,
+        relayErrors,
+      })}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  throw new Error(`${record.label} did not show ${pattern}; latest text was ${JSON.stringify(latest)}.`);
+  throw new Error(`${record.label} did not show ${pattern} within ${timeoutMs}ms: ${JSON.stringify({
+    status: latest,
+    requests: record.requests.slice(-20),
+    browserOutput: record.output().slice(-2_000),
+    blossomRequests: blossomRequests.slice(-20),
+    blossomErrors,
+    relayErrors,
+  })}`);
 }
 
 async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
@@ -910,10 +973,10 @@ try {
   await retriever.page.check("#tor-consent");
   await retriever.page.fill("#event-id", eventId);
   await retriever.page.click("#resolve-event");
-  await retriever.page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
+  await waitForPageText(retriever, "#retrieve-status", /separately received recovery key/iu);
   await retriever.page.fill("#recovery-key-input", recoveryKey);
   await retriever.page.click("#fetch-blossom");
-  await retriever.page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
+  await waitForPageText(retriever, "#retrieve-status", /locally decrypted bytes/iu);
   const downloadPromise = retriever.page.waitForEvent("download");
   await retriever.page.getByRole("link", { name: "Save verified onion-proof.txt" }).click();
   const download = await downloadPromise;
