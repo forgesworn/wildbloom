@@ -9,6 +9,7 @@ import { sha3_256 } from "@noble/hashes/sha3.js";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
+import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
 
 const HOST = "127.0.0.1";
 async function availablePort() {
@@ -403,7 +404,8 @@ try {
   if (!csp.includes("frame-ancestors 'none'") || headersResponse.headers.get("x-frame-options") !== "DENY") {
     throw new Error("Production response security headers are missing.");
   }
-  if (!headersResponse.headers.get("permissions-policy")?.includes("camera=()")) {
+  const permissionsPolicy = headersResponse.headers.get("permissions-policy") ?? "";
+  if (!["camera=()", "clipboard-read=()", "clipboard-write=()"].every((feature) => permissionsPolicy.includes(feature))) {
     throw new Error("Production response Permissions-Policy is missing.");
   }
   if ((await fetch(`${ORIGIN}/healthz`, { method: "POST" })).status !== 405) {
@@ -456,6 +458,7 @@ try {
       },
     });
   });
+  await page.addInitScript(installBrowserPersistenceAudit);
 
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -478,6 +481,35 @@ try {
 
   await page.goto(ORIGIN, { waitUntil: "networkidle" });
   if (remoteRequests.length !== 0) throw new Error(`Page made ambient remote requests: ${remoteRequests.join(", ")}`);
+  const protectedControls = [
+    "blossom-server",
+    "relay-urls",
+    "tracker-urls",
+    "external-signer-pubkey",
+    "recovery-key-output",
+    "external-unsigned-event",
+    "external-signed-event",
+    "event-id",
+    "recovery-key-input",
+  ];
+  for (const id of protectedControls) {
+    const attributes = await page.locator(`#${id}`).evaluate((element) => ({
+      autocomplete: element.getAttribute("autocomplete"),
+      autocapitalize: element.getAttribute("autocapitalize"),
+      autocorrect: element.getAttribute("autocorrect"),
+      spellcheck: element.getAttribute("spellcheck"),
+      translate: element.getAttribute("translate"),
+    }));
+    if (JSON.stringify(attributes) !== JSON.stringify({
+      autocomplete: "off",
+      autocapitalize: "off",
+      autocorrect: "off",
+      spellcheck: "false",
+      translate: "no",
+    })) {
+      throw new Error(`Protected control #${id} is missing browser-retention hints: ${JSON.stringify(attributes)}`);
+    }
+  }
   if (!(await page.locator("#upload-consent-copy").textContent())?.includes("encrypted bytes")) {
     throw new Error("The default encryption choice is not reflected in the upload authority copy.");
   }
@@ -799,11 +831,12 @@ try {
   if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
   if (!onionProxyRequests.includes("PUT /upload")) throw new Error("Tor-only upload did not traverse the controlled onion proxy.");
+  await assertNoBrowserPersistence(page, context, `${browserName} production journey`);
 
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

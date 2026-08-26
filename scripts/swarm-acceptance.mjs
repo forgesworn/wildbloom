@@ -9,6 +9,7 @@ import TrackerServer from "bittorrent-tracker/server";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium } from "playwright-core";
 import { WebSocketServer } from "ws";
+import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
 
 const HOST = "127.0.0.1";
 const SOURCE_BYTES = Buffer.from("Wildbloom peer acceptance\n".repeat(16_384), "utf8");
@@ -232,7 +233,11 @@ async function createAuditedPage(context, label, origin, allowedOrigins) {
   const errors = [];
   const requests = [];
   const webSockets = [];
+  const debugMessages = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "debug") debugMessages.push(message.text());
+  });
   page.on("websocket", (socket) => webSockets.push(socket.url()));
   page.on("request", (request) => {
     const requestOrigin = new URL(request.url()).origin;
@@ -265,8 +270,9 @@ async function createAuditedPage(context, label, origin, allowedOrigins) {
     }
     Object.defineProperty(window, "RTCPeerConnection", { configurable: false, value: AuditedPeerConnection });
   });
+  await page.addInitScript(installBrowserPersistenceAudit);
   await page.goto(origin, { waitUntil: "networkidle" });
-  const record = { label, page, errors, requests, webSockets };
+  const record = { label, page, errors, requests, webSockets, debugMessages };
   pages.push(record);
   return record;
 }
@@ -274,6 +280,25 @@ async function createAuditedPage(context, label, origin, allowedOrigins) {
 function assertCleanPage(record) {
   if (record.errors.length > 0) throw new Error(`${record.label} browser errors: ${record.errors.join("; ")}`);
   if (record.requests.length > 0) throw new Error(`${record.label} made undeclared requests: ${record.requests.join("; ")}`);
+}
+
+async function assertStoredDebugIsolation(record, context) {
+  const state = await record.page.evaluate(() => ({
+    storedDebug: globalThis.localStorage.getItem("debug"),
+    mutations: [...(window.__wildbloomPersistenceEvidence?.mutations ?? [])],
+  }));
+  if (state.storedDebug !== "*") throw new Error(`${record.label} changed the pre-existing browser debug preference.`);
+  if (state.mutations.length > 0) {
+    throw new Error(`${record.label} mutated persistent browser APIs: ${state.mutations.join(", ")}.`);
+  }
+  if (record.debugMessages.length > 0) {
+    throw new Error(`${record.label} allowed stored WebTorrent debug configuration to emit production diagnostics.`);
+  }
+  await record.page.evaluate(() => {
+    globalThis.localStorage.removeItem("debug");
+    if (window.__wildbloomPersistenceEvidence) window.__wildbloomPersistenceEvidence.mutations.length = 0;
+  });
+  await assertNoBrowserPersistence(record.page, context, `${record.label} peer journey`);
 }
 
 function assertPeerEvidence(record) {
@@ -330,6 +355,10 @@ try {
   if (publisher.requests.length > 0 || downloader.requests.length > 0) {
     throw new Error(`Opening the two production pages made ambient requests: ${[...publisher.requests, ...downloader.requests].join("; ")}`);
   }
+  await Promise.all([publisher.page, downloader.page].map((page) => page.evaluate(() => {
+    globalThis.localStorage.setItem("debug", "*");
+    if (window.__wildbloomPersistenceEvidence) window.__wildbloomPersistenceEvidence.mutations.length = 0;
+  })));
 
   await publisher.page.fill("#blossom-server", blossomOrigin);
   await publisher.page.fill("#relay-urls", relayUrl);
@@ -425,12 +454,16 @@ try {
   if (await publisher.page.isChecked("#seed-consent") || await publisher.page.isEnabled("#start-seeding")) {
     throw new Error("Changing the source retained stale swarm authority.");
   }
+  await Promise.all([
+    assertStoredDebugIsolation(publisher, publisherContext),
+    assertStoredDebugIsolation(downloader, downloaderContext),
+  ]);
   await downloaderContext.close();
   downloaderContext = undefined;
   if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the downloader restored a withdrawn peer session.");
 
   process.stdout.write(
-    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE and confirmed peer cleanup after failed decryption, consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
+    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE, stored-debug isolation, no retained browser state and confirmed peer cleanup after failed decryption, consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } catch (error) {
   const diagnostics = [];

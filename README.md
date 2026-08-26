@@ -98,8 +98,10 @@ exact served build hashes, strict immutable asset names, no-store HTML, health
 and error responses, response security headers and hostile host, method and
 path rejection. CI runs the browser path in system Chromium on Windows, Linux
 and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
-response security headers and zero ambient network activity, then exercises
-encrypted upload, exact Blossom authority,
+response security headers, zero ambient network activity, protected browser
+input hints, and no cookies, persistent browser-store mutations or retained
+browser state after the journey. It then exercises encrypted upload, exact
+Blossom authority,
 NIP-07 and exact external signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
 fallback. It rejects validly signed transformed hashes and false
@@ -111,7 +113,8 @@ can restore stale recovery, identity or publication state. Withdrawing Tor
 confirmation clears signer identity and downstream network authority. A
 separate Chromium gate drives two isolated production pages through
 a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
-the exact source from the browser peer, observes host-only ICE, and proves that
+the exact source from the browser peer, observes host-only ICE, isolates a
+pre-existing browser debug preference from WebTorrent, and proves that
 failed local decryption stops the downloading peer before a clean retry,
 withdrawing swarm consent stops it before tab closure, and changing the source
 stops the publishing peer. Browser acceptance also

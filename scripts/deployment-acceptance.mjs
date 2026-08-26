@@ -180,7 +180,7 @@ function expectSecurityHeaders(response, label) {
   expect(response.headers["x-content-type-options"] === "nosniff", `${label} permitted MIME sniffing.`);
   expect(response.headers["x-frame-options"] === "DENY", `${label} permitted framing.`);
   const permissions = response.headers["permissions-policy"] ?? "";
-  for (const feature of ["camera=()", "geolocation=()", "microphone=()", "payment=()", "usb=()"]) {
+  for (const feature of ["camera=()", "clipboard-read=()", "clipboard-write=()", "geolocation=()", "microphone=()", "payment=()", "usb=()"]) {
     expect(permissions.includes(feature), `${label} did not disable ${feature}.`);
   }
 }

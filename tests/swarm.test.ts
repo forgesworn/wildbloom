@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { sha256Hex } from "../src/core/crypto.js";
-import { downloadFromSwarm, startBrowserSeeding, type WebTorrentLoader } from "../src/core/swarm.js";
+import {
+  createWebTorrentLoader,
+  downloadFromSwarm,
+  importWebTorrentWithoutStoredDebug,
+  startBrowserSeeding,
+  withBlockedPersistentDebug,
+  type WebTorrentLoader,
+} from "../src/core/swarm.js";
 import type { InspectedFile, ResolvedHybridEvent, TorrentPlan } from "../src/core/types.js";
 
 const infoHash = "cd".repeat(20);
@@ -47,6 +54,132 @@ function retrieval(overrides: Partial<ResolvedHybridEvent> = {}): ResolvedHybrid
 }
 
 describe("WebTorrent safety boundary", () => {
+  it("loads the private dependency once and permits a retry after an import failure", async () => {
+    const module = { default: class Client {} as never };
+    let imports = 0;
+    const loader = createWebTorrentLoader(async () => {
+      imports += 1;
+      if (imports === 1) throw new Error("first import failed");
+      return module;
+    });
+    await expect(loader()).rejects.toThrow("first import failed");
+    await expect(loader()).resolves.toBe(module);
+    await expect(loader()).resolves.toBe(module);
+    expect(imports).toBe(2);
+  });
+
+  it("loads without touching storage when the browser storage API is absent", async () => {
+    const module = { default: class Client {} as never };
+    await expect(importWebTorrentWithoutStoredDebug(async () => module)).resolves.toBe(module);
+    await expect(withBlockedPersistentDebug(async () => "loaded", undefined, () => {
+      throw new Error("storage getter should not run");
+    })).resolves.toBe("loaded");
+  });
+
+  it("masks stored dependency debug flags only while loading", async () => {
+    class FakeStorage {
+      readonly values = new Map<string, string>([["debug", "*"], ["DEBUG", "webtorrent:*"], ["other", "preserved"]]);
+      getItem(key: string): string | null { return this.values.get(key) ?? null; }
+      setItem(key: string, value: string): void { this.values.set(key, value); }
+      removeItem(key: string): void { this.values.delete(key); }
+      clear(): void { this.values.clear(); }
+    }
+    const storage = new FakeStorage();
+    const nativeGetItem = FakeStorage.prototype.getItem;
+    const nativeSetItem = FakeStorage.prototype.setItem;
+    const nativeRemoveItem = FakeStorage.prototype.removeItem;
+    const result = await withBlockedPersistentDebug(
+      async () => {
+        const values = {
+          lowerDebug: storage.getItem("debug"),
+          upperDebug: storage.getItem("DEBUG"),
+          other: storage.getItem("other"),
+        };
+        storage.removeItem("debug");
+        storage.setItem("DEBUG", "changed");
+        return values;
+      },
+      FakeStorage as unknown as { prototype: Storage },
+      () => storage as unknown as Storage,
+    );
+    expect(result).toEqual({ lowerDebug: null, upperDebug: null, other: "preserved" });
+    expect(FakeStorage.prototype.getItem).toBe(nativeGetItem);
+    expect(FakeStorage.prototype.setItem).toBe(nativeSetItem);
+    expect(FakeStorage.prototype.removeItem).toBe(nativeRemoveItem);
+    expect(storage.getItem("debug")).toBe("*");
+    expect(storage.getItem("DEBUG")).toBe("webtorrent:*");
+  });
+
+  it("restores browser storage access after a failed dependency load", async () => {
+    class FakeStorage {
+      getItem(): string { return "preserved"; }
+      setItem(): void {}
+      removeItem(): void {}
+      clear(): void {}
+    }
+    const storage = new FakeStorage();
+    const nativeGetItem = FakeStorage.prototype.getItem;
+    await expect(withBlockedPersistentDebug(
+      async () => { throw new Error("module rejected"); },
+      FakeStorage as unknown as { prototype: Storage },
+      () => storage as unknown as Storage,
+    )).rejects.toThrow("module rejected");
+    expect(FakeStorage.prototype.getItem).toBe(nativeGetItem);
+  });
+
+  it("rejects unexpected dependency storage mutation during import", async () => {
+    class FakeStorage {
+      getItem(): null { return null; }
+      setItem(_key: string, _value: string): void {}
+      removeItem(_key: string): void {}
+      clear(): void {}
+    }
+    const storage = new FakeStorage();
+    await expect(withBlockedPersistentDebug(
+      async () => {
+        try {
+          storage.clear();
+        } catch {
+          // Model a dependency helper that catches storage failures internally.
+        }
+        try {
+          storage.removeItem("unexpected");
+        } catch {
+          // Model a dependency helper that catches storage failures internally.
+        }
+        try {
+          storage.setItem("unexpected", "value");
+        } catch {
+          // Model a dependency helper that catches storage failures internally.
+        }
+        return "loaded";
+      },
+      FakeStorage as unknown as { prototype: Storage },
+      () => storage as unknown as Storage,
+    )).rejects.toThrow(/unexpected persistent browser write/u);
+  });
+
+  it("fails closed when browser storage access cannot be safely isolated", async () => {
+    const prototype = {} as Storage;
+    Object.defineProperty(prototype, "getItem", {
+      configurable: false,
+      value: () => "*",
+    });
+    let loaded = false;
+    await expect(withBlockedPersistentDebug(
+      async () => { loaded = true; return "loaded"; },
+      { prototype },
+      () => prototype,
+    )).rejects.toThrow(/cannot be isolated/u);
+    expect(loaded).toBe(false);
+
+    await expect(withBlockedPersistentDebug(
+      async () => "loaded without storage",
+      { prototype },
+      () => { throw new Error("storage denied"); },
+    )).resolves.toBe("loaded without storage");
+  });
+
   it("does not load WebTorrent for seeding or retrieval in Tor-only mode", async () => {
     const { inspected, plan } = publication();
     let loaded = false;

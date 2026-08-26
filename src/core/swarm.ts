@@ -21,7 +21,114 @@ function privateWebTorrentClientOptions() {
 }
 type WebTorrentConstructor = typeof import("webtorrent/dist/webtorrent.min.js")["default"];
 export type WebTorrentLoader = () => Promise<{ default: WebTorrentConstructor }>;
-const loadWebTorrent: WebTorrentLoader = () => import("webtorrent/dist/webtorrent.min.js");
+type WebTorrentModule = { default: WebTorrentConstructor };
+
+export async function withBlockedPersistentDebug<T>(
+  loader: () => Promise<T>,
+  storageConstructor: { prototype: Storage } | undefined,
+  getOriginStorage: () => Storage,
+): Promise<T> {
+  if (!storageConstructor) return loader();
+  let originStorage: Storage;
+  try {
+    originStorage = getOriginStorage();
+  } catch {
+    // WebTorrent's debug helper also tolerates an origin where local storage is
+    // unavailable, so there is no stored debug preference to isolate here.
+    return loader();
+  }
+
+  const descriptors = new Map(["getItem", "setItem", "removeItem", "clear"].map((method) => [
+    method,
+    Object.getOwnPropertyDescriptor(storageConstructor.prototype, method),
+  ]));
+  if ([...descriptors.values()].some((descriptor) => !descriptor
+    || typeof descriptor.value !== "function"
+    || !descriptor.configurable)) {
+    throw new Error("WebTorrent cannot be isolated from persistent browser state.");
+  }
+  const getItemDescriptor = descriptors.get("getItem")!;
+  const setItemDescriptor = descriptors.get("setItem")!;
+  const removeItemDescriptor = descriptors.get("removeItem")!;
+  const clearDescriptor = descriptors.get("clear")!;
+  const nativeGetItem = getItemDescriptor.value as Storage["getItem"];
+  const nativeSetItem = setItemDescriptor.value as Storage["setItem"];
+  const nativeRemoveItem = removeItemDescriptor.value as Storage["removeItem"];
+  const nativeClear = clearDescriptor.value as Storage["clear"];
+  const isDebugKey = (key: string): boolean => key === "debug" || key === "DEBUG";
+  let unexpectedMutation: string | undefined;
+  try {
+    Object.defineProperty(storageConstructor.prototype, "getItem", {
+      ...getItemDescriptor,
+      value(this: Storage, key: string): string | null {
+        if (this === originStorage && isDebugKey(key)) return null;
+        return nativeGetItem.call(this, key);
+      },
+    });
+    Object.defineProperty(storageConstructor.prototype, "setItem", {
+      ...setItemDescriptor,
+      value(this: Storage, key: string, value: string): void {
+        if (this !== originStorage) return nativeSetItem.call(this, key, value);
+        if (!isDebugKey(key)) {
+          unexpectedMutation = "write";
+          throw new Error("WebTorrent attempted an unexpected persistent browser write.");
+        }
+      },
+    });
+    Object.defineProperty(storageConstructor.prototype, "removeItem", {
+      ...removeItemDescriptor,
+      value(this: Storage, key: string): void {
+        if (this !== originStorage) return nativeRemoveItem.call(this, key);
+        if (!isDebugKey(key)) {
+          unexpectedMutation = "removal";
+          throw new Error("WebTorrent attempted an unexpected persistent browser removal.");
+        }
+      },
+    });
+    Object.defineProperty(storageConstructor.prototype, "clear", {
+      ...clearDescriptor,
+      value(this: Storage): void {
+        if (this === originStorage) {
+          unexpectedMutation = "clear";
+          throw new Error("WebTorrent attempted to clear persistent browser state.");
+        }
+        return nativeClear.call(this);
+      },
+    });
+    const module = await loader();
+    if (unexpectedMutation) throw new Error(`WebTorrent attempted an unexpected persistent browser ${unexpectedMutation}.`);
+    return module;
+  } finally {
+    for (const [method, descriptor] of descriptors) {
+      Object.defineProperty(storageConstructor.prototype, method, descriptor!);
+    }
+  }
+}
+
+export async function importWebTorrentWithoutStoredDebug(
+  loader: () => Promise<WebTorrentModule> = () => import("webtorrent/dist/webtorrent.min.js"),
+): Promise<WebTorrentModule> {
+  return withBlockedPersistentDebug(
+    loader,
+    typeof Storage === "undefined" ? undefined : Storage,
+    () => globalThis.localStorage,
+  );
+}
+
+export function createWebTorrentLoader(
+  importer: () => Promise<WebTorrentModule> = importWebTorrentWithoutStoredDebug,
+): WebTorrentLoader {
+  let webTorrentModulePromise: Promise<WebTorrentModule> | undefined;
+  return () => {
+    webTorrentModulePromise ??= importer().catch((error: unknown) => {
+      webTorrentModulePromise = undefined;
+      throw error;
+    });
+    return webTorrentModulePromise;
+  };
+}
+
+const loadWebTorrent = createWebTorrentLoader();
 
 async function destroyClient(client: { destroy(callback?: (error?: Error) => void): void }): Promise<void> {
   await new Promise<void>((resolve, reject) => {

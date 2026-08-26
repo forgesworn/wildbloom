@@ -83,6 +83,24 @@ approval that completes from the previous profile is discarded. This prevents
 stale direct-mode events from becoming publishable in Tor-only state, but it
 cannot make a reused Nostr key or the signer's own network activity anonymous.
 
+## Browser state
+
+Wildbloom does not persist application data in cookies, local or session
+storage, IndexedDB, Cache Storage or a service worker. Production browser
+acceptance checks those stores after complete publication and retrieval
+journeys, and records any attempted mutation of their persistent APIs. Peer
+acceptance also plants a pre-existing `localStorage.debug` preference and proves
+that WebTorrent neither consumes nor changes it; this prevents a stale browser
+setting from enabling dependency diagnostics in production.
+
+Secret and machine-formatted controls ask the browser not to autofill,
+autocapitalise, autocorrect, spellcheck or translate their values. The response
+Permissions-Policy denies Clipboard API reads and writes; ordinary deliberate
+copy and paste through browser or operating-system controls still works. These
+are browser hints and containment controls, not secure deletion: a browser,
+extension, input method, clipboard manager or operating system may retain or
+synchronise data outside Wildbloom's control. Close the tab after use.
+
 ## Operational rules
 
 - Do not send the event ID and recovery key through the same observable

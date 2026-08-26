@@ -15,8 +15,9 @@ before a public production release.
   first record.
 - The public payload always uses `wildbloom.wbenc` and
   `application/vnd.wildbloom.encrypted`.
-- The key is never written to Nostr, Blossom, torrent metadata, local storage,
-  session storage or IndexedDB.
+- The key is never written to Nostr, Blossom, torrent metadata, cookies, local
+  or session storage, IndexedDB or Cache Storage, and no service worker is
+  registered.
 - Random bytes are filled directly into their destination buffer. Mutable raw
   key, source-chunk and private-metadata buffers are overwritten as soon as
   their operation finishes or fails.

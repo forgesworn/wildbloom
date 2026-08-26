@@ -57,15 +57,15 @@
         <div class="grid three">
           <label>
             Blossom server
-            <input id="blossom-server" type="url" placeholder="https://cdn.example.com" autocomplete="off" />
+            <input id="blossom-server" type="url" placeholder="https://cdn.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
           </label>
           <label>
             Nostr relays <small>one per line</small>
-            <textarea id="relay-urls" rows="3" placeholder="wss://relay.example.com"></textarea>
+            <textarea id="relay-urls" rows="3" placeholder="wss://relay.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
           <label id="tracker-field">
             WebTorrent trackers <small>one per line</small>
-            <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com"></textarea>
+            <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
         </div>
         <p id="ice-boundary" class="privacy-boundary">
@@ -93,7 +93,7 @@
         <div id="external-signer-identity" class="signer-identity" hidden>
           <label>
             External signer public key <small>64 lowercase hexadecimal characters. Public identity only, never a private key or nsec.</small>
-            <input id="external-signer-pubkey" type="text" inputmode="text" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" />
+            <input id="external-signer-pubkey" type="text" inputmode="text" maxlength="64" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
           </label>
         </div>
 
@@ -128,7 +128,7 @@
         <div id="recovery-key-panel" class="key-panel" hidden>
           <label>
             Recovery key <small>Secret. Send it out of band, never in a public Nostr event.</small>
-            <input id="recovery-key-output" type="password" readonly autocomplete="off" spellcheck="false" />
+            <input id="recovery-key-output" type="password" inputmode="text" readonly autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
           </label>
           <button id="toggle-recovery-key" type="button">Reveal recovery key</button>
           <div id="recovery-links" class="downloads"></div>
@@ -146,12 +146,12 @@
           </p>
           <label>
             Exact unsigned event JSON <small>Read-only. Review it on both devices before signing.</small>
-            <textarea id="external-unsigned-event" rows="10" readonly autocomplete="off" spellcheck="false"></textarea>
+            <textarea id="external-unsigned-event" rows="10" readonly autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
           <div id="external-signing-links" class="downloads"></div>
           <label>
             Complete signed event JSON <small>Wildbloom rejects changed fields, the wrong author, malformed data and invalid signatures.</small>
-            <textarea id="external-signed-event" rows="10" maxlength="131072" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+            <textarea id="external-signed-event" rows="10" maxlength="131072" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
           <div class="inline-actions">
             <button id="accept-external-signature" type="button">Accept exact signature</button>
@@ -209,11 +209,11 @@
 
         <label>
           Nostr event ID
-          <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" />
+          <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
         </label>
         <label id="recovery-key-field" hidden>
           Recovery key
-          <input id="recovery-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="wbk1_…" />
+          <input id="recovery-key-input" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="wbk1_…" />
         </label>
         <div class="actions">
           <button id="resolve-event" type="button">Resolve signed event</button>

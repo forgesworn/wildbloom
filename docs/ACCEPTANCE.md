@@ -29,7 +29,8 @@ the finish line.
   after failed local decryption, swarm-consent withdrawal and source change,
   before browser closure. A failed recovery exposes no save link and a correct
   retry must complete through a new peer session.
-- Response CSP, framing, referrer, permissions and MIME-sniffing headers.
+- Response CSP, framing, referrer, permissions and MIME-sniffing headers,
+  including denial of Clipboard API access.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,
   traversal, source-map and repository-file rejection.
@@ -37,6 +38,12 @@ the finish line.
   no redirect, streams the exact deployed bytes and fails on health, HSTS,
   MIME, cache, security-header, size or SHA-256 drift.
 - No remote request on page load.
+- No application mutation or retained entries in cookies, local or session
+  storage, IndexedDB, Cache Storage or service workers after a complete browser
+  journey. Secret and structured controls carry browser-retention hints.
+- Peer journeys preserve but do not consume a hostile pre-existing
+  `localStorage.debug` preference, emit no dependency debug diagnostics, then
+  leave no browser state after the harness removes its fixture.
 - Randomised local encryption and recovery-key gate.
 - Blossom upload of ciphertext rather than source bytes.
 - Exact hash, server and 90-second BUD-11 upload authority.
