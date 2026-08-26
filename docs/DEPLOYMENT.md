@@ -32,6 +32,12 @@ The command refuses to overwrite an existing record or to write into `dist`.
 Store it outside the repository with the release record rather than publishing
 it from the web root.
 
+Hosted CI generates that evidence independently on Windows, Linux and macOS,
+retains the three small metadata records for seven days, validates their exact
+shape and source commit, then requires identical toolchains and production
+bytes. A platform-specific bundle cannot silently become the canonical release.
+The comparison job does not upload or retain the application bundle itself.
+
 ## Verify the deployed origin
 
 After the release is live, verify it from a logged-out network location:

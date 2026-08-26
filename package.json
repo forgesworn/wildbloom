@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "serve:production": "node scripts/serve-production.mjs",
     "release:evidence": "node scripts/release-evidence.mjs",
+    "build:compare": "node scripts/compare-build-evidence.mjs",
     "verify:deployment": "node scripts/verify-deployment.mjs",
     "acceptance:deployment": "node scripts/deployment-acceptance.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",

@@ -6,6 +6,9 @@ the finish line.
 ## Automated on every push
 
 - Node 24 strict TypeScript on GitHub-hosted Windows, Linux and macOS runners.
+- Byte-for-byte equality of the Windows, Linux and macOS production builds,
+  using independently generated, schema-validated release evidence tied to the
+  exact source commit, package lock and Node/npm toolchain.
 - Unit and adversarial tests with global core thresholds of 85% statements,
   75% branches, 88% functions and 94% lines.
 - Production bundle generation.

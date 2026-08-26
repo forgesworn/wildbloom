@@ -148,6 +148,13 @@ if the package exclusions, Wildbloom's exact import or the browser-bundle
 contents change. Vite also rejects that Node code from the actual production
 module graph. Every other advisory still fails CI.
 
+Each Windows, Linux and macOS verification job also emits bounded release
+evidence for its own build. A separate job validates those records against the
+checked-out source commit and requires identical package locks, Node/npm
+toolchains, file lists, lengths and SHA-256 values before CI can pass. The
+comparison uses metadata only; the production bundle is not retained as a
+workflow artefact.
+
 CI also drives the GitHub runner's genuine branded Mozilla Firefox release
 through two disposable profiles and loopback-only WebDriver BiDi. That separate
 gate proves a trustworthy production origin, no ambient application network or
