@@ -10,7 +10,12 @@ const ALLOWED_ADVISORY = "GHSA-2p57-rm9w-gvfp";
 
 let report;
 try {
-  const output = execFileSync("npm", ["audit", "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const command = process.env.npm_execpath
+    ? { executable: process.execPath, arguments: [process.env.npm_execpath, "audit", "--json"] }
+    : process.platform === "win32"
+      ? { executable: process.env.ComSpec ?? "cmd.exe", arguments: ["/d", "/s", "/c", "npm audit --json"] }
+      : { executable: "npm", arguments: ["audit", "--json"] };
+  const output = execFileSync(command.executable, command.arguments, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   report = JSON.parse(output);
 } catch (error) {
   const output = error?.stdout;

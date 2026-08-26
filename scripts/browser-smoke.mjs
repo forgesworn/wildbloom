@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { platform } from "node:os";
+import { join } from "node:path";
 import { sha3_256 } from "@noble/hashes/sha3.js";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium } from "playwright-core";
@@ -51,13 +52,23 @@ const ONION_HOST = onionHostname();
 const ONION_BLOSSOM = `http://${ONION_HOST}`;
 
 function findChrome() {
-  const candidates = platform() === "darwin"
+  const operatingSystem = platform();
+  const candidates = operatingSystem === "darwin"
     ? [
         "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
         "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
       ]
-    : ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
+    : operatingSystem === "win32"
+      ? [
+          process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe"),
+          process.env["PROGRAMFILES(X86)"] && join(process.env["PROGRAMFILES(X86)"], "Google", "Chrome", "Application", "chrome.exe"),
+          process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Google", "Chrome", "Application", "chrome.exe"),
+          process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, "Microsoft", "Edge", "Application", "msedge.exe"),
+          process.env["PROGRAMFILES(X86)"] && join(process.env["PROGRAMFILES(X86)"], "Microsoft", "Edge", "Application", "msedge.exe"),
+        ].filter((candidate) => typeof candidate === "string")
+      : ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
   for (const candidate of candidates) {
     try {
       accessSync(candidate, constants.X_OK);
@@ -66,7 +77,7 @@ function findChrome() {
       // Try the next explicit browser path.
     }
   }
-  throw new Error("Browser smoke requires an installed Chrome, Chromium or Brave executable.");
+  throw new Error("Browser smoke requires an installed Chrome, Chromium, Brave or Edge executable.");
 }
 
 async function waitForServer(server) {
@@ -280,7 +291,8 @@ try {
   await page.check('input[name="network-profile"][value="tor"]');
   const trackerHidden = await page.isHidden("#tracker-field");
   const seedHidden = await page.isHidden("#seed-gate");
-  if (!trackerHidden || !seedHidden) throw new Error(`Tor-only mode did not remove tracker and WebRTC controls (${trackerHidden}/${seedHidden}, profile=${await page.locator('input[name="network-profile"]:checked').getAttribute("value")}).`);
+  const iceBoundaryHidden = await page.isHidden("#ice-boundary");
+  if (!trackerHidden || !seedHidden || !iceBoundaryHidden) throw new Error(`Tor-only mode did not remove tracker and WebRTC controls (${trackerHidden}/${seedHidden}/${iceBoundaryHidden}, profile=${await page.locator('input[name="network-profile"]:checked').getAttribute("value")}).`);
   await page.fill("#blossom-server", ONION_BLOSSOM);
   await page.check("#key-saved-consent");
   await page.check("#upload-consent");

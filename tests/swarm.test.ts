@@ -6,8 +6,16 @@ import type { InspectedFile, ResolvedHybridEvent, TorrentPlan } from "../src/cor
 const infoHash = "cd".repeat(20);
 const tracker = "wss://tracker.example.com/";
 const webSeed = "https://cdn.example.com/ab";
+const privateClientOptions = {
+  tracker: { rtcConfig: { iceServers: [] } },
+  dht: false,
+  lsd: false,
+  natPmp: false,
+  natUpnp: false,
+  utp: false,
+};
 
-function loaderFor(clientClass: new () => object): WebTorrentLoader {
+function loaderFor(clientClass: new (...arguments_: never[]) => object): WebTorrentLoader {
   return async () => ({ default: clientClass as never });
 }
 
@@ -37,6 +45,20 @@ describe("WebTorrent safety boundary", () => {
     };
     await expect(startBrowserSeeding(inspected, plan, "tor", loader as WebTorrentLoader)).rejects.toThrow(/disabled/u);
     expect(loaded).toBe(false);
+  });
+
+  it("disables undeclared STUN, DHT and local-discovery infrastructure", async () => {
+    let options: unknown;
+    class Client {
+      constructor(value: unknown) { options = value; }
+      on(): void {}
+      seed(_file: File, _options: unknown, callback: (torrent: { infoHash: string }) => void): void { callback({ infoHash }); }
+      destroy(callback?: () => void): void { callback?.(); }
+    }
+    const { inspected, plan } = publication();
+    const session = await startBrowserSeeding(inspected, plan, "direct", loaderFor(Client));
+    expect(options).toEqual(privateClientOptions);
+    await session.stop();
   });
 
   it("destroys a seeding client if WebTorrent changes the reviewed info hash", async () => {
@@ -81,10 +103,11 @@ describe("WebTorrent safety boundary", () => {
       size: 5,
       sha256: hash,
     } as unknown as ResolvedHybridEvent;
+    let options: unknown;
     class Client {
       static last: Client;
       destroyed = false;
-      constructor() { Client.last = this; }
+      constructor(value: unknown) { Client.last = this; options = value; }
       on(): void {}
       add(_magnet: string, _options: unknown, callback: (torrent: object) => void): void {
         callback({
@@ -102,6 +125,7 @@ describe("WebTorrent safety boundary", () => {
     const result = await downloadFromSwarm(resolved, (value) => { progress = value; }, "direct", loaderFor(Client));
     expect(await result.blob.text()).toBe("hello");
     expect(progress).toBe(1);
+    expect(options).toEqual(privateClientOptions);
     await result.session.stop();
     expect(Client.last.destroyed).toBe(true);
   });

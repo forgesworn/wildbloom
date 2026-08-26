@@ -32,6 +32,8 @@ delivery. It is interoperability work, not a new storage network.
   upload. Any envelope-format change requires a version change and vectors.
 - Tor-only mode accepts checksum-valid v3 onion endpoints, never falls back to
   clearnet, and must not load, seed or download through WebTorrent.
+- Direct WebTorrent must not inherit undeclared public STUN/TURN defaults. Any
+  ICE service requires explicit operator configuration, disclosure and tests.
 - A file or network-profile change invalidates every prior network consent.
 - Joining a torrent swarm reveals network metadata. Keep that warning beside
   the action and require acknowledgement.

@@ -4,6 +4,20 @@ import type { InspectedFile, NetworkProfile, ResolvedHybridEvent, StopHandle, To
 
 const SWARM_TIMEOUT_MS = 30 * 60 * 1000;
 const SWARM_START_TIMEOUT_MS = 30_000;
+function privateWebTorrentClientOptions() {
+  // WebTorrent otherwise inherits public Google and Twilio STUN servers from
+  // simple-peer. Wildbloom never contacts undeclared ICE infrastructure. This
+  // host-candidate-only policy is intentionally conservative: cross-network
+  // connectivity needs a separately reviewed, explicitly configured service.
+  return {
+    tracker: { rtcConfig: { iceServers: [] } },
+    dht: false,
+    lsd: false,
+    natPmp: false,
+    natUpnp: false,
+    utp: false,
+  };
+}
 type WebTorrentConstructor = typeof import("webtorrent/dist/webtorrent.min.js")["default"];
 export type WebTorrentLoader = () => Promise<{ default: WebTorrentConstructor }>;
 const loadWebTorrent: WebTorrentLoader = () => import("webtorrent/dist/webtorrent.min.js");
@@ -20,7 +34,7 @@ export async function startBrowserSeeding(
 ): Promise<StopHandle> {
   if (profile === "tor") throw new Error("WebTorrent is disabled in Tor-only mode.");
   const { default: WebTorrent } = await loader();
-  const client = new WebTorrent();
+  const client = new WebTorrent(privateWebTorrentClientOptions());
   return new Promise((resolve, reject) => {
     let settled = false;
     const timer = globalThis.setTimeout(() => {
@@ -68,7 +82,7 @@ export async function downloadFromSwarm(
     throw new Error("The signed event does not contain a usable WebTorrent transport.");
   }
   const { default: WebTorrent } = await loader();
-  const client = new WebTorrent();
+  const client = new WebTorrent(privateWebTorrentClientOptions());
   return new Promise((resolve, reject) => {
     let settled = false;
     const fail = (error: unknown): void => {

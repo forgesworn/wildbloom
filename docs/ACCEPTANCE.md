@@ -5,7 +5,7 @@ the finish line.
 
 ## Automated on every push
 
-- Node 24 strict TypeScript.
+- Node 24 strict TypeScript on GitHub-hosted Windows, Linux and macOS runners.
 - Unit and adversarial tests with global core thresholds of 80% statements,
   70% branches, 85% functions and 90% lines.
 - Production bundle generation.
@@ -38,9 +38,11 @@ npm run ci
   services, including denial, timeout and circuit-change behaviour.
 - A supported extension-free signer path for high-anonymity Tor publication.
 - Controlled two-browser WebTorrent seeding and retrieval through a real WSS
-  tracker, with observed IP-disclosure copy checked against packet evidence.
-- Chrome, Firefox and Safari desktop matrix plus keyboard and screen-reader
-  review.
+  tracker, with host-candidate and any operator ICE traffic checked against
+  packet evidence.
+- Branded Chrome, Firefox and real Safari desktop coverage on their supported
+  operating systems; Playwright WebKit alone is not Safari proof.
+- Keyboard and screen-reader review.
 - Maximum-size, low-memory, interrupted-upload and interrupted-download tests.
 - Production host selection, TLS/HSTS, onion address custody, monitoring,
   rollback and log-retention policy.

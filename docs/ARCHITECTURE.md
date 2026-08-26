@@ -3,6 +3,30 @@
 Wildbloom composes existing protocols and adds a versioned local encryption
 envelope. It does not introduce a storage network.
 
+## Platform boundary
+
+The canonical product is a static browser application. The same local-only
+TypeScript core and built assets target current browsers on Windows, Linux and
+macOS; the complete automated gate runs on all three operating systems. This
+is an application compatibility claim, not a claim that native installers or
+background services exist.
+
+Do not add a desktop shell merely for packaging. Reconsider one only if a
+validated requirement needs native streaming for very large files, reliable
+background seeding, OS key storage or a separately designed bundled-Tor
+process. A Tauri spike must prove the exact crypto, WebSocket, WebRTC, download
+and accessibility paths in Windows WebView2, macOS WKWebView and Linux
+WebKitGTK before adoption; those engines do not have identical behaviour.
+Electron is a fallback only if a pinned Chromium runtime materially solves a
+proven compatibility problem and its Node/IPC capability surface passes a
+separate security review.
+
+Platform references:
+
+- [Tauri system webview versions](https://tauri.app/reference/webview-versions/)
+- [Electron security checklist](https://www.electronjs.org/docs/latest/tutorial/security)
+- [Playwright browser boundaries](https://playwright.dev/docs/browsers)
+
 ```text
  source --local AES-GCM--> padded encrypted envelope
                     |
@@ -32,13 +56,17 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
    whose URL, hash or size differs.
 5. In direct mode it creates a one-file BitTorrent v1 descriptor containing
    the Blossom URL as a web seed and user-selected WebSocket trackers.
+   WebTorrent receives an explicit empty ICE-server list; it must not inherit
+   library-supplied public STUN/TURN infrastructure.
 6. The signer signs a NIP-94 file event and, in direct mode, a NIP-35 torrent
    index. The encryption scheme is an explicit versioned extension tag.
 7. Only the explicit publish action sends those events to chosen relays.
 
 Seeding is deliberately independent from relay publication. A Blossom-backed
 magnet remains useful without the publisher becoming a peer, while a live
-publisher can explicitly add peer capacity.
+publisher can explicitly add peer capacity. The current host-candidate-only
+WebRTC policy favours a truthful network-authority boundary over silent NAT
+traversal. Internet peer delivery needs a separately reviewed ICE design.
 
 Tor-only mode is a separate branch. It validates v3 onion checksums, accepts
 only onion Nostr and Blossom endpoints, omits the torrent entirely and refuses

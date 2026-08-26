@@ -53,6 +53,7 @@
 | Remote endpoint uses plaintext | Reject except explicit localhost development |
 | Tor-only endpoint is clearnet, v2 onion or checksum-invalid v3 onion | Reject before network access |
 | Tor-only flow requests WebTorrent | Reject before the WebTorrent bundle loads |
+| WebTorrent library supplies undeclared public STUN defaults | Override with an explicit empty ICE-server list; keep cross-network peer delivery unpromised |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
 | User changes file or transport profile after consent | Clear all publication and swarm consents |
 
@@ -65,6 +66,8 @@
 - Exercise onion publication and retrieval against disposable keys, relays and
   a local Blossom server, and exercise direct mode with a controlled live
   WebTorrent tracker and two browser peers.
+- Select and disclose an operator-controlled ICE/STUN/TURN policy, or retain
+  the documented host-candidate-only connectivity limit.
 - Decide on relay, tracker and server policy without silently turning optional
   defaults into endorsements.
 - Preserve the tested response headers at the hosting edge and add HSTS after

@@ -44,6 +44,11 @@ The CSP permits arbitrary HTTPS/WSS because users select their own Nostr,
 Blossom and tracker endpoints. Runtime validation still restricts schemes,
 credentials, endpoint counts, onion addresses and redirects.
 
+Wildbloom configures WebTorrent with no public ICE servers. Do not add STUN or
+TURN defaults at the hosting edge or by patching the bundle. An operator ICE
+service needs an explicit endpoint/credential design, user-facing disclosure,
+retention policy and cross-network packet-level acceptance first.
+
 ## Onion service
 
 Run the static server on loopback and point a v3 onion service at it. A minimal

@@ -41,6 +41,7 @@ const blossomInput = element<HTMLInputElement>("blossom-server");
 const relayInput = element<HTMLTextAreaElement>("relay-urls");
 const trackerInput = element<HTMLTextAreaElement>("tracker-urls");
 const trackerField = element<HTMLElement>("tracker-field");
+const iceBoundary = element<HTMLElement>("ice-boundary");
 const torBoundary = element<HTMLElement>("tor-boundary");
 const torConsentField = element<HTMLElement>("tor-consent-field");
 const torConsent = element<HTMLInputElement>("tor-consent");
@@ -207,6 +208,7 @@ function applyProfile(): void {
   const tor = profile() === "tor";
   torBoundary.hidden = !tor;
   torConsentField.hidden = !tor;
+  iceBoundary.hidden = tor;
   trackerField.hidden = tor;
   trackerInput.disabled = tor;
   seedGate.hidden = tor;

@@ -23,7 +23,19 @@ declare module "webtorrent/dist/webtorrent.min.js" {
     private?: boolean;
   }
 
+  interface WebTorrentClientOptions {
+    dht?: boolean;
+    lsd?: boolean;
+    natPmp?: boolean;
+    natUpnp?: boolean;
+    tracker?: {
+      rtcConfig?: RTCConfiguration;
+    };
+    utp?: boolean;
+  }
+
   class WebTorrent {
+    constructor(options?: WebTorrentClientOptions);
     seed(input: File, options: TorrentOptions, callback: (torrent: Torrent) => void): Torrent;
     add(input: string, options: TorrentOptions, callback: (torrent: Torrent) => void): Torrent;
     on(event: "error", listener: (error: Error) => void): void;

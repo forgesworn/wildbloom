@@ -36,7 +36,7 @@
           <legend>Network profile</legend>
           <label class="profile-option">
             <input name="network-profile" type="radio" value="direct" checked />
-            <span><strong>Direct encrypted delivery</strong><small>Nostr, Blossom and WebTorrent. Services and peers see your IP address.</small></span>
+            <span><strong>Direct encrypted delivery</strong><small>Nostr, Blossom and host-candidate WebTorrent. Services and peers see your IP address.</small></span>
           </label>
           <label class="profile-option">
             <input name="network-profile" type="radio" value="tor" />
@@ -63,6 +63,11 @@
             <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com"></textarea>
           </label>
         </div>
+        <p id="ice-boundary" class="privacy-boundary">
+          Peer mode has no hidden public STUN or TURN default. That avoids an
+          undeclared third party, but peer connections may fail across networks
+          until an operator-controlled ICE policy is reviewed and configured.
+        </p>
 
         <label id="tor-consent-field" class="check privacy-confirmation" hidden>
           <input id="tor-consent" type="checkbox" />
@@ -121,7 +126,7 @@
         <div id="seed-gate" class="gate">
           <label class="check">
             <input id="seed-consent" type="checkbox" />
-            <span>I understand trackers and peers can observe my IP address and torrent activity.</span>
+            <span>I understand trackers, peers and WebRTC connection candidates can expose network addresses and torrent activity.</span>
           </label>
           <button id="start-seeding" type="button" disabled>Start peer seeding</button>
         </div>

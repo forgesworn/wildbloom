@@ -18,6 +18,12 @@ This profile still reveals:
 - that the same ciphertext is being requested or seeded;
 - browser and signer characteristics visible to those services.
 
+Wildbloom overrides WebTorrent's inherited public Google and Twilio STUN
+defaults with an empty ICE-server list. Peer mode therefore makes no undeclared
+STUN/TURN request, but host candidates still expose network addresses to a peer
+and cross-network connectivity may fail. Any future public ICE service must be
+operator-selected, disclosed beside the action and covered by packet evidence.
+
 ## Tor-only encrypted delivery
 
 Tor-only mode accepts only exact checksum-valid v3 `.onion` hostnames for

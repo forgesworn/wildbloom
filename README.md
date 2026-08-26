@@ -22,6 +22,11 @@ supports source files up to 256 MiB. Independent cryptographic review, live
 onion-service acceptance, cross-browser testing and a controlled live swarm
 remain release gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
+The canonical build is web-first and targets current browsers on Windows,
+Linux and macOS. It is not currently a native desktop application; native
+packaging remains conditional on a proven requirement that the browser sandbox
+cannot meet. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 No private key enters Wildbloom. Every signature is requested from an injected
 NIP-07 signer, and no network action runs on page load. Uploading, relay
 publication, seeding, relay lookup and downloading are separate user actions.
@@ -35,7 +40,9 @@ the file.
 ## Network profiles
 
 - **Direct encrypted delivery:** Nostr, Blossom and WebTorrent. Servers,
-  trackers and peers can observe network metadata and IP addresses.
+  trackers and peers can observe network metadata and IP addresses. Wildbloom
+  supplies no implicit public STUN/TURN server, so current peer connectivity is
+  deliberately best-effort and may be limited to compatible local networks.
 - **Tor-only encrypted delivery:** exact checksum-valid v3 onion services for
   Nostr and Blossom. Clearnet endpoints, trackers and WebRTC are refused.
 
@@ -84,6 +91,9 @@ other advisory still fails CI.
 - A public Nostr event permanently associates the file metadata with the
   signing public key, subject to relay retention.
 - A torrent tracker and peers can observe IP addresses and torrent activity.
+- WebRTC connection candidates expose network addresses to the remote peer.
+  Wildbloom disables WebTorrent's inherited public Google/Twilio STUN defaults;
+  an internet-capable ICE service needs separate operator review and disclosure.
 - SHA-256 and BitTorrent piece hashes provide integrity, not confidentiality.
 - A recovery key protects content, not the public event's author, timestamp,
   endpoints or access pattern.
