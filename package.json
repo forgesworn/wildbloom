@@ -11,30 +11,36 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "serve:production": "node scripts/serve-production.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "npm run typecheck && npm test && npm run build && npm run smoke:browser && npm run secrets",
+    "check": "npm run typecheck && npm run test:coverage && npm run build && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {
+    "@noble/hashes": "2.0.1",
     "create-torrent": "6.1.3",
     "nostr-tools": "2.25.0",
-    "path-browserify": "1.0.1",
     "parse-torrent": "11.0.24",
+    "path-browserify": "1.0.1",
     "webtorrent": "3.0.21"
   },
   "devDependencies": {
     "@types/create-torrent": "6.1.1",
     "@types/node": "24.10.13",
-    "@types/path-browserify": "1.0.3",
     "@types/parse-torrent": "11.0.1",
+    "@types/path-browserify": "1.0.3",
+    "@types/ws": "8.18.1",
+    "@vitest/coverage-v8": "4.1.11",
     "playwright-core": "1.62.1",
     "typescript": "7.0.2",
     "vite": "8.2.2",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "ws": "8.21.3"
   }
 }

@@ -12,8 +12,9 @@ describe("hybrid torrent metadata", () => {
     expect(parsed.name).toBe("hello.txt");
     expect(parsed.length).toBe(11);
     expect(parsed.urlList).toContain(webSeed);
-    expect(plan.magnetUri).toContain(`xt=urn%3Abtih%3A${plan.infoHash}`);
+    expect(plan.magnetUri).toContain(`xt=urn:btih:${plan.infoHash}`);
     expect(plan.magnetUri).toContain("ws=https%3A%2F%2Fcdn.example.com");
+    expect((await parseTorrent(plan.magnetUri)).infoHash).toBe(plan.infoHash);
   });
 
   it("refuses to create a browser torrent without a WebSocket tracker", async () => {

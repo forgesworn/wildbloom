@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:*; worker-src 'self' blob:"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion; worker-src 'self' blob:"
     />
     <meta name="referrer" content="no-referrer" />
     <title>Wildbloom</title>
@@ -17,9 +17,9 @@
         <h1>Wildbloom</h1>
         <p class="lede">Files that outlive their host.</p>
         <p class="boundary">
-          This prototype keeps signing keys in your NIP-07 extension. Publishing
-          to Nostr, uploading to Blossom and joining a torrent swarm are public
-          network actions. Nothing starts automatically.
+          Wildbloom encrypts file content locally by default and keeps signing
+          keys in your NIP-07 extension. Publishing metadata and joining a
+          torrent swarm still reveal information. Nothing starts automatically.
         </p>
       </header>
 
@@ -32,6 +32,23 @@
           </div>
         </div>
 
+        <fieldset class="profile-picker">
+          <legend>Network profile</legend>
+          <label class="profile-option">
+            <input name="network-profile" type="radio" value="direct" checked />
+            <span><strong>Direct encrypted delivery</strong><small>Nostr, Blossom and WebTorrent. Services and peers see your IP address.</small></span>
+          </label>
+          <label class="profile-option">
+            <input name="network-profile" type="radio" value="tor" />
+            <span><strong>Tor-only encrypted delivery</strong><small>Exact v3 onion Nostr and Blossom endpoints only. WebTorrent is disabled.</small></span>
+          </label>
+        </fieldset>
+        <p id="tor-boundary" class="privacy-boundary" hidden>
+          Wildbloom cannot prove that this browser is using Tor. Tor-only mode
+          refuses clearnet endpoints and disables WebRTC, but a NIP-07 add-on or
+          reused Nostr key can still fingerprint or identify you.
+        </p>
+
         <div class="grid three">
           <label>
             Blossom server
@@ -41,11 +58,16 @@
             Nostr relays <small>one per line</small>
             <textarea id="relay-urls" rows="3" placeholder="wss://relay.example.com"></textarea>
           </label>
-          <label>
+          <label id="tracker-field">
             WebTorrent trackers <small>one per line</small>
             <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com"></textarea>
           </label>
         </div>
+
+        <label id="tor-consent-field" class="check privacy-confirmation" hidden>
+          <input id="tor-consent" type="checkbox" />
+          <span>I have configured this entire browser through Tor. I understand Wildbloom cannot verify that claim.</span>
+        </label>
 
         <div class="actions">
           <button id="connect-signer" type="button">Connect NIP-07 signer</button>
@@ -62,6 +84,10 @@
           </div>
         </div>
 
+        <label class="check protection-choice">
+          <input id="protect-file" type="checkbox" checked />
+          <span>Encrypt content, filename and MIME type locally before upload (recommended).</span>
+        </label>
         <label class="file-picker">
           File
           <input id="publish-file" type="file" />
@@ -71,15 +97,28 @@
         </div>
         <dl id="file-facts" class="facts" aria-live="polite"></dl>
 
-        <div class="gate">
-          <label class="check">
-            <input id="upload-consent" type="checkbox" />
-            <span>I understand this sends the complete file to the chosen Blossom server.</span>
+        <div id="recovery-key-panel" class="key-panel" hidden>
+          <label>
+            Recovery key <small>Secret. Send it out of band, never in a public Nostr event.</small>
+            <input id="recovery-key-output" type="password" readonly autocomplete="off" spellcheck="false" />
           </label>
-          <button id="upload-file" type="button" disabled>Upload and build torrent metadata</button>
+          <button id="toggle-recovery-key" type="button">Reveal recovery key</button>
+          <div id="recovery-links" class="downloads"></div>
+          <label class="check">
+            <input id="key-saved-consent" type="checkbox" />
+            <span>I have saved the recovery key. Wildbloom cannot recover it.</span>
+          </label>
         </div>
 
         <div class="gate">
+          <label class="check">
+            <input id="upload-consent" type="checkbox" />
+            <span id="upload-consent-copy">I understand this sends encrypted bytes and visible transfer metadata to the chosen Blossom server.</span>
+          </label>
+          <button id="upload-file" type="button" disabled>Upload prepared payload</button>
+        </div>
+
+        <div id="seed-gate" class="gate">
           <label class="check">
             <input id="seed-consent" type="checkbox" />
             <span>I understand trackers and peers can observe my IP address and torrent activity.</span>
@@ -88,7 +127,7 @@
         </div>
 
         <div class="gate">
-          <p>Signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.</p>
+          <p id="sign-event-copy">Signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.</p>
           <button id="sign-events" type="button" disabled>Review and sign events</button>
         </div>
 
@@ -117,6 +156,10 @@
           Nostr event ID
           <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" />
         </label>
+        <label id="recovery-key-field" hidden>
+          Recovery key
+          <input id="recovery-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="wbk1_…" />
+        </label>
         <div class="actions">
           <button id="resolve-event" type="button">Resolve signed event</button>
         </div>
@@ -135,7 +178,7 @@
       </section>
 
       <footer>
-        Prototype, not a privacy system. Verify the threat model before using real or sensitive material.
+        Privacy is a set of bounded controls, not a badge. Verify the threat model before using sensitive material.
       </footer>
     </main>
     <script type="module" src="/src/main.ts"></script>

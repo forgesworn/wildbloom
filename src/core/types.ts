@@ -16,6 +16,11 @@ export interface SignerPort {
   signEvent(template: EventTemplate): Promise<SignedNostrEvent>;
 }
 
+export type NetworkProfile = "direct" | "tor";
+
+export const WILDBLOOM_ENCRYPTION = "wildbloom-aes-256-gcm-chunked-v1" as const;
+export type EncryptionScheme = typeof WILDBLOOM_ENCRYPTION;
+
 export interface BlobDescriptor {
   readonly url: string;
   readonly sha256: string;
@@ -33,6 +38,15 @@ export interface InspectedFile {
   readonly type: string;
 }
 
+export interface ProtectedFile {
+  readonly inspected: InspectedFile;
+  readonly recoveryKey: string;
+  readonly scheme: EncryptionScheme;
+  readonly sourceName: string;
+  readonly sourceSize: number;
+  readonly sourceType: string;
+}
+
 export interface TorrentPlan {
   readonly torrentBytes: Uint8Array;
   readonly torrentBlob: Blob;
@@ -46,7 +60,8 @@ export interface TorrentPlan {
 export interface HybridPublication {
   readonly inspected: InspectedFile;
   readonly descriptor: BlobDescriptor;
-  readonly torrent: TorrentPlan;
+  readonly torrent?: TorrentPlan;
+  readonly encryption?: EncryptionScheme;
 }
 
 export interface ResolvedHybridEvent {
@@ -55,8 +70,10 @@ export interface ResolvedHybridEvent {
   readonly mimeType: string;
   readonly sha256: string;
   readonly size: number;
-  readonly magnetUri: string;
-  readonly infoHash: string;
+  readonly magnetUri?: string;
+  readonly infoHash?: string;
+  readonly trackers: readonly string[];
+  readonly encryption?: EncryptionScheme;
   readonly name: string;
 }
 

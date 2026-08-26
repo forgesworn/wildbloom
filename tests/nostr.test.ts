@@ -10,6 +10,7 @@ import {
   validateBlobDescriptor,
 } from "../src/core/nostr.js";
 import type { HybridPublication, SignedNostrEvent, SignerPort } from "../src/core/types.js";
+import { WILDBLOOM_ENCRYPTION } from "../src/core/types.js";
 
 const secret = new Uint8Array(32).fill(7);
 const pubkey = getPublicKey(secret);
@@ -35,7 +36,7 @@ const publication: HybridPublication = {
     torrentBytes: new Uint8Array([1]),
     torrentBlob: new Blob([new Uint8Array([1])]),
     infoHash,
-    magnetUri: `magnet:?xt=urn%3Abtih%3A${infoHash}&ws=https%3A%2F%2Fcdn.example.com%2F${sha256}.txt`,
+    magnetUri: `magnet:?xt=urn%3Abtih%3A${infoHash}&dn=hello.txt&xl=5&tr=wss%3A%2F%2Ftracker.example.com%2F&ws=https%3A%2F%2Fcdn.example.com%2F${sha256}.txt`,
     name: "hello.txt",
     trackers: ["wss://tracker.example.com/"],
     webSeed: `https://cdn.example.com/${sha256}.txt`,
@@ -77,10 +78,11 @@ describe("Blossom authorisation", () => {
 describe("hybrid Nostr events", () => {
   it("builds NIP-94 and NIP-35 shapes without confusing their two x hashes", async () => {
     const fileTemplate = buildFileEvent(publication, 2_000);
-    const torrentTemplate = buildTorrentEvent(publication.inspected, publication.torrent, 2_000);
+    const torrentTemplate = buildTorrentEvent(publication.inspected, publication.torrent!, 2_000);
     expect(fileTemplate.kind).toBe(1063);
     expect(fileTemplate.tags).toContainEqual(["x", sha256]);
     expect(fileTemplate.tags).toContainEqual(["i", infoHash]);
+    expect(fileTemplate.tags).toContainEqual(["alt", "File: hello.txt"]);
     expect(torrentTemplate.kind).toBe(2003);
     expect(torrentTemplate.tags).toContainEqual(["x", infoHash]);
     expect(torrentTemplate.tags).not.toContainEqual(["x", sha256]);
@@ -97,6 +99,48 @@ describe("hybrid Nostr events", () => {
     }, secret) as SignedNostrEvent;
     expect(() => resolveHybridEvent(wrong)).toThrow(/does not match/u);
   });
+
+  it("strips unrecognised magnet parameters and returns only validated trackers", () => {
+    const template = buildFileEvent(publication, 2_000);
+    const signed = finalizeEvent({
+      ...template,
+      tags: template.tags.map((tag) => tag[0] === "magnet" ? ["magnet", `${tag[1]}&xs=https%3A%2F%2Fevil.example%2Fmetadata.torrent`] : tag),
+    }, secret) as SignedNostrEvent;
+    const resolved = resolveHybridEvent(signed);
+    expect(resolved.magnetUri).not.toContain("evil.example");
+    expect(resolved.trackers).toEqual(["wss://tracker.example.com/"]);
+  });
+
+  it("rejects signed magnets that change size, web seed or tracker transport", () => {
+    const template = buildFileEvent(publication, 2_000);
+    for (const replacement of [
+      publication.torrent!.magnetUri.replace("xl=5", "xl=6"),
+      publication.torrent!.magnetUri.replace("cdn.example.com", "other.example.com"),
+      publication.torrent!.magnetUri.replace("wss%3A", "ws%3A"),
+    ]) {
+      const signed = finalizeEvent({
+        ...template,
+        tags: template.tags.map((tag) => tag[0] === "magnet" ? ["magnet", replacement] : tag),
+      }, secret) as SignedNostrEvent;
+      expect(() => resolveHybridEvent(signed)).toThrow();
+    }
+  });
+
+  it("supports an encrypted Blossom-only event without inventing swarm support", () => {
+    const encryptedPublication: HybridPublication = {
+      inspected: publication.inspected,
+      descriptor: publication.descriptor,
+      encryption: WILDBLOOM_ENCRYPTION,
+    };
+    const template = buildFileEvent(encryptedPublication, 2_000);
+    expect(template.tags).toContainEqual(["encryption", WILDBLOOM_ENCRYPTION]);
+    expect(template.tags).toContainEqual(["alt", "Encrypted Wildbloom file"]);
+    expect(template.tags.some((tag) => tag[0] === "magnet")).toBe(false);
+    const resolved = resolveHybridEvent(finalizeEvent(template, secret) as SignedNostrEvent);
+    expect(resolved.encryption).toBe(WILDBLOOM_ENCRYPTION);
+    expect(resolved.magnetUri).toBeUndefined();
+    expect(resolved.trackers).toEqual([]);
+  });
 });
 
 describe("Blossom descriptors", () => {
@@ -106,5 +150,7 @@ describe("Blossom descriptors", () => {
       .toThrow(/different bytes/u);
     expect(() => validateBlobDescriptor({ ...publication.descriptor, url: "http://cdn.example.com/blob" }, { sha256, size: 5 }))
       .toThrow();
+    expect(() => validateBlobDescriptor({ ...publication.descriptor, type: "text/html" }, publication.inspected))
+      .toThrow(/MIME/u);
   });
 });

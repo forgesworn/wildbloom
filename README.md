@@ -2,7 +2,7 @@
 
 **Files that outlive their host.**
 
-Wildbloom is a local-first browser prototype that makes one file available
+Wildbloom is a local-first browser application that makes one file available
 through three existing protocols:
 
 - Nostr provides signed discovery and attribution.
@@ -15,15 +15,35 @@ URL, SHA-256, magnet URI and torrent info hash. Wildbloom also creates a NIP-35
 kind `2003` torrent index event. It does not put file bytes on Nostr and does
 not claim to create a new storage network.
 
-## Prototype status
+## Current status
 
-This is working prototype code, not a deployed service and not a privacy
-system. It currently supports one-file torrents up to 256 MiB. Browser peers
-need at least one user-supplied WebSocket tracker.
+This is a hardened production candidate, not a deployed service. It currently
+supports source files up to 256 MiB. Independent cryptographic review, live
+onion-service acceptance, cross-browser testing and a controlled live swarm
+remain release gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 No private key enters Wildbloom. Every signature is requested from an injected
 NIP-07 signer, and no network action runs on page load. Uploading, relay
 publication, seeding, relay lookup and downloading are separate user actions.
+
+Local encryption is enabled by default. Wildbloom creates a random 256-bit
+recovery key, encrypts the content, filename and MIME type in authenticated
+chunks, pads the payload, and uploads only the encrypted envelope. The recovery
+key never enters Blossom, Nostr, a torrent or browser storage. Losing it loses
+the file.
+
+## Network profiles
+
+- **Direct encrypted delivery:** Nostr, Blossom and WebTorrent. Servers,
+  trackers and peers can observe network metadata and IP addresses.
+- **Tor-only encrypted delivery:** exact checksum-valid v3 onion services for
+  Nostr and Blossom. Clearnet endpoints, trackers and WebRTC are refused.
+
+Tor-only mode does not prove that the browser is actually using Tor. The Tor
+Project also discourages both torrenting over Tor and installing extra Tor
+Browser add-ons. A NIP-07 add-on or reused Nostr identity therefore remains an
+identity and fingerprinting boundary. Read [`docs/PRIVACY.md`](docs/PRIVACY.md)
+before treating Tor as useful for a particular threat model.
 
 ## Run it locally
 
@@ -45,12 +65,13 @@ npm run check
 npm run ci
 ```
 
-`check` runs strict TypeScript, unit tests, a production build, a real
-headless-browser smoke and the local secret scanner. The browser smoke blocks
-unrecognised remote traffic, proves page load has no ambient network activity,
-and exercises hashing, scoped Blossom authorisation, upload handling, torrent
-metadata and NIP-07 signing against controlled fakes. `ci` additionally audits
-dependencies. The audit script has one
+`check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
+production build, a real headless-browser acceptance path and the local secret
+scanner. The browser path proves response security headers and zero ambient
+network activity, then exercises encrypted upload, exact Blossom authority,
+NIP-07 signing, controlled relay publication and retrieval, ciphertext
+download, local recovery, consent reset and Tor-only refusal of clearnet
+fallback. `ci` additionally audits dependencies. The audit script has one
 fail-closed exception for an `ip` advisory reachable only from WebTorrent's
 Node UDP-tracker server parser: Wildbloom imports the prebuilt browser bundle,
 and the exception fails if the package's browser exclusions change. Every
@@ -58,15 +79,26 @@ other advisory still fails CI.
 
 ## What publication reveals
 
-- A Blossom upload reveals the file and network metadata to that server.
+- An encrypted Blossom upload still reveals ciphertext size, hash, timing and
+  network metadata to that server.
 - A public Nostr event permanently associates the file metadata with the
   signing public key, subject to relay retention.
 - A torrent tracker and peers can observe IP addresses and torrent activity.
 - SHA-256 and BitTorrent piece hashes provide integrity, not confidentiality.
+- A recovery key protects content, not the public event's author, timestamp,
+  endpoints or access pattern.
 
-Do not use sensitive material without adding client-side encryption and
-reviewing what the resulting ciphertext metadata still reveals. See
-[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
+Encryption is the default, but the envelope format has not yet received an
+independent cryptographic review. See [`docs/ENCRYPTION.md`](docs/ENCRYPTION.md)
+and [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
+
+## Production serving
+
+`npm run build && npm run serve:production` serves the built application on
+loopback with the repository's response security headers and `/healthz`.
+Production TLS, HSTS, host allowlisting, reverse-proxy logging and onion-service
+configuration are deployment responsibilities. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Specifications
 
@@ -84,5 +116,5 @@ Wildbloom is a working name and has not received legal trade mark clearance.
 
 ## Licence
 
-Private and unlicensed while the prototype is being evaluated. No permission
+Private and unlicensed while the production candidate is being evaluated. No permission
 is granted to copy, distribute or create derivative works.

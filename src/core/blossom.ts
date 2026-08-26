@@ -3,18 +3,20 @@ import { buildUploadAuthorisation, encodeNostrAuthorisation, signEventExactly, v
 import {
   assertHex64,
   assertPrototypeFileSize,
+  assertPrototypeTransferSize,
   fileExtension,
   normaliseBlossomServer,
   normaliseBlossomUrl,
   safeDiagnostic,
   sanitiseFileName,
 } from "./security.js";
-import type { BlobDescriptor, InspectedFile, ResolvedHybridEvent, SignerPort } from "./types.js";
+import type { BlobDescriptor, InspectedFile, NetworkProfile, ResolvedHybridEvent, SignerPort } from "./types.js";
 
 type FetchPort = typeof fetch;
 
-export async function inspectFile(file: File): Promise<InspectedFile> {
-  assertPrototypeFileSize(file.size);
+export async function inspectFile(file: File, purpose: "source" | "transfer" = "source"): Promise<InspectedFile> {
+  if (purpose === "source") assertPrototypeFileSize(file.size);
+  else assertPrototypeTransferSize(file.size);
   const name = sanitiseFileName(file.name);
   return {
     file,
@@ -26,8 +28,13 @@ export async function inspectFile(file: File): Promise<InspectedFile> {
   };
 }
 
-export function buildBlossomUri(file: InspectedFile, server: string, pubkey: string): string {
-  const hostname = new URL(normaliseBlossomServer(server)).hostname;
+export function buildBlossomUri(
+  file: InspectedFile,
+  server: string,
+  pubkey: string,
+  profile: NetworkProfile = "direct",
+): string {
+  const hostname = new URL(normaliseBlossomServer(server, profile)).hostname;
   const query = new URLSearchParams();
   query.append("xs", hostname);
   query.append("as", assertHex64(pubkey, "Author public key"));
@@ -41,9 +48,10 @@ export async function uploadToBlossom(
   signer: SignerPort,
   pubkey: string,
   fetchImpl: FetchPort = fetch,
+  profile: NetworkProfile = "direct",
 ): Promise<BlobDescriptor> {
-  const server = normaliseBlossomServer(serverInput);
-  const template = buildUploadAuthorisation(inspected.sha256, server);
+  const server = normaliseBlossomServer(serverInput, profile);
+  const template = buildUploadAuthorisation(inspected.sha256, server, undefined, undefined, profile);
   const authorisation = await signEventExactly(template, signer, pubkey);
   const response = await fetchImpl(`${server}/upload`, {
     method: "PUT",
@@ -56,35 +64,71 @@ export async function uploadToBlossom(
     credentials: "omit",
     referrerPolicy: "no-referrer",
     cache: "no-store",
+    redirect: "error",
   });
   if (response.status !== 200 && response.status !== 201) {
     const reason = safeDiagnostic(response.headers.get("X-Reason") || response.statusText || `HTTP ${response.status}`);
     throw new Error(`Blossom upload failed: ${reason}`);
   }
-  const text = await response.text();
-  if (text.length > 64 * 1024) throw new Error("Blossom descriptor response is unexpectedly large.");
+  const text = await readTextCapped(response, 64 * 1024);
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
     throw new Error("Blossom returned a non-JSON descriptor.");
   }
-  return validateBlobDescriptor(parsed, inspected);
+  const descriptor = validateBlobDescriptor(parsed, inspected, profile);
+  if (new URL(descriptor.url).origin !== server) {
+    throw new Error("Blossom moved the payload to an unapproved origin.");
+  }
+  return descriptor;
+}
+
+async function readTextCapped(response: Response, maximumBytes: number): Promise<string> {
+  const advertised = Number(response.headers.get("Content-Length"));
+  if (Number.isFinite(advertised) && advertised > maximumBytes) {
+    throw new Error("Blossom descriptor response is unexpectedly large.");
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let received = 0;
+  let text = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      received += value.byteLength;
+      if (received > maximumBytes) {
+        await reader.cancel("descriptor too large");
+        throw new Error("Blossom descriptor response is unexpectedly large.");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error("Blossom descriptor is not valid UTF-8.");
+    throw error;
+  }
+  return text;
 }
 
 export async function fetchVerifiedBlob(
   resolved: ResolvedHybridEvent,
   fetchImpl: FetchPort = fetch,
+  profile: NetworkProfile = "direct",
 ): Promise<Blob> {
-  const url = normaliseBlossomUrl(resolved.url, resolved.sha256);
+  const url = normaliseBlossomUrl(resolved.url, resolved.sha256, profile);
   const response = await fetchImpl(url, {
     method: "GET",
     credentials: "omit",
     referrerPolicy: "no-referrer",
     cache: "no-store",
+    redirect: "error",
   });
   if (!response.ok) throw new Error(`Blossom retrieval failed: ${safeDiagnostic(response.statusText || `HTTP ${response.status}`)}`);
-  if (response.url) normaliseBlossomUrl(response.url, resolved.sha256);
+  if (response.url && response.url !== url) throw new Error("Blossom retrieval changed URL unexpectedly.");
 
   const advertisedLength = response.headers.get("Content-Length");
   if (advertisedLength !== null && Number(advertisedLength) !== resolved.size) {

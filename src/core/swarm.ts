@@ -1,20 +1,41 @@
 import { sha256Hex } from "./crypto.js";
 import { safeDiagnostic } from "./security.js";
-import type { InspectedFile, ResolvedHybridEvent, StopHandle, TorrentPlan } from "./types.js";
+import type { InspectedFile, NetworkProfile, ResolvedHybridEvent, StopHandle, TorrentPlan } from "./types.js";
 
 const SWARM_TIMEOUT_MS = 30 * 60 * 1000;
+const SWARM_START_TIMEOUT_MS = 30_000;
+type WebTorrentConstructor = typeof import("webtorrent/dist/webtorrent.min.js")["default"];
+export type WebTorrentLoader = () => Promise<{ default: WebTorrentConstructor }>;
+const loadWebTorrent: WebTorrentLoader = () => import("webtorrent/dist/webtorrent.min.js");
 
 async function destroyClient(client: { destroy(callback?: (error?: Error) => void): void }): Promise<void> {
   await new Promise<void>((resolve) => client.destroy(() => resolve()));
 }
 
-export async function startBrowserSeeding(inspected: InspectedFile, plan: TorrentPlan): Promise<StopHandle> {
-  const { default: WebTorrent } = await import("webtorrent/dist/webtorrent.min.js");
+export async function startBrowserSeeding(
+  inspected: InspectedFile,
+  plan: TorrentPlan,
+  profile: NetworkProfile = "direct",
+  loader: WebTorrentLoader = loadWebTorrent,
+): Promise<StopHandle> {
+  if (profile === "tor") throw new Error("WebTorrent is disabled in Tor-only mode.");
+  const { default: WebTorrent } = await loader();
   const client = new WebTorrent();
   return new Promise((resolve, reject) => {
     let settled = false;
+    const timer = globalThis.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      void destroyClient(client);
+      reject(new Error("WebTorrent did not start seeding before the safety timeout."));
+    }, SWARM_START_TIMEOUT_MS);
     client.on("error", (error) => {
-      if (!settled) reject(new Error(`WebTorrent failed: ${safeDiagnostic(error)}`));
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        void destroyClient(client);
+        reject(new Error(`WebTorrent failed: ${safeDiagnostic(error)}`));
+      }
     });
     client.seed(inspected.file, {
       name: inspected.name,
@@ -23,11 +44,14 @@ export async function startBrowserSeeding(inspected: InspectedFile, plan: Torren
       private: false,
     }, (torrent) => {
       if (torrent.infoHash.toLowerCase() !== plan.infoHash) {
+        settled = true;
+        clearTimeout(timer);
         void destroyClient(client);
         reject(new Error("WebTorrent generated a different info hash from the reviewed torrent metadata."));
         return;
       }
       settled = true;
+      clearTimeout(timer);
       resolve({ stop: () => destroyClient(client) });
     });
   });
@@ -36,8 +60,14 @@ export async function startBrowserSeeding(inspected: InspectedFile, plan: Torren
 export async function downloadFromSwarm(
   resolved: ResolvedHybridEvent,
   onProgress: (progress: number, bytesPerSecond: number) => void,
+  profile: NetworkProfile = "direct",
+  loader: WebTorrentLoader = loadWebTorrent,
 ): Promise<{ blob: Blob; session: StopHandle }> {
-  const { default: WebTorrent } = await import("webtorrent/dist/webtorrent.min.js");
+  if (profile === "tor") throw new Error("WebTorrent is disabled in Tor-only mode.");
+  if (!resolved.magnetUri || !resolved.infoHash || resolved.trackers.length === 0) {
+    throw new Error("The signed event does not contain a usable WebTorrent transport.");
+  }
+  const { default: WebTorrent } = await loader();
   const client = new WebTorrent();
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -48,15 +78,15 @@ export async function downloadFromSwarm(
       void destroyClient(client);
       reject(error instanceof Error ? error : new Error(safeDiagnostic(error)));
     };
-    const timer = window.setTimeout(() => fail(new Error("Swarm download timed out.")), SWARM_TIMEOUT_MS);
+    const timer = globalThis.setTimeout(() => fail(new Error("Swarm download timed out.")), SWARM_TIMEOUT_MS);
     client.on("error", fail);
-    client.add(resolved.magnetUri, {}, (torrent) => {
+    client.add(resolved.magnetUri as string, {}, (torrent) => {
       if (torrent.infoHash.toLowerCase() !== resolved.infoHash || torrent.length !== resolved.size) {
         fail(new Error("Torrent metadata does not match the signed Nostr event."));
         return;
       }
       if (torrent.files.length !== 1 || torrent.files[0]?.length !== resolved.size) {
-        fail(new Error("This prototype accepts one-file torrents only."));
+        fail(new Error("Wildbloom accepts one-file torrents only."));
         return;
       }
       torrent.on("download", () => onProgress(torrent.progress, torrent.downloadSpeed));
