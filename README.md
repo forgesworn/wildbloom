@@ -19,8 +19,9 @@ not claim to create a new storage network.
 
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
-onion-service acceptance, branded-browser testing and cross-network packet
-evidence remain release gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
+branded Tor Browser interaction, branded-browser testing and cross-network
+packet evidence remain release gates. See
+[`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
 Linux and macOS. It is not currently a native desktop application; native
@@ -70,6 +71,8 @@ network defaults.
 ```sh
 npm run check
 npm run ci
+npm run smoke:swarm
+npm run acceptance:tor
 ```
 
 `check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
@@ -83,11 +86,22 @@ download, local recovery, consent reset and Tor-only refusal of clearnet
 fallback. A separate Chromium gate drives two isolated production pages through
 a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
 the exact source from the browser peer, observes host-only ICE, and proves that
-changing the source stops seeding. `ci` additionally audits dependencies. The
-audit script has one fail-closed exception for an `ip` advisory reachable only
-from WebTorrent's Node UDP-tracker parser: Wildbloom imports the prebuilt
-browser bundle, and the exception fails if the package's browser exclusions
-change. Every other advisory still fails CI.
+changing the source stops seeding. Browser acceptance also interrupts a real
+hung upload and partial download, checks that cancellation closes the
+connection, removes stale output and permits a safe retry. `ci` additionally
+audits dependencies. The audit script has one fail-closed exception for an
+`ip` advisory reachable only from WebTorrent's Node UDP-tracker parser:
+Wildbloom imports the prebuilt browser bundle, and the exception fails if the
+package's browser exclusions change. Every other advisory still fails CI.
+
+`acceptance:tor` requires a local Tor executable and installed Playwright
+Chromium. It creates fresh disposable v3 onion services for the app, Blossom
+and a Nostr relay, then performs encrypted publication and exact recovery
+through a real Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only
+secure-origin override for Web Crypto on HTTP onion origins. This proves onion
+transport and fail-closed behaviour, not interaction in branded Tor Browser;
+that remains a manual release gate. The separate GitHub
+`tor-acceptance` workflow runs this gate on demand.
 
 ## What publication reveals
 

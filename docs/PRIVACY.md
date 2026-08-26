@@ -36,6 +36,12 @@ Tor onion services provide end-to-end encrypted TCP connections, but the app
 cannot inspect the browser's proxy configuration and therefore cannot prove
 that Tor is in use.
 
+The automated transport gate does use a real Tor daemon and fresh v3 onion
+services for the app, Blossom and relay. It proves the application has no
+clearnet or WebRTC fallback in that controlled run. Because stock Chromium
+needs a test-only secure-origin override and is not Tor Browser, branded Tor
+Browser interaction remains separate acceptance evidence.
+
 Primary guidance:
 
 - [Tor Browser safety and the torrent warning](https://support.torproject.org/tor-browser/security/using-tb-safely/)

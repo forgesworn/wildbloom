@@ -96,6 +96,8 @@ button {
 }
 button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 button:disabled { cursor: not-allowed; opacity: 0.38; }
+button.secondary { color: var(--ink); background: transparent; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 0.7rem; justify-content: flex-end; }
 .quiet { color: var(--muted); font: 0.82rem ui-monospace, monospace; overflow-wrap: anywhere; }
 
 .facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.55rem 1rem; margin: 1.2rem 0; padding: 1rem; border-radius: 12px; background: #090d0a; }
@@ -127,4 +129,5 @@ footer { padding: 2rem 0; color: var(--muted); font-size: 0.82rem; text-align: c
   .facts { grid-template-columns: 1fr; }
   .facts dd { margin-bottom: 0.5rem; }
   button { width: 100%; }
+  .inline-actions { width: 100%; }
 }

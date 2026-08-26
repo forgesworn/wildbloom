@@ -121,7 +121,10 @@
             <input id="upload-consent" type="checkbox" />
             <span id="upload-consent-copy">I understand this sends encrypted bytes and visible transfer metadata to the chosen Blossom server.</span>
           </label>
-          <button id="upload-file" type="button" disabled>Upload prepared payload</button>
+          <div class="inline-actions">
+            <button id="upload-file" type="button" disabled>Upload prepared payload</button>
+            <button id="cancel-upload" class="secondary" type="button" disabled>Cancel upload</button>
+          </div>
         </div>
 
         <div id="seed-gate" class="gate">
@@ -129,7 +132,10 @@
             <input id="seed-consent" type="checkbox" />
             <span>I understand trackers, peers and WebRTC connection candidates can expose network addresses and torrent activity.</span>
           </label>
-          <button id="start-seeding" type="button" disabled>Start peer seeding</button>
+          <div class="inline-actions">
+            <button id="start-seeding" type="button" disabled>Start peer seeding</button>
+            <button id="stop-seeding" class="secondary" type="button" disabled>Stop seeding</button>
+          </div>
         </div>
 
         <div class="gate">
@@ -178,6 +184,7 @@
             <span>I accept the swarm IP-address disclosure.</span>
           </label>
           <button id="fetch-swarm" type="button" disabled>Join swarm and verify</button>
+          <button id="cancel-download" class="secondary" type="button" disabled>Cancel download</button>
         </div>
         <output id="retrieve-status" class="status" aria-live="polite">No event resolved.</output>
         <div id="retrieve-links" class="downloads"></div>

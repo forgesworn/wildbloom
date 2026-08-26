@@ -16,6 +16,7 @@
     "smoke:browser:firefox": "node scripts/browser-smoke.mjs --browser firefox",
     "smoke:browser:webkit": "node scripts/browser-smoke.mjs --browser webkit",
     "smoke:swarm": "node scripts/swarm-acceptance.mjs",
+    "acceptance:tor": "node scripts/tor-acceptance.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",

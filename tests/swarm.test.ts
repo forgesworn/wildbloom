@@ -93,6 +93,24 @@ describe("WebTorrent safety boundary", () => {
     expect(Client.last.destroyed).toBe(true);
   });
 
+  it("cancels WebTorrent startup and destroys the client", async () => {
+    class Client {
+      static last: Client;
+      destroyed = false;
+      constructor() { Client.last = this; }
+      on(): void {}
+      seed(): void {}
+      destroy(callback?: () => void): void { this.destroyed = true; callback?.(); }
+    }
+    const { inspected, plan } = publication();
+    const controller = new AbortController();
+    const result = startBrowserSeeding(inspected, plan, "direct", loaderFor(Client), controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    await expect(result).rejects.toThrow(/cancelled/u);
+    expect(Client.last.destroyed).toBe(true);
+  });
+
   it("verifies torrent metadata and final SHA-256 before returning bytes", async () => {
     const bytes = new Blob(["hello"], { type: "text/plain" });
     const hash = await sha256Hex(bytes);
@@ -176,6 +194,32 @@ describe("WebTorrent safety boundary", () => {
       sha256: "ab".repeat(32),
     } as unknown as ResolvedHybridEvent;
     await expect(downloadFromSwarm(resolved, () => undefined, "direct", loaderFor(Client))).rejects.toThrow(/store interrupted/u);
+    expect(Client.last.destroyed).toBe(true);
+  });
+
+  it("cancels an in-flight swarm before exposing bytes", async () => {
+    class Client {
+      static last: Client;
+      destroyed = false;
+      added = false;
+      constructor() { Client.last = this; }
+      on(): void {}
+      add(): void { this.added = true; }
+      destroy(callback?: () => void): void { this.destroyed = true; callback?.(); }
+    }
+    const resolved = {
+      magnetUri: `magnet:?xt=urn:btih:${infoHash}`,
+      infoHash,
+      trackers: [tracker],
+      size: 5,
+      sha256: "ab".repeat(32),
+    } as unknown as ResolvedHybridEvent;
+    const controller = new AbortController();
+    const result = downloadFromSwarm(resolved, () => undefined, "direct", loaderFor(Client), controller.signal);
+    await Promise.resolve();
+    expect(Client.last.added).toBe(true);
+    controller.abort();
+    await expect(result).rejects.toThrow(/cancelled/u);
     expect(Client.last.destroyed).toBe(true);
   });
 });

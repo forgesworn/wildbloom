@@ -78,7 +78,12 @@ traversal. Internet peer delivery needs a separately reviewed ICE design.
 
 Tor-only mode is a separate branch. It validates v3 onion checksums, accepts
 only onion Nostr and Blossom endpoints, omits the torrent entirely and refuses
-WebRTC. It has no automatic fallback to the direct branch.
+WebRTC. It has no automatic fallback to the direct branch. A separate real-Tor
+gate runs the production app, controlled Blossom service and controlled Nostr
+relay as three disposable v3 onion services, rotates identity between fresh
+browser contexts and requires exact encrypted recovery. Its Chromium
+secure-origin override is test scaffolding, not part of the production build
+and not branded Tor Browser evidence.
 
 ## Retrieval
 

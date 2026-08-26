@@ -72,11 +72,14 @@ const publishConsent = element<HTMLInputElement>("publish-consent");
 const swarmConsent = element<HTMLInputElement>("download-swarm-consent");
 
 const uploadButton = element<HTMLButtonElement>("upload-file");
+const cancelUploadButton = element<HTMLButtonElement>("cancel-upload");
 const seedButton = element<HTMLButtonElement>("start-seeding");
+const stopSeedButton = element<HTMLButtonElement>("stop-seeding");
 const signButton = element<HTMLButtonElement>("sign-events");
 const publishButton = element<HTMLButtonElement>("publish-events");
 const blossomFetchButton = element<HTMLButtonElement>("fetch-blossom");
 const swarmFetchButton = element<HTMLButtonElement>("fetch-swarm");
+const cancelDownloadButton = element<HTMLButtonElement>("cancel-download");
 
 let pubkey: string | null = null;
 let sourceInspected: InspectedFile | null = null;
@@ -87,6 +90,9 @@ let torrentPlan: TorrentPlan | null = null;
 let signedEvents: SignedNostrEvent[] = [];
 let seedSession: StopHandle | null = null;
 let downloadSession: StopHandle | null = null;
+let uploadController: AbortController | null = null;
+let downloadController: AbortController | null = null;
+let seedController: AbortController | null = null;
 let resolved: ResolvedHybridEvent | null = null;
 const objectUrls = new Set<string>();
 
@@ -159,11 +165,17 @@ function addDownload(target: HTMLDivElement, blob: Blob, fileName: string, label
 }
 
 function resetPublicationAfterInspection(): void {
+  uploadController?.abort();
+  uploadController = null;
+  cancelUploadButton.disabled = true;
   descriptor = null;
   torrentPlan = null;
   signedEvents = [];
+  seedController?.abort();
+  seedController = null;
   if (seedSession) void seedSession.stop();
   seedSession = null;
+  stopSeedButton.disabled = true;
   uploadConsent.checked = false;
   keySavedConsent.checked = false;
   seedConsent.checked = false;
@@ -189,6 +201,11 @@ function resetInspection(): void {
 }
 
 function resetResolution(): void {
+  downloadController?.abort();
+  downloadController = null;
+  cancelDownloadButton.disabled = true;
+  if (downloadSession) void downloadSession.stop();
+  downloadSession = null;
   resolved = null;
   swarmConsent.checked = false;
   recoveryKeyInput.value = "";
@@ -201,7 +218,14 @@ function resetResolution(): void {
 
 function updateUploadButton(): void {
   const keyReady = !protectedEnvelope || keySavedConsent.checked;
-  uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady);
+  uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady && !descriptor && !uploadController);
+}
+
+function updateRetrievalButtons(): void {
+  const busy = downloadController !== null;
+  blossomFetchButton.disabled = busy || !resolved;
+  swarmFetchButton.disabled = busy || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
+  cancelDownloadButton.disabled = !busy;
 }
 
 function applyProfile(): void {
@@ -256,6 +280,15 @@ fileInput.addEventListener("change", () => {
   resetInspection();
   setStatus(publishStatus, "File selection changed. Inspect locally before enabling any network action.");
 });
+
+for (const input of [blossomInput, relayInput, trackerInput]) {
+  input.addEventListener("input", () => {
+    resetPublicationAfterInspection();
+    resetResolution();
+    setStatus(publishStatus, "Network endpoints changed. Repeat every network consent before publishing.");
+    setStatus(retrieveStatus, "Network endpoints changed. Resolve the signed event again before downloading.");
+  });
+}
 
 protectFile.addEventListener("change", () => {
   resetInspection();
@@ -324,46 +357,97 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !pubkey || !uploadConsent.checked) throw new Error("Prepare the file, connect a signer and acknowledge the upload first.");
   if (protectedEnvelope && !keySavedConsent.checked) throw new Error("Save and acknowledge the recovery key before upload.");
   assertTorReady();
+  if (uploadController) throw new Error("An upload is already in progress.");
   const selectedProfile = profile();
   const server = normaliseBlossomServer(blossomInput.value, selectedProfile);
-  setStatus(publishStatus, "Requesting a short-lived, server-and-hash-scoped upload signature…");
-  descriptor = await uploadToBlossom(inspected, server, signer(), pubkey, fetch, selectedProfile);
-  if (selectedProfile === "direct") {
-    setStatus(publishStatus, "Blossom accepted the exact payload. Building torrent metadata locally…");
-    torrentPlan = await createHybridTorrent(inspected, descriptor.url, trackers());
-  } else {
-    torrentPlan = null;
+  const controller = new AbortController();
+  uploadController = controller;
+  updateUploadButton();
+  cancelUploadButton.disabled = false;
+  try {
+    setStatus(publishStatus, "Requesting a short-lived, server-and-hash-scoped upload signature…");
+    descriptor = await uploadToBlossom(inspected, server, signer(), pubkey, {
+      fetchImpl: fetch,
+      profile: selectedProfile,
+      signal: controller.signal,
+    });
+    if (selectedProfile === "direct") {
+      setStatus(publishStatus, "Blossom accepted the exact payload. Building torrent metadata locally…");
+      torrentPlan = await createHybridTorrent(inspected, descriptor.url, trackers());
+    } else {
+      torrentPlan = null;
+    }
+    const facts: Array<readonly [string, string]> = [
+      ["Public payload", inspected.name],
+      ["Public bytes", String(inspected.size)],
+      ["Public SHA-256", inspected.sha256],
+      ["Blossom", descriptor.url],
+      ["Blossom URI", buildBlossomUri(inspected, server, pubkey, selectedProfile)],
+    ];
+    if (torrentPlan) facts.push(["Info hash", torrentPlan.infoHash], ["Magnet", torrentPlan.magnetUri]);
+    showFacts(fileFacts, facts);
+    clearDownloads(publishLinks);
+    if (torrentPlan) {
+      addDownload(publishLinks, torrentPlan.torrentBlob, `${inspected.name}.torrent`, "Download .torrent metadata");
+      seedButton.disabled = !seedConsent.checked;
+    }
+    signButton.disabled = false;
+    setStatus(publishStatus, torrentPlan
+      ? "Encrypted hybrid metadata is staged. Nothing has been seeded or published to Nostr."
+      : "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created.");
+  } finally {
+    if (uploadController === controller) uploadController = null;
+    cancelUploadButton.disabled = true;
+    updateUploadButton();
   }
-  const facts: Array<readonly [string, string]> = [
-    ["Public payload", inspected.name],
-    ["Public bytes", String(inspected.size)],
-    ["Public SHA-256", inspected.sha256],
-    ["Blossom", descriptor.url],
-    ["Blossom URI", buildBlossomUri(inspected, server, pubkey, selectedProfile)],
-  ];
-  if (torrentPlan) facts.push(["Info hash", torrentPlan.infoHash], ["Magnet", torrentPlan.magnetUri]);
-  showFacts(fileFacts, facts);
-  clearDownloads(publishLinks);
-  if (torrentPlan) {
-    addDownload(publishLinks, torrentPlan.torrentBlob, `${inspected.name}.torrent`, "Download .torrent metadata");
-    seedButton.disabled = !seedConsent.checked;
-  }
-  signButton.disabled = false;
-  setStatus(publishStatus, torrentPlan
-    ? "Encrypted hybrid metadata is staged. Nothing has been seeded or published to Nostr."
-    : "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created.");
 }));
 
+cancelUploadButton.addEventListener("click", () => {
+  if (!uploadController) return;
+  uploadController.abort();
+  cancelUploadButton.disabled = true;
+  setStatus(publishStatus, "Cancelling the Blossom upload…");
+});
+
 seedConsent.addEventListener("change", () => {
-  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && !seedSession && profile() === "direct");
+  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && !seedSession && !seedController && profile() === "direct");
 });
 
 seedButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !torrentPlan || !seedConsent.checked) throw new Error("Build the torrent and acknowledge swarm visibility first.");
+  if (seedController) throw new Error("WebTorrent is already starting.");
+  const controller = new AbortController();
+  seedController = controller;
   setStatus(publishStatus, "Joining the WebTorrent swarm…");
-  seedSession = await startBrowserSeeding(inspected, torrentPlan, profile());
   seedButton.disabled = true;
-  setStatus(publishStatus, `Seeding ${torrentPlan.infoHash}. Keep this tab open to remain a peer.`);
+  stopSeedButton.disabled = false;
+  try {
+    seedSession = await startBrowserSeeding(inspected, torrentPlan, profile(), undefined, controller.signal);
+    if (seedController === controller) seedController = null;
+    stopSeedButton.disabled = false;
+    setStatus(publishStatus, `Seeding ${torrentPlan.infoHash}. Keep this tab open to remain a peer.`);
+  } catch (error) {
+    if (seedController === controller) seedController = null;
+    stopSeedButton.disabled = true;
+    seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+    throw error;
+  }
+}));
+
+stopSeedButton.addEventListener("click", () => guard(publishStatus, async () => {
+  if (seedController) {
+    seedController.abort();
+    stopSeedButton.disabled = true;
+    setStatus(publishStatus, "Cancelling WebTorrent startup…");
+    return;
+  }
+  if (!seedSession) return;
+  const session = seedSession;
+  seedSession = null;
+  stopSeedButton.disabled = true;
+  await session.stop();
+  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+  setStatus(publishStatus, "Peer seeding stopped. Blossom and published relay events are unchanged.");
 }));
 
 signButton.addEventListener("click", () => guard(publishStatus, async () => {
@@ -418,8 +502,7 @@ element<HTMLButtonElement>("resolve-event").addEventListener("click", () => guar
     ["Info hash", resolved.infoHash ?? "Not advertised"],
   ]);
   recoveryKeyField.hidden = !resolved.encryption;
-  blossomFetchButton.disabled = false;
-  swarmFetchButton.disabled = !(profile() === "direct" && swarmConsent.checked && resolved.magnetUri);
+  updateRetrievalButtons();
   setStatus(retrieveStatus, resolved.encryption
     ? "Signed event verified. Enter the separately received recovery key when downloading."
     : "Signed event verified. The advertised payload is plaintext; no file has been downloaded.");
@@ -437,39 +520,67 @@ async function revealPayload(blob: Blob, event: ResolvedHybridEvent): Promise<Fi
 blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
   if (!resolved) throw new Error("Resolve a signed event first.");
   assertTorReady();
-  setStatus(retrieveStatus, "Downloading from Blossom and verifying signed size and SHA-256…");
-  const verified = await fetchVerifiedBlob(resolved, fetch, profile());
-  const payload = await revealPayload(verified, resolved);
+  if (downloadController) throw new Error("A download is already in progress.");
+  const controller = new AbortController();
+  downloadController = controller;
+  updateRetrievalButtons();
   clearDownloads(retrieveLinks);
-  addDownload(retrieveLinks, payload, payload instanceof File ? payload.name : resolved.name, `Save verified ${payload instanceof File ? payload.name : resolved.name}`);
-  setStatus(retrieveStatus, resolved.encryption
-    ? "Ciphertext and AES-GCM authentication verified. The save link points to locally decrypted bytes."
-    : "Blossom download verified. The save link points to the checked local bytes.");
+  try {
+    setStatus(retrieveStatus, "Downloading from Blossom and verifying signed size and SHA-256…");
+    const verified = await fetchVerifiedBlob(resolved, { fetchImpl: fetch, profile: profile(), signal: controller.signal });
+    const payload = await revealPayload(verified, resolved);
+    addDownload(retrieveLinks, payload, payload instanceof File ? payload.name : resolved.name, `Save verified ${payload instanceof File ? payload.name : resolved.name}`);
+    setStatus(retrieveStatus, resolved.encryption
+      ? "Ciphertext and AES-GCM authentication verified. The save link points to locally decrypted bytes."
+      : "Blossom download verified. The save link points to the checked local bytes.");
+  } finally {
+    if (downloadController === controller) downloadController = null;
+    updateRetrievalButtons();
+  }
 }));
 
 swarmConsent.addEventListener("change", () => {
-  swarmFetchButton.disabled = !(swarmConsent.checked && resolved?.magnetUri && profile() === "direct");
+  updateRetrievalButtons();
 });
 
 swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
   if (!resolved || !resolved.magnetUri || !swarmConsent.checked) throw new Error("Resolve a torrent event and acknowledge swarm visibility first.");
+  if (downloadController) throw new Error("A download is already in progress.");
   if (downloadSession) await downloadSession.stop();
-  setStatus(retrieveStatus, "Joining the swarm. Waiting for verified bytes…");
-  const result = await downloadFromSwarm(resolved, (progress, speed) => {
-    setStatus(retrieveStatus, `Swarm download ${(progress * 100).toFixed(1)}% · ${(speed / 1024).toFixed(1)} KiB/s`);
-  }, profile());
-  downloadSession = result.session;
-  const payload = await revealPayload(result.blob, resolved);
+  const controller = new AbortController();
+  downloadController = controller;
+  updateRetrievalButtons();
   clearDownloads(retrieveLinks);
-  addDownload(retrieveLinks, payload, payload instanceof File ? payload.name : resolved.name, `Save verified ${payload instanceof File ? payload.name : resolved.name}`);
-  setStatus(retrieveStatus, resolved.encryption
-    ? "Swarm ciphertext, SHA-256 and AES-GCM authentication verified."
-    : "Swarm download verified against the signed SHA-256.");
+  try {
+    setStatus(retrieveStatus, "Joining the swarm. Waiting for verified bytes…");
+    const result = await downloadFromSwarm(resolved, (progress, speed) => {
+      setStatus(retrieveStatus, `Swarm download ${(progress * 100).toFixed(1)}% · ${(speed / 1024).toFixed(1)} KiB/s`);
+    }, profile(), undefined, controller.signal);
+    downloadSession = result.session;
+    const payload = await revealPayload(result.blob, resolved);
+    addDownload(retrieveLinks, payload, payload instanceof File ? payload.name : resolved.name, `Save verified ${payload instanceof File ? payload.name : resolved.name}`);
+    setStatus(retrieveStatus, resolved.encryption
+      ? "Swarm ciphertext, SHA-256 and AES-GCM authentication verified."
+      : "Swarm download verified against the signed SHA-256.");
+  } finally {
+    if (downloadController === controller) downloadController = null;
+    updateRetrievalButtons();
+  }
 }));
+
+cancelDownloadButton.addEventListener("click", () => {
+  if (!downloadController) return;
+  downloadController.abort();
+  cancelDownloadButton.disabled = true;
+  setStatus(retrieveStatus, "Cancelling the active download…");
+});
 
 window.addEventListener("beforeunload", () => {
   if (seedSession) void seedSession.stop();
   if (downloadSession) void downloadSession.stop();
+  uploadController?.abort();
+  downloadController?.abort();
+  seedController?.abort();
   for (const url of objectUrls) URL.revokeObjectURL(url);
 });
 

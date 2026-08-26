@@ -55,6 +55,12 @@ const blossomErrors = [];
 let blossomOrigin;
 let uploadedBytes;
 let uploadedHash;
+let hangUpload = false;
+let hangDownload = false;
+let hangingUploadStarted;
+let hangingUploadClosed;
+let hangingDownloadStarted;
+let hangingDownloadClosed;
 
 const blossom = createServer((request, response) => {
   void (async () => {
@@ -70,6 +76,12 @@ const blossom = createServer((request, response) => {
       return;
     }
     if (request.method === "PUT" && url.pathname === "/upload") {
+      if (hangUpload) {
+        hangingUploadStarted?.();
+        response.once("close", () => hangingUploadClosed?.());
+        request.resume();
+        return;
+      }
       const chunks = [];
       let size = 0;
       for await (const chunk of request) {
@@ -101,6 +113,17 @@ const blossom = createServer((request, response) => {
       return;
     }
     if (request.method === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
+      if (hangDownload) {
+        response.writeHead(200, {
+          ...cors,
+          "Content-Type": "application/vnd.wildbloom.encrypted",
+          "Content-Length": String(uploadedBytes.length),
+        });
+        response.write(uploadedBytes.subarray(0, Math.min(1024, uploadedBytes.length)));
+        hangingDownloadStarted?.();
+        response.once("close", () => hangingDownloadClosed?.());
+        return;
+      }
       response.writeHead(200, {
         ...cors,
         "Content-Type": "application/vnd.wildbloom.encrypted",
@@ -358,6 +381,20 @@ try {
   await page.check("#upload-consent");
   if (await page.isEnabled("#upload-file")) throw new Error("Upload enabled before recovery-key acknowledgement.");
   await page.check("#key-saved-consent");
+  const uploadStarted = new Promise((resolve) => { hangingUploadStarted = resolve; });
+  const uploadClosed = new Promise((resolve) => { hangingUploadClosed = resolve; });
+  hangUpload = true;
+  await page.click("#upload-file");
+  await within(uploadStarted, 5_000, "Controlled interrupted upload did not reach Blossom.");
+  await page.click("#cancel-upload");
+  await page.locator("#publish-status").filter({ hasText: "Blossom upload cancelled" }).waitFor();
+  await within(uploadClosed, 5_000, "Cancelling the upload did not close the Blossom request.");
+  hangUpload = false;
+  hangingUploadStarted = undefined;
+  hangingUploadClosed = undefined;
+  if (!(await page.isDisabled("#cancel-upload")) || !(await page.isEnabled("#upload-file"))) {
+    throw new Error("Cancelled upload did not restore a safe retry state.");
+  }
   await page.click("#upload-file");
   await page.locator("#publish-status").filter({ hasText: "hybrid metadata is staged" }).waitFor();
   const stagedFacts = await page.locator("#file-facts").textContent();
@@ -395,6 +432,22 @@ try {
   const downloadedPath = await download.path();
   if (!downloadedPath || !readFileSync(downloadedPath).equals(BYTES)) throw new Error("Browser recovery did not reproduce the source bytes.");
 
+  await page.fill("#recovery-key-input", recoveryKey);
+  const downloadStarted = new Promise((resolve) => { hangingDownloadStarted = resolve; });
+  const downloadClosed = new Promise((resolve) => { hangingDownloadClosed = resolve; });
+  hangDownload = true;
+  await page.click("#fetch-blossom");
+  await within(downloadStarted, 5_000, "Controlled interrupted download did not reach Blossom.");
+  await page.click("#cancel-download");
+  await page.locator("#retrieve-status").filter({ hasText: "Blossom retrieval cancelled" }).waitFor();
+  await within(downloadClosed, 5_000, "Cancelling the download did not close the Blossom response.");
+  hangDownload = false;
+  hangingDownloadStarted = undefined;
+  hangingDownloadClosed = undefined;
+  if (!(await page.isDisabled("#cancel-download")) || await page.locator("#retrieve-links a").count() !== 0) {
+    throw new Error("Cancelled retrieval retained a stale save link or active cancel authority.");
+  }
+
   await page.check('input[name="network-profile"][value="tor"]');
   const trackerHidden = await page.isHidden("#tracker-field");
   const seedHidden = await page.isHidden("#seed-gate");
@@ -409,11 +462,15 @@ try {
 
   await page.check("#tor-consent");
   await page.fill("#blossom-server", blossomOrigin);
+  await page.check("#key-saved-consent");
+  await page.check("#upload-consent");
   await page.click("#upload-file");
   await page.locator("#publish-status").filter({ hasText: "Tor-only mode" }).waitFor();
   if (uploadAuthorisations.length !== 1) throw new Error("Tor-only mode attempted a clearnet upload.");
 
   await page.fill("#blossom-server", ONION_BLOSSOM);
+  await page.check("#key-saved-consent");
+  await page.check("#upload-consent");
   await page.click("#upload-file");
   await page.locator("#publish-status").filter({ hasText: "No clearnet fallback" }).waitFor();
   const torAuth = uploadAuthorisations[1];
@@ -445,7 +502,7 @@ try {
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
   if (!onionProxyRequests.includes("PUT /upload")) throw new Error("Tor-only upload did not traverse the controlled onion proxy.");
 
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

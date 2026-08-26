@@ -30,6 +30,8 @@ the finish line.
 - Blossom ciphertext retrieval, signed size/hash verification and local
   authenticated decryption back to the original file.
 - Consent invalidation when the file or network profile changes.
+- User cancellation closes an in-flight upload and partial-body download,
+  clears stale output and leaves a safe retry path.
 - Tor-only rejection of clearnet endpoints and absence of torrent metadata or
   WebRTC controls.
 - Secret scan and guarded dependency audit.
@@ -60,11 +62,38 @@ Playwright may freeze WebKit support on an older host operating system. A
 stalled or frozen local runtime is not stronger evidence than the current
 macOS CI job.
 
+## Real Tor transport gate
+
+Run this separately with Tor and Playwright Chromium installed:
+
+```sh
+npx playwright-core install chromium
+npm run build
+npm run acceptance:tor -- --browser chromium
+```
+
+The gate launches a fresh Tor daemon with cookie-authenticated loopback
+control and disposable v3 onion services for the production app, Blossom and
+Nostr relay. It publishes only ciphertext, receives the exact relay
+acknowledgement, requests `NEWNYM`, recovers the exact source in a fresh browser
+context without a signer, refuses WebRTC and proves a denied Blossom target
+does not retain a stale download. Temporary onion keys are deleted after Tor
+has stopped. The on-demand `tor-acceptance` GitHub workflow runs the same gate
+on Linux.
+
+Chromium does not treat HTTP onion origins as secure contexts, so the harness
+uses Chromium's test-only secure-origin override to exercise Wildbloom's Web
+Crypto path. The branded Tor Browser path is expected to supply that secure
+context, but remains part of its manual release gate. The automated gate is
+real Tor transport evidence, not branded Tor Browser interaction.
+
 ## Release gates not yet satisfied
 
 - Independent cryptographic and browser security review.
-- Tor Browser exercise against disposable real v3 onion Nostr and Blossom
-  services, including denial, timeout and circuit-change behaviour.
+- Branded Tor Browser exercise against disposable real v3 onion Nostr and
+  Blossom services, including denial, cancellation, timeout and identity-change
+  behaviour. The automated Chromium gate proves real onion transport and
+  `NEWNYM`, but Playwright cannot drive the branded Tor Browser binary.
 - A supported extension-free signer path for high-anonymity Tor publication.
 - Two-device WebTorrent seeding and retrieval across the intended production
   network boundary, with host-candidate and any future operator ICE traffic
@@ -74,7 +103,9 @@ macOS CI job.
   operating systems; Playwright's patched Firefox and WebKit builds are useful
   engine evidence but not those branded-browser releases.
 - Keyboard and screen-reader review.
-- Maximum-size, low-memory, interrupted-upload and interrupted-download tests.
+- Maximum-size and low-memory tests. Controlled browser interruption and
+  cancellation are automated; operating-system loss and device pressure are
+  not yet proven.
 - Production host selection, TLS/HSTS, onion address custody, monitoring,
   rollback and log-retention policy.
 - Legal name clearance, licence decision, privacy notice and operator support

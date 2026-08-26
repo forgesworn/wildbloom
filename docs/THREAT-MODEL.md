@@ -56,8 +56,9 @@
 | WebTorrent library supplies undeclared public STUN defaults | Override with an explicit empty ICE-server list; keep cross-network peer delivery unpromised |
 | Web seed masks a broken browser peer path | Two-context acceptance refuses every web-seed retrieval and requires exact recovery through the WSS-signalled peer |
 | File changes while the browser is seeding | Stop the seeding client and clear swarm consent before the replacement can be prepared |
+| Upload or retrieval stalls | Bound the operation by a deadline; explicit cancellation aborts fetches and destroys in-flight peer clients |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
-| User changes file or transport profile after consent | Clear all publication and swarm consents |
+| User changes file, endpoint or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority |
 
 ## Before any public deployment
 
@@ -65,8 +66,8 @@
   cryptographic and browser security review.
 - Re-evaluate the documented WebTorrent Node-only `ip` advisory exception on
   every WebTorrent upgrade; CI fails if its browser reachability guard changes.
-- Exercise onion publication and retrieval against disposable keys, relays and
-  a local Blossom server, and exercise direct mode with a controlled live
+- Repeat the automated real-onion transport gate, complete its branded Tor
+  Browser counterpart, and exercise direct mode with a controlled live
   WebTorrent tracker and two browser peers.
 - Select and disclose an operator-controlled ICE/STUN/TURN policy, or retain
   the documented host-candidate-only connectivity limit.
