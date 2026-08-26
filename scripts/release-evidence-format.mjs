@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { isProductionAssetPath } from "./production-build.mjs";
+import {
+  isProductionAssetPath,
+  MAX_PRODUCTION_BUILD_BYTES,
+  MAX_PRODUCTION_FILE_BYTES,
+  MAX_PRODUCTION_FILES,
+} from "./production-build.mjs";
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const HEX_40 = /^[0-9a-f]{40}$/u;
 const MAX_EVIDENCE_BYTES = 1024 * 1024;
-const MAX_RELEASE_FILES = 64;
-const MAX_RELEASE_FILE_BYTES = 32 * 1024 * 1024;
-const MAX_RELEASE_BUILD_BYTES = 64 * 1024 * 1024;
 
 function expect(condition, message) {
   if (!condition) throw new Error(message);
@@ -36,7 +38,7 @@ export function validateReleaseEvidence(value) {
   expect(/^v24\.[0-9]+\.[0-9]+$/u.test(value.buildToolchain.node), "Release evidence has an unsupported Node build version.");
   expect(/^11\.[0-9]+\.[0-9]+$/u.test(value.buildToolchain.npm), "Release evidence has an unsupported npm build version.");
   expect(HEX_64.test(value.buildSha256), "Release evidence has an invalid aggregate build hash.");
-  expect(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= MAX_RELEASE_FILES, "Release evidence has an invalid file list.");
+  expect(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= MAX_PRODUCTION_FILES, "Release evidence has an invalid file list.");
 
   const paths = new Set();
   let buildBytes = 0;
@@ -46,14 +48,14 @@ export function validateReleaseEvidence(value) {
     expect(file.path === "index.html" || isProductionAssetPath(file.path), `Release evidence contains an unsafe file path: ${String(file.path)}`);
     expect(!paths.has(file.path), `Release evidence contains a duplicate file path: ${file.path}`);
     expect(
-      Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= MAX_RELEASE_FILE_BYTES,
+      Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= MAX_PRODUCTION_FILE_BYTES,
       `Release evidence has an invalid or excessive byte count: ${file.path}`,
     );
     expect(HEX_64.test(file.sha256), `Release evidence has an invalid file hash: ${file.path}`);
     buildBytes += file.bytes;
     paths.add(file.path);
   }
-  expect(buildBytes <= MAX_RELEASE_BUILD_BYTES, "Release evidence exceeds the deployment verification byte budget.");
+  expect(buildBytes <= MAX_PRODUCTION_BUILD_BYTES, "Release evidence exceeds the deployment verification byte budget.");
   expect(paths.has("index.html"), "Release evidence does not contain index.html.");
   expect(
     JSON.stringify(value.files.map((file) => file.path))

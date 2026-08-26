@@ -29,6 +29,14 @@ ready for a missing or malformed build. Unknown or repeated command-line
 options fail closed. The Host allowlist accepts hostnames only; ports, paths,
 credentials and other URL syntax are configuration errors.
 
+At startup the server loads the validated release into one immutable process
+snapshot. It accepts at most 64 files, 32 MiB per file and 64 MiB in total,
+then serves those exact bytes without reopening `dist` for each request. A file
+changed, removed or added on disk after readiness cannot alter what that
+process serves. Deploy by starting a new process against the new complete
+release and switching traffic only after its `/healthz` succeeds; changing the
+directory underneath a running process is not a release mechanism.
+
 Every request target containing a query string is rejected, including requests
 for hashed assets and `/healthz`. `GET` and `HEAD` requests carrying a framed
 body are also rejected and their connection is closed. The server logs only
@@ -152,5 +160,6 @@ A real deployment is complete only when the exact source commit, built asset
 hashes, public or onion address, health response, response headers, process
 identity, bind address, rollback target and logged-out reachability have been
 recorded. `verify:deployment` records the byte and edge-header portion; process
-identity, bind address, rollback and log policy remain operator evidence. A
+  identity, bind address, snapshot start, rollback and log policy remain
+  operator evidence. A
 GitHub Actions build is not live deployment proof.

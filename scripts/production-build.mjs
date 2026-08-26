@@ -3,6 +3,9 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const HASHED_ASSET = /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:css|js)$/u;
+export const MAX_PRODUCTION_FILES = 64;
+export const MAX_PRODUCTION_FILE_BYTES = 32 * 1024 * 1024;
+export const MAX_PRODUCTION_BUILD_BYTES = 64 * 1024 * 1024;
 
 export function isProductionAssetPath(relative) {
   return HASHED_ASSET.test(relative);
@@ -21,7 +24,7 @@ function regularFile(path, label) {
   return details;
 }
 
-export function inspectProductionBuild(root = resolve(process.cwd(), "dist")) {
+export function loadProductionBuild(root = resolve(process.cwd(), "dist")) {
   let rootDetails;
   try {
     rootDetails = lstatSync(root);
@@ -65,14 +68,42 @@ export function inspectProductionBuild(root = resolve(process.cwd(), "dist")) {
   }
 
   const paths = ["index.html", ...assetEntries.map((entry) => `assets/${entry.name}`)].sort();
+  if (paths.length > MAX_PRODUCTION_FILES) {
+    throw new Error(`Production build contains more than ${MAX_PRODUCTION_FILES} files.`);
+  }
+  let buildBytes = 0;
   return paths.map((relative) => {
     const absolute = resolve(root, relative);
-    const details = regularFile(absolute, `Production file ${relative}`);
-    const bytes = readFileSync(absolute);
+    const before = regularFile(absolute, `Production file ${relative}`);
+    if (before.size === 0) throw new Error(`Production file must not be empty: ${relative}`);
+    if (before.size > MAX_PRODUCTION_FILE_BYTES) {
+      throw new Error(`Production file exceeds the ${MAX_PRODUCTION_FILE_BYTES}-byte limit: ${relative}`);
+    }
+    buildBytes += before.size;
+    if (buildBytes > MAX_PRODUCTION_BUILD_BYTES) {
+      throw new Error(`Production build exceeds the ${MAX_PRODUCTION_BUILD_BYTES}-byte limit.`);
+    }
+    const content = readFileSync(absolute);
+    const after = regularFile(absolute, `Production file ${relative}`);
+    if (
+      content.length !== before.size
+      || after.size !== before.size
+      || after.dev !== before.dev
+      || after.ino !== before.ino
+      || after.mtimeMs !== before.mtimeMs
+      || after.ctimeMs !== before.ctimeMs
+    ) {
+      throw new Error(`Production file changed while it was being inspected: ${relative}`);
+    }
     return {
       path: relative,
-      bytes: details.size,
-      sha256: createHash("sha256").update(bytes).digest("hex"),
+      bytes: content.length,
+      sha256: createHash("sha256").update(content).digest("hex"),
+      content,
     };
   });
+}
+
+export function inspectProductionBuild(root = resolve(process.cwd(), "dist")) {
+  return loadProductionBuild(root).map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 }));
 }

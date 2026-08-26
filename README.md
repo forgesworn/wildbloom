@@ -111,7 +111,9 @@ and error responses, exact fail-closed response security headers and hostile
 configuration, host, method, path, query-string and request-body rejection. It
 also covers malformed HTTP framing and headers at the raw socket boundary, and
 proves that private rejection markers do not reach the origin server's output.
-CI runs the browser path in system Chromium on
+The running server is also required to retain its exact bounded startup
+snapshot if the underlying release directory is changed. CI runs the browser
+path in system Chromium on
 Windows, Linux and macOS, Playwright Firefox on Linux and Playwright WebKit on
 macOS. It proves response security headers, zero ambient network activity,
 denial of supported unused browser capabilities, protected browser input hints,
@@ -216,7 +218,8 @@ and [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 loopback with the repository's response security headers and `/healthz`. The
 server fails closed on unknown configuration, refuses all query strings and
 request bodies, bounds HTTP parsing, and does not log request targets, headers
-or bodies.
+or bodies. It serves a validated, size-bounded startup snapshot so filesystem
+changes cannot silently mutate a running release.
 Production TLS, HSTS, host allowlisting, reverse-proxy logging and onion-service
 configuration are deployment responsibilities. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

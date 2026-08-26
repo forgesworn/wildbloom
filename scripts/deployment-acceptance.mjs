@@ -332,7 +332,11 @@ expectRejectedBuild(
   "unexpected root entries",
 );
 const port = await availablePort();
-const production = spawn(process.execPath, ["scripts/serve-production.mjs", "--host", HOST, "--port", String(port)], {
+const deploymentRoot = mkdtempSync(join(tmpdir(), "wildbloom-production-server-"));
+cpSync(resolve("dist"), join(deploymentRoot, "dist"), { recursive: true });
+const expectedFiles = new Map(evidence.files.map((file) => [file.path, readFileSync(resolve("dist", file.path))]));
+const production = spawn(process.execPath, [resolve("scripts/serve-production.mjs"), "--host", HOST, "--port", String(port)], {
+  cwd: deploymentRoot,
   env: { ...process.env, WILDBLOOM_ALLOWED_HOSTS: `wildbloom.test,${HOST}` },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -355,7 +359,7 @@ try {
   expectSecurityHeaders(healthHead, "HEAD health response");
 
   const index = await exchange(port);
-  const expectedIndex = readFileSync(resolve("dist/index.html"));
+  const expectedIndex = expectedFiles.get("index.html");
   expect(index.status === 200 && index.body.equals(expectedIndex), "Production root did not return exact built index bytes.");
   expect(index.headers["cache-control"] === "no-store", "Production HTML was cacheable.");
   expect(index.headers["content-length"] === String(expectedIndex.length), "Production HTML length was not exact.");
@@ -377,6 +381,21 @@ try {
     expect(head.status === 200 && head.body.length === 0, `HEAD returned asset bytes: ${file.path}`);
     expect(head.headers["content-length"] === String(file.bytes), `HEAD asset length drifted: ${file.path}`);
   }
+
+  writeFileSync(join(deploymentRoot, "dist", "index.html"), "tampered after startup");
+  for (const file of evidence.files.filter((item) => item.path !== "index.html")) {
+    rmSync(join(deploymentRoot, "dist", file.path));
+  }
+  writeFileSync(join(deploymentRoot, "dist", "assets", "injected-abcdefgh.js"), "injected after startup");
+  for (const file of evidence.files) {
+    const response = await exchange(port, { path: file.path === "index.html" ? "/" : `/${file.path}` });
+    expect(response.status === 200 && response.body.equals(expectedFiles.get(file.path)), `Production server did not retain its startup snapshot: ${file.path}`);
+    expect(createHash("sha256").update(response.body).digest("hex") === file.sha256, `Startup snapshot hash drifted: ${file.path}`);
+  }
+  const injected = await exchange(port, { path: "/assets/injected-abcdefgh.js" });
+  expect(injected.status === 404, "Production server exposed an asset added after startup.");
+  const snapshotHealth = await exchange(port, { path: "/healthz" });
+  expect(snapshotHealth.status === 200, "Production server lost readiness after its underlying release directory changed.");
 
   const rejected = [
     { path: "/package.json", status: 404, label: "repository file" },
@@ -481,8 +500,9 @@ try {
   expectDeploymentVerificationCli(evidence, port);
 
   process.stdout.write(
-    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, strict configuration, hostile host/method/path/query/body/parser rejection, no private request logging and independent release-evidence verification.\n`,
+    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), pinned startup snapshot, strict immutable hashes, no-store HTML/health/errors, security headers, strict configuration, hostile host/method/path/query/body/parser rejection, no private request logging and independent release-evidence verification.\n`,
   );
 } finally {
   await stopChild(production);
+  rmSync(deploymentRoot, { recursive: true, force: true });
 }

@@ -43,6 +43,9 @@ the finish line.
   traversal, source-map and repository-file rejection. Raw-socket probes also
   require fail-closed responses with the exact security policy for conflicting
   request framing, invalid header bytes and oversized request headers.
+- A bounded startup snapshot remains byte-identical after the underlying HTML
+  is overwritten and its assets are deleted, while a valid-looking hashed
+  asset added after readiness remains unservable.
 - An explicit deployment verifier that consumes clean release evidence, follows
   no redirect, streams the exact deployed bytes and fails on health, HSTS,
   MIME, cache, security-header, size or SHA-256 drift.

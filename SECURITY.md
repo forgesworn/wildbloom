@@ -26,6 +26,9 @@ file or personal data in an issue or relay event.
   security-header responses for malformed framing without logging request
   targets, headers or bodies. Upstream infrastructure needs the same explicit
   log and request-limit policy.
+- The origin validates and pins the complete bounded release in memory before
+  readiness, then performs no per-request release-file reads. A deployment
+  change requires a new process and health-checked traffic switch.
 
 The repository being private does not make protocol activity private. Read the
 threat model before testing with live infrastructure.

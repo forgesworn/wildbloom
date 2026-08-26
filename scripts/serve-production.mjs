@@ -1,8 +1,7 @@
-import { createReadStream, lstatSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
 import { SECURITY_HEADERS } from "./http-security.mjs";
-import { inspectProductionBuild, isProductionAssetPath } from "./production-build.mjs";
+import { isProductionAssetPath, loadProductionBuild } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
 function argumentsFrom(argv) {
@@ -30,7 +29,7 @@ if (!/^[0-9]{1,5}$/u.test(options.port)) throw new Error("Production port must b
 const port = Number(options.port);
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("Production port must be between 1 and 65535.");
 const root = resolve(process.cwd(), "dist");
-inspectProductionBuild(root);
+const productionFiles = new Map(loadProductionBuild(root).map((file) => [file.path, file]));
 
 function normaliseAllowedHost(value) {
   const raw = value.trim().toLowerCase();
@@ -147,26 +146,19 @@ const server = createServer({
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
-  const file = resolve(root, relative);
-  let details;
-  try {
-    details = lstatSync(file);
-  } catch {
-    respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
-    return;
-  }
-  if (!details.isFile() || details.isSymbolicLink()) {
+  const file = productionFiles.get(relative);
+  if (!file) {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
   response.writeHead(200, {
     ...SECURITY_HEADERS,
     "Cache-Control": relative === "index.html" ? "no-store" : "public, max-age=31536000, immutable",
-    "Content-Length": String(details.size),
-    "Content-Type": contentTypes.get(extname(file)) ?? "application/octet-stream",
+    "Content-Length": String(file.bytes),
+    "Content-Type": contentTypes.get(extname(relative)) ?? "application/octet-stream",
   });
   if (request.method === "HEAD") response.end();
-  else createReadStream(file).pipe(response);
+  else response.end(file.content);
 });
 
 server.on("checkContinue", (request, response) => {
