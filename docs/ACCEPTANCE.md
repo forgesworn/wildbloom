@@ -5,7 +5,8 @@ the finish line.
 
 ## Automated on every push
 
-- Node 24 strict TypeScript on GitHub-hosted Windows, Linux and macOS runners.
+- The exact `.nvmrc` Node/npm toolchain and LF-normalised checkout on
+  GitHub-hosted Windows, Linux and macOS runners.
 - Byte-for-byte equality of the Windows, Linux and macOS production builds,
   using independently generated, schema-validated release evidence tied to the
   exact source commit, package lock and Node/npm toolchain.

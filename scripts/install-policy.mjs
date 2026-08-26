@@ -10,6 +10,7 @@ const EXPECTED_NPM_CONFIG = Object.freeze({
 });
 const EXPECTED_NPM_ENGINE = ">=11 <12";
 const EXPECTED_NPM_MAJOR = 11;
+const EXPECTED_NODE_VERSION = "24.19.0";
 const EXPECTED_INSTALL_COMMAND = "npm ci --ignore-scripts";
 const EXPECTED_WORKFLOW_INSTALLS = 7;
 const REVIEWED_WORKFLOW_ACTIONS = Object.freeze({
@@ -47,6 +48,12 @@ const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 if (packageJson.engines?.npm !== EXPECTED_NPM_ENGINE) {
   fail(`package.json must require npm ${EXPECTED_NPM_ENGINE}.`);
 }
+if (readFileSync(".nvmrc", "utf8") !== `${EXPECTED_NODE_VERSION}\n`) {
+  fail(`.nvmrc must pin the canonical build to Node ${EXPECTED_NODE_VERSION}.`);
+}
+if (readFileSync(".gitattributes", "utf8") !== "* text=auto eol=lf\n") {
+  fail(".gitattributes must normalise every text checkout to LF.");
+}
 const userAgent = process.env.npm_config_user_agent ?? "";
 const runningNpm = /^npm\/([^\s]+)/u.exec(userAgent)?.[1];
 if (runningNpm && Number(runningNpm.split(".", 1)[0]) !== EXPECTED_NPM_MAJOR) {
@@ -59,6 +66,13 @@ let actionUses = 0;
 const observedActions = new Set();
 for (const workflow of workflowFiles) {
   const source = readFileSync(workflow, "utf8");
+  const setupNodeBlocks = source.split("actions/setup-node@").slice(1);
+  for (const block of setupNodeBlocks) {
+    const step = block.split(/^\s*-\s+(?:uses|name|run):/mu, 1)[0];
+    if (!/^\s+node-version-file:\s+\.nvmrc\s*$/mu.test(step) || /^\s+node-version:/mu.test(step)) {
+      fail(`${workflow} must consume the exact .nvmrc build version in every setup-node step.`);
+    }
+  }
   const installLines = source.split(/\r?\n/u).filter((line) => /\bnpm\s+(?:ci|i|install)\b/u.test(line));
   for (const line of installLines) {
     installCommands += 1;

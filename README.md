@@ -62,7 +62,9 @@ useful for a particular threat model.
 
 ## Run it locally
 
-Requirements: Node.js 24.x and a current browser. Publishing needs either a
+Requirements: Node.js 24.x and a current browser. The canonical hosted build
+uses the exact Node patch in `.nvmrc`; update that pin only with a complete
+platform-matrix run. Publishing needs either a
 NIP-07 extension or a separate signer that can return canonical signed Nostr
 event JSON. Later Node
 majors require a deliberate platform-matrix upgrade rather than an assumed

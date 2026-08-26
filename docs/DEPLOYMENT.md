@@ -16,6 +16,9 @@ The committed `.npmrc` makes `npm ci` refuse unsupported Node engines and peer
 conflicts and prevents dependency `preinstall`, `install` and `postinstall`
 hooks. Keep that policy enabled on the build host. Wildbloom's browser build
 does not require the native Node hooks present in WebTorrent's dependency tree.
+Use the exact Node patch in `.nvmrc` for a canonical release build. The
+repository also forces LF text checkouts so Windows cannot publish different
+HTML or package-lock bytes merely because of line-ending conversion.
 
 The production server exposes `/healthz`, serves only `index.html` and
 eight-character content-hashed JavaScript and CSS assets, rejects source maps
