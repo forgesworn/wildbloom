@@ -10,6 +10,7 @@ import { chromium } from "playwright-core";
 import { WebSocketServer } from "ws";
 
 const HOST = "127.0.0.1";
+const ONION_ACTION_TIMEOUT_MS = 3 * 60 * 1000;
 const SOURCE_BYTES = Buffer.from("real onion transport proof", "utf8");
 const SECRET = new Uint8Array(32).fill(19);
 const PUBKEY = getPublicKey(SECRET);
@@ -292,6 +293,34 @@ async function createPage(context, label, appOrigin, allowedOrigins, signer) {
   return { label, page, errors, undeclaredRequests, webSockets };
 }
 
+async function warmOnionTargets(page, blossomOrigin, relayUrl) {
+  await waitFor(async () => {
+    try {
+      return await page.evaluate(async ({ blossom, relay }) => {
+        const response = await fetch(blossom, {
+          cache: "no-store",
+          redirect: "error",
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (response.status !== 404) return false;
+        return new Promise((resolve) => {
+          const socket = new WebSocket(relay);
+          const finish = (ready) => {
+            window.clearTimeout(timer);
+            socket.close();
+            resolve(ready);
+          };
+          const timer = window.setTimeout(() => finish(false), 10_000);
+          socket.addEventListener("open", () => finish(true), { once: true });
+          socket.addEventListener("error", () => finish(false), { once: true });
+        });
+      }, { blossom: blossomOrigin, relay: relayUrl });
+    } catch {
+      return false;
+    }
+  }, ONION_ACTION_TIMEOUT_MS, "Controlled Blossom and relay onions did not both become reachable within three minutes.", 1_000);
+}
+
 function assertCleanPage(record) {
   if (record.errors.length > 0) throw new Error(`${record.label} page errors: ${record.errors.join("; ")}`);
   if (record.undeclaredRequests.length > 0) throw new Error(`${record.label} made undeclared requests: ${record.undeclaredRequests.join("; ")}`);
@@ -360,6 +389,7 @@ try {
     }
   }, 180_000, `Tor control port did not report 100% bootstrap within three minutes: ${torLog || "no Tor log output"}`, 500);
   await waitFor(() => onionHostname(appService) && onionHostname(blossomService) && onionHostname(relayService), 10_000, "Tor did not create all v3 onion hostnames.");
+  process.stdout.write("Tor bootstrap reached 100% and three disposable v3 service identities are ready.\n");
   const appHost = onionHostname(appService);
   const blossomHost = onionHostname(blossomService);
   const relayHost = onionHostname(relayService);
@@ -395,6 +425,8 @@ try {
   publisherContext = await browser.newContext({ acceptDownloads: true });
   const publisher = await createPage(publisherContext, "onion publisher", appOrigin, allowedOrigins, true);
   if (publisher.undeclaredRequests.length > 0) throw new Error(`Opening the onion app made ambient requests: ${publisher.undeclaredRequests.join("; ")}`);
+  await warmOnionTargets(publisher.page, blossomOnionOrigin, relayUrl);
+  process.stdout.write("The production app, controlled Blossom target and controlled relay are reachable only through their onion origins.\n");
   await publisher.page.check('input[name="network-profile"][value="tor"]');
   await publisher.page.fill("#blossom-server", blossomOnionOrigin);
   await publisher.page.fill("#relay-urls", relayUrl);
@@ -407,7 +439,7 @@ try {
   await publisher.page.check("#upload-consent");
   await publisher.page.check("#key-saved-consent");
   await publisher.page.click("#upload-file");
-  await publisher.page.locator("#publish-status").filter({ hasText: "No clearnet fallback" }).waitFor({ timeout: 60_000 });
+  await publisher.page.locator("#publish-status").filter({ hasText: "No clearnet fallback" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   if (!uploadedBytes || !uploadedHash) throw new Error("Encrypted payload did not traverse the real Blossom onion service.");
   await publisher.page.click("#sign-events");
   await publisher.page.locator("#publish-status").filter({ hasText: "Signed locally through NIP-07" }).waitFor();
@@ -418,12 +450,13 @@ try {
   }
   await publisher.page.check("#publish-consent");
   await publisher.page.click("#publish-events");
-  await publisher.page.locator("#publish-status").filter({ hasText: "1/1 acknowledgements" }).waitFor({ timeout: 60_000 });
+  await publisher.page.locator("#publish-status").filter({ hasText: "1/1 acknowledgements" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   if (await publisher.page.evaluate(() => window.__wildbloomTorWebRtcUsed)) throw new Error("Tor-only publication created WebRTC state.");
 
   await publisherContext.close();
   publisherContext = undefined;
   await signalNewIdentity(controlPort, controlCookie);
+  process.stdout.write("Tor acknowledged NEWNYM after encrypted publication.\n");
   await new Promise((resolve) => setTimeout(resolve, 1_000));
 
   retrieverContext = await browser.newContext({ acceptDownloads: true });
@@ -434,10 +467,10 @@ try {
   await retriever.page.check("#tor-consent");
   await retriever.page.fill("#event-id", eventId);
   await retriever.page.click("#resolve-event");
-  await retriever.page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor({ timeout: 60_000 });
+  await retriever.page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   await retriever.page.fill("#recovery-key-input", recoveryKey);
   await retriever.page.click("#fetch-blossom");
-  await retriever.page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor({ timeout: 60_000 });
+  await retriever.page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   const downloadPromise = retriever.page.waitForEvent("download");
   await retriever.page.getByRole("link", { name: "Save verified onion-proof.txt" }).click();
   const download = await downloadPromise;
@@ -450,7 +483,7 @@ try {
   blossomClosed = true;
   await retriever.page.fill("#recovery-key-input", recoveryKey);
   await retriever.page.click("#fetch-blossom");
-  await retriever.page.locator("#retrieve-status.error").waitFor({ timeout: 60_000 });
+  await retriever.page.locator("#retrieve-status.error").waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   if (await retriever.page.locator("#retrieve-links a").count() !== 0) throw new Error("Denied onion retrieval retained a stale verified download.");
 
   assertCleanPage(publisher);
