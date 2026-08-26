@@ -65,6 +65,7 @@
 | File changes while the browser is seeding | Stop the seeding client and clear swarm consent before the replacement can be prepared |
 | Upload or retrieval stalls | Bound the operation by a deadline; explicit cancellation aborts fetches and destroys in-flight peer clients |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
+| Peer bytes verify but the recovery key or local decryption fails | Destroy the provisional peer client before reporting failure or permitting a clean retry; never expose a save link |
 | Verified remote bytes contain executable HTML, SVG or script content | Offer only an `application/octet-stream`, `noopener` object-URL download; never navigate to or render the remote MIME type inside Wildbloom's origin |
 | User changes file, endpoint, signer public key, signing method or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority; profile changes also clear the displayed external signing identity |
 | Local crypto, signer or relay result finishes after that state change | Abort local hashing/crypto where possible and discard every result whose monotonic state revision is stale |

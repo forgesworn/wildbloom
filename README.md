@@ -112,8 +112,9 @@ confirmation clears signer identity and downstream network authority. A
 separate Chromium gate drives two isolated production pages through
 a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
 the exact source from the browser peer, observes host-only ICE, and proves that
-withdrawing swarm consent stops the downloading peer before tab closure and
-changing the source stops the publishing peer. Browser acceptance also
+failed local decryption stops the downloading peer before a clean retry,
+withdrawing swarm consent stops it before tab closure, and changing the source
+stops the publishing peer. Browser acceptance also
 interrupts a real hung upload and partial download, checks that cancellation closes the
 connection, removes stale output and permits a safe retry. It scans five
 dynamic states with axe-core WCAG A/AA rules and proves visible keyboard focus
@@ -131,8 +132,9 @@ through two disposable profiles and loopback-only WebDriver BiDi. That separate
 gate proves a trustworthy production origin, no ambient application network or
 signer, external-signature encrypted upload and relay publication, exact
 recovery through both Blossom and a second real Firefox WebRTC peer, host-only
-ICE, peer cleanup after consent withdrawal, an independently generated fixture,
-timeout, cancellation and denied-service failure.
+ICE, peer cleanup after failed decryption and consent withdrawal, an
+independently generated fixture, timeout, cancellation and denied-service
+failure.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

@@ -17,6 +17,7 @@ const SOURCE_BYTES = Buffer.from("genuine Firefox exact recovery", "utf8");
 const PREPARED_BYTES = Buffer.from("prepared in genuine Firefox", "utf8");
 const SECRET = new Uint8Array(32).fill(23);
 const PUBKEY = getPublicKey(SECRET);
+const WRONG_RECOVERY_KEY = `wbk1_${Buffer.alloc(32, 99).toString("base64url")}`;
 const tempRoot = mkdtempSync(join(tmpdir(), "wildbloom-firefox-"));
 
 function createCertificate() {
@@ -760,8 +761,29 @@ try {
   await setValue(downloaderRecord, "#event-id", publishedFileEvent.id);
   await click(downloaderRecord, "#resolve-event");
   await waitForText(downloaderRecord, "#retrieve-status", /separately received recovery key/iu);
-  await setValue(downloaderRecord, "#recovery-key-input", prepared.recoveryKey);
+  await setValue(downloaderRecord, "#recovery-key-input", WRONG_RECOVERY_KEY);
   await setChecked(downloaderRecord, "#download-swarm-consent", true);
+  await click(downloaderRecord, "#fetch-swarm");
+  await waitForText(
+    downloaderRecord,
+    "#retrieve-status",
+    /wrong or the encrypted envelope was modified/iu,
+    PEER_TIMEOUT_MS,
+  );
+  await waitFor(
+    () => peerCount(tracker, infoHash) === 1,
+    ACTION_TIMEOUT_MS,
+    "A failed recovery key left the genuine Firefox downloader in the swarm.",
+  );
+  const failedPeerRecovery = await evaluate(downloaderRecord, `(() => ({
+    fetchDisabled: document.querySelector("#fetch-swarm")?.disabled,
+    links: document.querySelectorAll("#retrieve-links a").length,
+  }))()`);
+  if (failedPeerRecovery.fetchDisabled !== false || failedPeerRecovery.links !== 0) {
+    throw new Error(`Failed genuine Firefox peer decryption retained output or blocked retry: ${JSON.stringify(failedPeerRecovery)}.`);
+  }
+
+  await setValue(downloaderRecord, "#recovery-key-input", prepared.recoveryKey);
   await click(downloaderRecord, "#fetch-swarm");
   await waitForText(downloaderRecord, "#retrieve-status", /Swarm ciphertext/iu, PEER_TIMEOUT_MS);
   const peerRecovery = await evaluate(downloaderRecord, `(async () => {
@@ -788,7 +810,9 @@ try {
     "The controlled tracker never observed two live genuine Firefox peers.",
   );
   const starts = trackerEvents.filter((entry) => entry.event === "start" && entry.infoHash === infoHash);
-  if (starts.length < 2) throw new Error("The controlled WSS tracker did not receive both genuine Firefox start announcements.");
+  if (starts.length < 3) {
+    throw new Error("The controlled WSS tracker did not receive the Firefox publisher, failed-key and retry start announcements.");
+  }
   await Promise.all([assertPeerEvidence(record), assertPeerEvidence(downloaderRecord)]);
   assertAllowedRequests(record, allowedOrigins);
   assertAllowedRequests(downloaderRecord, allowedOrigins);
@@ -927,7 +951,7 @@ try {
     throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors, ...trackerErrors].join("; ")}`);
   }
   process.stdout.write(
-    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
+    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption and consent withdrawal, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } finally {
   await closeFirefox(downloaderRecord).catch(() => undefined);

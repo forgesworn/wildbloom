@@ -17,6 +17,9 @@ before a public production release.
   `application/vnd.wildbloom.encrypted`.
 - The key is never written to Nostr, Blossom, torrent metadata, local storage,
   session storage or IndexedDB.
+- Random bytes are filled directly into their destination buffer. Mutable raw
+  key, source-chunk and private-metadata buffers are overwritten as soon as
+  their operation finishes or fails.
 
 ## Binary format
 
@@ -68,6 +71,9 @@ record. Plaintext is offered for saving only after every record succeeds.
 
 - JavaScript and Web Crypto operate inside the browser process. A compromised
   browser, extension or page can read plaintext and keys.
+- Overwriting mutable buffers reduces their lifetime but cannot guarantee
+  process-wide zeroisation: browser internals, immutable strings and Blob/File
+  implementations may retain copies outside JavaScript's control.
 - GCM safety depends on unique nonces for a key. Wildbloom uses a fresh random
   key and nonce prefix for every envelope and refuses more than 258 records.
 - No password KDF is involved. The recovery key has full cryptographic entropy

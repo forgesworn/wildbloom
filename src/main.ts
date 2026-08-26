@@ -901,7 +901,10 @@ blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async (
 
 swarmConsent.addEventListener("change", () => {
   if (!swarmConsent.checked) {
-    if (downloadTransport === "swarm") downloadController?.abort();
+    if (downloadTransport === "swarm") {
+      setStatus(retrieveStatus, "Leaving the WebTorrent swarm…");
+      downloadController?.abort();
+    }
     if (downloadSession) {
       const session = downloadSession;
       const expectedRevision = resolutionRevision;
@@ -936,6 +939,8 @@ swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () 
   downloadTransport = "swarm";
   updateRetrievalButtons();
   clearDownloads(retrieveLinks);
+  let provisionalSession: StopHandle | null = null;
+  let cleanupError: unknown;
   try {
     setStatus(retrieveStatus, "Joining the swarm. Waiting for verified bytes…");
     const result = await downloadFromSwarm(selectedResolved, (progress, speed) => {
@@ -943,38 +948,45 @@ swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () 
         setStatus(retrieveStatus, `Swarm download ${(progress * 100).toFixed(1)}% · ${(speed / 1024).toFixed(1)} KiB/s`);
       }
     }, selectedProfile, undefined, controller.signal);
+    provisionalSession = result.session;
     if (controller.signal.aborted
       || resolutionRevision !== expectedRevision
       || resolved !== selectedResolved
-      || profile() !== selectedProfile) {
-      await confirmPeerStopped(result.session);
-      return;
-    }
-    downloadSession = result.session;
+      || profile() !== selectedProfile) return;
     const payload = await revealPayload(result.blob, selectedResolved, controller.signal);
     if (controller.signal.aborted
       || resolutionRevision !== expectedRevision
       || resolved !== selectedResolved
-      || profile() !== selectedProfile) {
-      if (downloadSession === result.session) {
-        downloadSession = null;
-        await confirmPeerStopped(result.session);
-      }
-      return;
-    }
+      || profile() !== selectedProfile) return;
     const downloadName = payload instanceof File ? payload.name : selectedResolved.name;
     addDownload(retrieveLinks, payload, downloadName, `Save verified ${downloadName}`);
+    downloadSession = result.session;
+    provisionalSession = null;
     setStatus(retrieveStatus, selectedResolved.encryption
       ? "Swarm ciphertext, SHA-256 and AES-GCM authentication verified."
       : "Swarm download verified against the signed SHA-256.");
   } catch (error) {
-    if (error instanceof PeerCleanupError || !(controller.signal.aborted && resolutionRevision !== expectedRevision)) throw error;
+    if (error instanceof PeerCleanupError
+      || !(controller.signal.aborted && (resolutionRevision !== expectedRevision || !swarmConsent.checked))) throw error;
   } finally {
+    if (provisionalSession) {
+      try {
+        await confirmPeerStopped(provisionalSession);
+      } catch (error) {
+        cleanupError = error;
+      }
+    }
     if (downloadController === controller) {
       downloadController = null;
       downloadTransport = null;
     }
+    if (cleanupError) swarmConsent.checked = false;
     updateRetrievalButtons();
+    if (!cleanupError && controller.signal.aborted && !swarmConsent.checked
+      && resolutionRevision === expectedRevision) {
+      setStatus(retrieveStatus, "Swarm participation stopped. No peer session was retained.");
+    }
+    if (cleanupError) throw cleanupError;
   }
 }));
 

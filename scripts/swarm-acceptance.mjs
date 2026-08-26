@@ -15,6 +15,7 @@ const SOURCE_BYTES = Buffer.from("Wildbloom peer acceptance\n".repeat(16_384), "
 const SOURCE_HASH = createHash("sha256").update(SOURCE_BYTES).digest("hex");
 const SECRET = new Uint8Array(32).fill(17);
 const PUBKEY = getPublicKey(SECRET);
+const WRONG_RECOVERY_KEY = `wbk1_${Buffer.alloc(32, 99).toString("base64url")}`;
 const tempRoot = mkdtempSync(join(tmpdir(), "wildbloom-swarm-"));
 
 function requestedBrowser() {
@@ -367,8 +368,21 @@ try {
   await downloader.page.fill("#event-id", eventId);
   await downloader.page.click("#resolve-event");
   await downloader.page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor();
-  await downloader.page.fill("#recovery-key-input", recoveryKey);
+  await downloader.page.fill("#recovery-key-input", WRONG_RECOVERY_KEY);
   await downloader.page.check("#download-swarm-consent");
+  await downloader.page.click("#fetch-swarm");
+  await downloader.page.locator("#retrieve-status").filter({ hasText: "wrong or the encrypted envelope was modified" }).waitFor({ timeout: 60_000 });
+  await waitFor(
+    () => peerCount(tracker, infoHash) === 1,
+    10_000,
+    "A failed recovery key left the downloading browser in the swarm.",
+  );
+  if ((await downloader.page.locator("#retrieve-links a").count()) !== 0
+    || !(await downloader.page.isEnabled("#fetch-swarm"))) {
+    throw new Error("Failed peer decryption retained output or blocked a clean retry.");
+  }
+
+  await downloader.page.fill("#recovery-key-input", recoveryKey);
   await downloader.page.click("#fetch-swarm");
   await downloader.page.locator("#retrieve-status").filter({ hasText: "Swarm ciphertext" }).waitFor({ timeout: 60_000 });
   const downloadPromise = downloader.page.waitForEvent("download");
@@ -384,7 +398,7 @@ try {
 
   await waitFor(() => peerCount(tracker, infoHash) >= 2, 10_000, "The controlled tracker never observed two live browser peers.");
   const starts = trackerEvents.filter((entry) => entry.event === "start" && entry.infoHash === infoHash);
-  if (starts.length < 2) throw new Error("The controlled WSS tracker did not receive both browser start announcements.");
+  if (starts.length < 3) throw new Error("The controlled WSS tracker did not receive the publisher, failed-key and retry start announcements.");
   if (!publisher.webSockets.includes(trackerUrl) || !downloader.webSockets.includes(trackerUrl)) {
     throw new Error("Both browsers did not connect to the exact controlled WSS tracker.");
   }
@@ -416,7 +430,7 @@ try {
   if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the downloader restored a withdrawn peer session.");
 
   process.stdout.write(
-    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE and confirmed peer cleanup after consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
+    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE and confirmed peer cleanup after failed decryption, consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } catch (error) {
   const diagnostics = [];

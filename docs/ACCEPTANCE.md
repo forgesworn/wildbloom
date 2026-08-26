@@ -17,15 +17,18 @@ the finish line.
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
   application network or signer, external-signature encrypted upload and
   two-event relay publication, exact Blossom and real WebRTC-peer recovery,
-  host-only ICE, peer cleanup, an independently generated encrypted fixture,
-  relay timeout, partial-body cancellation and denied-service failure.
+  host-only ICE, peer cleanup after failed decryption and consent withdrawal,
+  an independently generated encrypted fixture, relay timeout, partial-body
+  cancellation and denied-service failure.
 - Two isolated Chromium contexts publishing and retrieving the encrypted file
   through a real, ephemeral TLS WebSocket tracker.
 - Exact source recovery while the controlled Blossom web seed refuses every
   retrieval, proving the bytes came from the other browser peer.
 - Runtime observation that both peers receive an empty ICE-server list, gather
   host candidates only, reach a connected WebRTC state, and leave the tracker
-  after swarm-consent withdrawal and source change, before browser closure.
+  after failed local decryption, swarm-consent withdrawal and source change,
+  before browser closure. A failed recovery exposes no save link and a correct
+  retry must complete through a new peer session.
 - Response CSP, framing, referrer, permissions and MIME-sniffing headers.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,
@@ -108,7 +111,7 @@ This drives two independent Firefox processes. One completes extension-free
 encrypted publication and seeding; the other performs signer-free exact peer
 recovery while the published Blossom object is unavailable. The gate requires
 the declared WSS tracker, host-only ICE and confirmed peer cleanup after
-consent withdrawal and source change.
+failed local decryption, consent withdrawal and source change.
 
 ## Real Tor transport gate
 
