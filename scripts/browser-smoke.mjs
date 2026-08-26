@@ -10,7 +10,10 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
-import { generateKnownAnswerEnvelope } from "./encryption-vector.mjs";
+import {
+  generateKnownAnswerEnvelope,
+  generateMultiRecordKnownAnswerEnvelope,
+} from "./encryption-vector.mjs";
 
 const HOST = "127.0.0.1";
 async function availablePort() {
@@ -30,6 +33,8 @@ const ORIGIN = `http://${HOST}:${PORT}`;
 const BYTES = Buffer.from("hello wildbloom", "utf8");
 const SOURCE_HASH = createHash("sha256").update(BYTES).digest("hex");
 const KNOWN_ANSWER = generateKnownAnswerEnvelope();
+const MULTI_RECORD_KNOWN_ANSWER = generateMultiRecordKnownAnswerEnvelope();
+const KNOWN_ANSWER_FIXTURES = [KNOWN_ANSWER, MULTI_RECORD_KNOWN_ANSWER];
 const WRONG_RECOVERY_KEY = `wbk1_${Buffer.alloc(32, 99).toString("base64url")}`;
 const HOSTILE_BYTES = Buffer.from("<!doctype html><script>window.opener.document.body.textContent='compromised'</script>", "utf8");
 const HOSTILE_HASH = createHash("sha256").update(HOSTILE_BYTES).digest("hex");
@@ -156,13 +161,16 @@ const blossom = createServer((request, response) => {
       response.end(uploadedBytes);
       return;
     }
-    if (request.method === "GET" && url.pathname === `/${KNOWN_ANSWER.envelopeSha256}.wbenc`) {
+    const knownAnswerFixture = KNOWN_ANSWER_FIXTURES.find(
+      (fixture) => url.pathname === `/${fixture.envelopeSha256}.wbenc`,
+    );
+    if (request.method === "GET" && knownAnswerFixture) {
       response.writeHead(200, {
         ...cors,
         "Content-Type": "application/vnd.wildbloom.encrypted",
-        "Content-Length": String(KNOWN_ANSWER.envelope.length),
+        "Content-Length": String(knownAnswerFixture.envelope.length),
       });
-      response.end(KNOWN_ANSWER.envelope);
+      response.end(knownAnswerFixture.envelope);
       return;
     }
     if (request.method === "GET" && url.pathname === `/${HOSTILE_HASH}.html`) {
@@ -437,6 +445,23 @@ function listen(server) {
   });
 }
 
+function makeKnownAnswerEvent(fixture, origin, createdAt) {
+  return finalizeEvent({
+    kind: 1063,
+    created_at: createdAt,
+    tags: [
+      ["url", `${origin}/${fixture.envelopeSha256}.wbenc`],
+      ["m", "application/vnd.wildbloom.encrypted"],
+      ["x", fixture.envelopeSha256],
+      ["ox", fixture.envelopeSha256],
+      ["size", String(fixture.envelope.length)],
+      ["encryption", "wildbloom-aes-256-gcm-chunked-v1"],
+      ["alt", "Encrypted Wildbloom file"],
+    ],
+    content: "wildbloom.wbenc",
+  }, SECRET);
+}
+
 const relayEvents = new Map();
 const relay = new WebSocketServer({ host: HOST, port: 0, maxPayload: 1024 * 1024 });
 relay.on("connection", (socket) => socket.on("message", (raw) => {
@@ -467,21 +492,14 @@ try {
   const blossomAddress = blossom.address();
   if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom server did not expose a TCP port.");
   blossomOrigin = `http://${HOST}:${blossomAddress.port}`;
-  const knownAnswerEvent = finalizeEvent({
-    kind: 1063,
-    created_at: 1_700_000_002,
-    tags: [
-      ["url", `${blossomOrigin}/${KNOWN_ANSWER.envelopeSha256}.wbenc`],
-      ["m", "application/vnd.wildbloom.encrypted"],
-      ["x", KNOWN_ANSWER.envelopeSha256],
-      ["ox", KNOWN_ANSWER.envelopeSha256],
-      ["size", String(KNOWN_ANSWER.envelope.length)],
-      ["encryption", "wildbloom-aes-256-gcm-chunked-v1"],
-      ["alt", "Encrypted Wildbloom file"],
-    ],
-    content: "wildbloom.wbenc",
-  }, SECRET);
+  const knownAnswerEvent = makeKnownAnswerEvent(KNOWN_ANSWER, blossomOrigin, 1_700_000_002);
+  const multiRecordKnownAnswerEvent = makeKnownAnswerEvent(
+    MULTI_RECORD_KNOWN_ANSWER,
+    blossomOrigin,
+    1_700_000_003,
+  );
   relayEvents.set(knownAnswerEvent.id, knownAnswerEvent);
+  relayEvents.set(multiRecordKnownAnswerEvent.id, multiRecordKnownAnswerEvent);
   const proxyAddress = onionProxy.address();
   if (!proxyAddress || typeof proxyAddress === "string") throw new Error("Controlled onion proxy did not expose a TCP port.");
   const proxyOrigin = `http://${HOST}:${proxyAddress.port}`;
@@ -763,6 +781,34 @@ try {
     })}`);
   }
 
+  await page.fill("#event-id", multiRecordKnownAnswerEvent.id);
+  await page.click("#resolve-event");
+  await page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor();
+  await page.fill("#recovery-key-input", MULTI_RECORD_KNOWN_ANSWER.recoveryKey);
+  await page.click("#fetch-blossom");
+  await page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor();
+  const multiRecordDownload = await page.getByRole("link", {
+    name: `Save verified ${MULTI_RECORD_KNOWN_ANSWER.sourceName}`,
+  }).evaluate(async (anchor) => {
+    const blob = window.__wildbloomObservedObjectUrls?.get(anchor.href);
+    if (!blob) return { bytes: 0, mimeType: undefined, rel: anchor.rel, sha256: undefined };
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+    return {
+      bytes: blob.size,
+      mimeType: blob.type,
+      rel: anchor.rel,
+      sha256: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    };
+  });
+  if (multiRecordDownload.bytes !== MULTI_RECORD_KNOWN_ANSWER.source.length
+    || multiRecordDownload.mimeType !== "application/octet-stream"
+    || !multiRecordDownload.rel.includes("noopener")
+    || multiRecordDownload.sha256 !== MULTI_RECORD_KNOWN_ANSWER.sourceSha256) {
+    throw new Error(`Browser did not recover the exact published two-record vector: ${JSON.stringify(
+      multiRecordDownload,
+    )}`);
+  }
+
   const hostileEvent = finalizeEvent({
     kind: 1063,
     created_at: 1_700_000_001,
@@ -978,7 +1024,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published one- and two-record known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

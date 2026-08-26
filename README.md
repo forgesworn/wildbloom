@@ -99,8 +99,9 @@ npm run acceptance:tor-browser
 npm run acceptance:maximum
 ```
 
-`check` verifies the published encryption known-answer vector, runs strict
-TypeScript, coverage-gated unit and adversarial tests, a production build,
+`check` verifies the published one- and two-record encryption known-answer
+vectors, runs strict TypeScript, coverage-gated unit and adversarial tests, a
+production build,
 adversarial deployment acceptance, a real headless-browser acceptance path and
 the local secret scanner. The deployment gate verifies the
 exact served build hashes, strict immutable asset names, no-store HTML, health
@@ -110,12 +111,12 @@ and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
 response security headers, zero ambient network activity, protected browser
 input hints, and no cookies, persistent browser-store mutations or retained
 browser state after the journey. Each hosted browser engine also rejects a
-wrong key for the published independent AES-GCM vector without exposing a save
-link, then recovers its exact bytes. The journey exercises encrypted upload,
-exact Blossom authority,
-NIP-07 and exact external signing, controlled relay publication and retrieval, ciphertext
-download, local recovery, consent reset and Tor-only refusal of clearnet
-fallback. It rejects validly signed transformed hashes and false
+wrong key for the published independent AES-GCM vectors without exposing a
+save link, then recovers both exact sources across the authenticated chunk
+boundary. The journey exercises encrypted upload, exact Blossom authority,
+NIP-07 and exact external signing, controlled relay publication and retrieval,
+ciphertext download, local recovery, consent reset and Tor-only refusal of
+clearnet fallback. It rejects validly signed transformed hashes and false
 encrypted-envelope metadata, while verified saves use inert octet-stream object
 URLs rather than executable remote MIME types. It also supersedes an active
 local encryption, holds a signer request

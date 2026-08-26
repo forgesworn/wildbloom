@@ -1,0 +1,46 @@
+{
+  "format": "wildbloom-encryption-known-answer-v1",
+  "scheme": "wildbloom-aes-256-gcm-chunked-v1",
+  "source": {
+    "name": "known-answer-two-records.bin",
+    "type": "application/octet-stream",
+    "bytes": 1048613,
+    "formula": "byte[i] = (i * 29 + 7) mod 256",
+    "sha256": "a75d80a57309ce6fc527a6eb134fd2d53ccdd53a4eba24fc562610e4da797d35"
+  },
+  "testOnlyKey": {
+    "rawHex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "recoveryKey": "wbk1_ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+  },
+  "noncePrefixHex": "b0b1b2b3b4b5b6b7",
+  "padding": {
+    "plaintextBytes": 2097152,
+    "formula": "byte[i] = (i * 73 + 41) mod 256 before metadata and source overwrite"
+  },
+  "metadata": {
+    "canonicalUtf8": "{\"name\":\"known-answer-two-records.bin\",\"size\":1048613,\"type\":\"application/octet-stream\"}",
+    "bytes": 88
+  },
+  "headerHex": "57424c4d454e43310010000000000002b0b1b2b3b4b5b6b7",
+  "plaintextSha256": "97c7da089c1e67357519974a7b0a674846f321e147e62734ba95c2dd126619f2",
+  "records": [
+    {
+      "counter": 0,
+      "nonceHex": "b0b1b2b3b4b5b6b700000000",
+      "additionalAuthenticatedDataHex": "57424c4d454e43310010000000000002b0b1b2b3b4b5b6b700000000",
+      "plaintextSha256": "2ed0e8f20456919594b1e6761c3dfe56fc2284c3831b2c9d3124f08a58325840",
+      "ciphertextSha256": "238ba89e03a72d25a2a4b48650539c8347f43079cce2374ae1a4ccc078cd2662",
+      "authenticationTagHex": "0d4e6becaa2de23ce4433752eb90f9c4"
+    },
+    {
+      "counter": 1,
+      "nonceHex": "b0b1b2b3b4b5b6b700000001",
+      "additionalAuthenticatedDataHex": "57424c4d454e43310010000000000002b0b1b2b3b4b5b6b700000001",
+      "plaintextSha256": "0ac3f73d1f7bc1e944ff921fdf52e052ea65fca899249ee4c4f7a294d933aaa9",
+      "ciphertextSha256": "0109498771d5b44818fc8fa42b0f94416880fffcbd06070e29f8eb5639590289",
+      "authenticationTagHex": "1a32e922ba64e410e93c7317c207a0fb"
+    }
+  ],
+  "envelopeBytes": 2097208,
+  "envelopeSha256": "7d302aa7b1ed91560a528992472bf64430776373860ac0d7d9a43d514e3586f1"
+}
