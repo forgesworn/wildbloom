@@ -40,7 +40,9 @@ the finish line.
   that supported declared features are actually unavailable.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,
-  traversal, source-map and repository-file rejection.
+  traversal, source-map and repository-file rejection. Raw-socket probes also
+  require fail-closed responses with the exact security policy for conflicting
+  request framing, invalid header bytes and oversized request headers.
 - An explicit deployment verifier that consumes clean release evidence, follows
   no redirect, streams the exact deployed bytes and fails on health, HSTS,
   MIME, cache, security-header, size or SHA-256 drift.

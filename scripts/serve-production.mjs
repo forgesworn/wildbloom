@@ -71,8 +71,13 @@ function hostAllowed(request) {
 }
 
 function respond(response, status, headers, body = "") {
-  response.writeHead(status, { ...SECURITY_HEADERS, "Cache-Control": "no-store", ...headers });
-  response.end(body);
+  response.writeHead(status, {
+    ...SECURITY_HEADERS,
+    "Cache-Control": "no-store",
+    "Content-Length": String(Buffer.byteLength(body)),
+    ...headers,
+  });
+  response.end(response.req.method === "HEAD" ? undefined : body);
 }
 
 function hasRequestBody(request) {
@@ -81,7 +86,16 @@ function hasRequestBody(request) {
   return contentLength !== undefined && contentLength !== "0";
 }
 
-const server = createServer((request, response) => {
+const server = createServer({
+  connectionsCheckingInterval: 1_000,
+  headersTimeout: 10_000,
+  insecureHTTPParser: false,
+  keepAliveTimeout: 5_000,
+  maxHeaderSize: 16_384,
+  rejectNonStandardBodyWrites: true,
+  requestTimeout: 10_000,
+  requireHostHeader: true,
+}, (request, response) => {
   if (!hostAllowed(request)) {
     respond(response, 421, { "Content-Type": "text/plain; charset=utf-8" }, "Misdirected request\n");
     return;
@@ -118,7 +132,7 @@ const server = createServer((request, response) => {
     return;
   }
   if (url.pathname === "/healthz") {
-    respond(response, 200, { "Content-Type": "application/json; charset=utf-8" }, request.method === "HEAD" ? "" : '{"status":"ok"}\n');
+    respond(response, 200, { "Content-Type": "application/json; charset=utf-8" }, '{"status":"ok"}\n');
     return;
   }
 
@@ -162,6 +176,27 @@ server.on("checkContinue", (request, response) => {
 server.on("checkExpectation", (request, response) => {
   request.resume();
   respond(response, 417, { Connection: "close", "Content-Type": "text/plain; charset=utf-8" }, "Expectation failed\n");
+});
+const parserErrorBody = "Bad request\n";
+const parserErrorResponse = [
+  "HTTP/1.1 400 Bad Request",
+  ...Object.entries({
+    ...SECURITY_HEADERS,
+    "Cache-Control": "no-store",
+    Connection: "close",
+    "Content-Length": String(Buffer.byteLength(parserErrorBody)),
+    "Content-Type": "text/plain; charset=utf-8",
+  }).map(([name, value]) => `${name}: ${value}`),
+  "",
+  parserErrorBody,
+].join("\r\n");
+server.on("clientError", (_error, socket) => {
+  if (socket.destroyed || socket.writableEnded) return;
+  if (!socket.writable) {
+    socket.destroy();
+    return;
+  }
+  socket.end(parserErrorResponse);
 });
 
 server.listen(port, host, () => process.stdout.write(`Wildbloom production server listening on http://${host}:${port}\n`));

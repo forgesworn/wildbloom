@@ -37,6 +37,13 @@ bodies. This keeps accidental recovery keys and other private input out of the
 origin process output, but it cannot stop an upstream proxy from observing or
 logging a request before rejection.
 
+The origin uses Node's strict HTTP parser with a 16 KiB request-header limit,
+ten-second header and request deadlines, and a one-second deadline-check
+interval. Conflicting request framing, invalid header bytes and oversized
+headers receive the same bounded, no-store, security-header response before
+the connection closes. These limits are defence in depth behind the reverse
+proxy, not a substitute for edge request limits and connection controls.
+
 The release-evidence JSON contains no secret material. It records the full
 source commit, whether the source tree was clean, the exact Node and npm build
 versions, the package-lock hash, an aggregate build hash and the byte length

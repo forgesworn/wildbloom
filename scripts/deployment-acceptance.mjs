@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request } from "node:http";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -44,6 +45,56 @@ function exchange(port, { method = "GET", path = "/", host = "wildbloom.test", h
     call.once("error", reject);
     if (body) call.write(body);
     call.end();
+  });
+}
+
+function rawExchange(port, payload) {
+  return new Promise((resolveResponse, reject) => {
+    const chunks = [];
+    const socket = connect({ host: HOST, port });
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      socket.destroy();
+      reject(new Error("Raw production-server exchange timed out."));
+    }, 5_000);
+    function finish() {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const raw = Buffer.concat(chunks);
+      const boundary = raw.indexOf("\r\n\r\n");
+      expect(boundary >= 0, "Raw production-server response omitted its header boundary.");
+      const lines = raw.subarray(0, boundary).toString("latin1").split("\r\n");
+      const statusMatch = /^HTTP\/1\.1 ([0-9]{3}) /u.exec(lines.shift() ?? "");
+      expect(statusMatch, "Raw production-server response omitted a valid status line.");
+      const headers = {};
+      for (const line of lines) {
+        const separator = line.indexOf(":");
+        expect(separator > 0, "Raw production-server response contained a malformed header.");
+        const name = line.slice(0, separator).toLowerCase();
+        expect(headers[name] === undefined, `Raw production-server response duplicated ${name}.`);
+        headers[name] = line.slice(separator + 1).trim();
+      }
+      resolveResponse({
+        status: Number(statusMatch[1]),
+        headers,
+        body: raw.subarray(boundary + 4),
+      });
+    }
+    socket.once("connect", () => socket.write(payload, "latin1"));
+    socket.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    socket.once("end", finish);
+    socket.once("close", () => {
+      if (chunks.length > 0) finish();
+    });
+    socket.once("error", (error) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      }
+    });
   });
 }
 
@@ -295,8 +346,13 @@ try {
   const health = await exchange(port, { path: "/healthz" });
   expect(health.status === 200, "Health endpoint was not ready.");
   expect(health.body.equals(Buffer.from('{"status":"ok"}\n')), "Health endpoint returned unexpected bytes.");
+  expect(health.headers["content-length"] === "16", "Health endpoint did not bound its response bytes.");
   expect(health.headers["cache-control"] === "no-store", "Health response was cacheable.");
   expectSecurityHeaders(health, "Health response");
+  const healthHead = await exchange(port, { method: "HEAD", path: "/healthz" });
+  expect(healthHead.status === 200 && healthHead.body.length === 0, "HEAD returned health response bytes.");
+  expect(healthHead.headers["content-length"] === "16", "HEAD did not report the exact health length.");
+  expectSecurityHeaders(healthHead, "HEAD health response");
 
   const index = await exchange(port);
   const expectedIndex = readFileSync(resolve("dist/index.html"));
@@ -341,6 +397,10 @@ try {
     expect(response.headers["cache-control"] === "no-store", `Rejected ${probe.label} response was cacheable.`);
     expectSecurityHeaders(response, `Rejected ${probe.label}`);
   }
+  const rejectedHead = await exchange(port, { method: "HEAD", path: "/?private-query-marker" });
+  expect(rejectedHead.status === 400 && rejectedHead.body.length === 0, "Rejected HEAD returned body bytes.");
+  expect(rejectedHead.headers["content-length"] === "12", "Rejected HEAD did not report its bounded error length.");
+  expectSecurityHeaders(rejectedHead, "Rejected HEAD query string");
 
   const badHost = await exchange(port, { host: "attacker.invalid" });
   expect(badHost.status === 421, "Production server accepted an undeclared Host authority.");
@@ -376,20 +436,52 @@ try {
     expect(response.headers.connection === "close", `Production server retained ${expectationProbe.label} connection.`);
     expectSecurityHeaders(response, `Rejected ${expectationProbe.label}`);
   }
+  for (const parserProbe of [
+    {
+      label: "conflicting request framing",
+      payload: [
+        "GET / HTTP/1.1",
+        "Host: wildbloom.test",
+        "Content-Length: 4",
+        "Transfer-Encoding: chunked",
+        "X-Private-Probe: private-parser-marker",
+        "",
+        "0",
+        "",
+        "",
+      ].join("\r\n"),
+    },
+    {
+      label: "invalid request header bytes",
+      payload: "GET / HTTP/1.1\r\nHost: wildbloom.test\r\nX-Private-Probe: private-parser-marker\x01\r\n\r\n",
+    },
+    {
+      label: "oversized request headers",
+      payload: `GET / HTTP/1.1\r\nHost: wildbloom.test\r\nX-Private-Probe: private-parser-marker${"x".repeat(16_384)}\r\n\r\n`,
+    },
+  ]) {
+    const response = await rawExchange(port, parserProbe.payload);
+    expect(response.status === 400 && response.body.equals(Buffer.from("Bad request\n")), `Production server accepted ${parserProbe.label}.`);
+    expect(response.headers["cache-control"] === "no-store", `Rejected ${parserProbe.label} response was cacheable.`);
+    expect(response.headers.connection === "close", `Production server retained ${parserProbe.label} connection.`);
+    expect(response.headers["content-length"] === "12", `Rejected ${parserProbe.label} response was not length bounded.`);
+    expectSecurityHeaders(response, `Rejected ${parserProbe.label}`);
+  }
 
   await new Promise((resolveTurn) => setImmediate(resolveTurn));
   const observedOutput = Buffer.concat(productionOutput).toString("utf8");
   expect(
     !observedOutput.includes("private-query-marker")
       && !observedOutput.includes("private-body-marker")
-      && !observedOutput.includes("private-expectation-marker"),
+      && !observedOutput.includes("private-expectation-marker")
+      && !observedOutput.includes("private-parser-marker"),
     "Production server logged a private request marker.",
   );
 
   expectDeploymentVerificationCli(evidence, port);
 
   process.stdout.write(
-    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, strict configuration, hostile host/method/path/query/body rejection, no private request logging and independent release-evidence verification.\n`,
+    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, strict configuration, hostile host/method/path/query/body/parser rejection, no private request logging and independent release-evidence verification.\n`,
   );
 } finally {
   await stopChild(production);

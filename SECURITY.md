@@ -22,6 +22,10 @@ file or personal data in an issue or relay event.
 - Torrent metadata is checked against the signed event before bytes are used.
 - HTTPS/WSS is required away from localhost.
 - Tor-only mode accepts exact v3 onion endpoints and disables WebTorrent.
+- The bundled origin bounds request parsing and returns generic, no-store,
+  security-header responses for malformed framing without logging request
+  targets, headers or bodies. Upstream infrastructure needs the same explicit
+  log and request-limit policy.
 
 The repository being private does not make protocol activity private. Read the
 threat model before testing with live infrastructure.
