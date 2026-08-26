@@ -50,6 +50,11 @@ the finish line.
   peer downloader must also leave the controlled tracker before page closure.
 - Randomised local encryption and a canonical recovery-key gate that rejects
   alternate base64url spellings of the same key bytes.
+- The published independent AES-GCM known-answer envelope is resolved through
+  the controlled relay and Blossom server, rejected with a wrong key without a
+  stale save link, then recovered byte-for-byte through production Web Crypto
+  in system Chromium on Windows, Linux and macOS, Playwright Firefox on Linux
+  and Playwright WebKit on macOS.
 - Blossom upload of ciphertext rather than source bytes.
 - Exact hash, server and 90-second BUD-11 upload authority.
 - Exact external signed-event handoff: a validly signed changed template is

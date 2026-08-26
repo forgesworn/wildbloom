@@ -10,6 +10,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
+import { generateKnownAnswerEnvelope } from "./encryption-vector.mjs";
 
 const HOST = "127.0.0.1";
 async function availablePort() {
@@ -28,6 +29,8 @@ const PORT = await availablePort();
 const ORIGIN = `http://${HOST}:${PORT}`;
 const BYTES = Buffer.from("hello wildbloom", "utf8");
 const SOURCE_HASH = createHash("sha256").update(BYTES).digest("hex");
+const KNOWN_ANSWER = generateKnownAnswerEnvelope();
+const WRONG_RECOVERY_KEY = `wbk1_${Buffer.alloc(32, 99).toString("base64url")}`;
 const HOSTILE_BYTES = Buffer.from("<!doctype html><script>window.opener.document.body.textContent='compromised'</script>", "utf8");
 const HOSTILE_HASH = createHash("sha256").update(HOSTILE_BYTES).digest("hex");
 const SECRET = new Uint8Array(32).fill(11);
@@ -151,6 +154,15 @@ const blossom = createServer((request, response) => {
         "Content-Length": String(uploadedBytes.length),
       });
       response.end(uploadedBytes);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === `/${KNOWN_ANSWER.envelopeSha256}.wbenc`) {
+      response.writeHead(200, {
+        ...cors,
+        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Length": String(KNOWN_ANSWER.envelope.length),
+      });
+      response.end(KNOWN_ANSWER.envelope);
       return;
     }
     if (request.method === "GET" && url.pathname === `/${HOSTILE_HASH}.html`) {
@@ -455,6 +467,21 @@ try {
   const blossomAddress = blossom.address();
   if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom server did not expose a TCP port.");
   blossomOrigin = `http://${HOST}:${blossomAddress.port}`;
+  const knownAnswerEvent = finalizeEvent({
+    kind: 1063,
+    created_at: 1_700_000_002,
+    tags: [
+      ["url", `${blossomOrigin}/${KNOWN_ANSWER.envelopeSha256}.wbenc`],
+      ["m", "application/vnd.wildbloom.encrypted"],
+      ["x", KNOWN_ANSWER.envelopeSha256],
+      ["ox", KNOWN_ANSWER.envelopeSha256],
+      ["size", String(KNOWN_ANSWER.envelope.length)],
+      ["encryption", "wildbloom-aes-256-gcm-chunked-v1"],
+      ["alt", "Encrypted Wildbloom file"],
+    ],
+    content: "wildbloom.wbenc",
+  }, SECRET);
+  relayEvents.set(knownAnswerEvent.id, knownAnswerEvent);
   const proxyAddress = onionProxy.address();
   if (!proxyAddress || typeof proxyAddress === "string") throw new Error("Controlled onion proxy did not expose a TCP port.");
   const proxyOrigin = `http://${HOST}:${proxyAddress.port}`;
@@ -702,6 +729,40 @@ try {
     throw new Error("Cancelled retrieval retained a stale save link or active cancel authority.");
   }
 
+  await page.fill("#event-id", knownAnswerEvent.id);
+  await page.click("#resolve-event");
+  await page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor();
+  await page.fill("#recovery-key-input", WRONG_RECOVERY_KEY);
+  await page.click("#fetch-blossom");
+  await page.locator("#retrieve-status.error")
+    .filter({ hasText: /wrong or the encrypted envelope was modified/iu })
+    .waitFor();
+  if (await page.locator("#retrieve-links a").count() !== 0 || !(await page.isDisabled("#cancel-download"))) {
+    throw new Error("Known-answer wrong-key rejection retained a save link or active download authority.");
+  }
+  await page.fill("#recovery-key-input", KNOWN_ANSWER.recoveryKey);
+  await page.click("#fetch-blossom");
+  await page.locator("#retrieve-status").filter({ hasText: "locally decrypted bytes" }).waitFor();
+  const knownAnswerDownload = await page.getByRole("link", {
+    name: `Save verified ${KNOWN_ANSWER.sourceName}`,
+  }).evaluate(async (anchor) => {
+    const blob = window.__wildbloomObservedObjectUrls?.get(anchor.href);
+    return {
+      bytes: blob ? Array.from(new Uint8Array(await blob.arrayBuffer())) : [],
+      mimeType: blob?.type,
+      rel: anchor.rel,
+    };
+  });
+  if (knownAnswerDownload.mimeType !== "application/octet-stream"
+    || !knownAnswerDownload.rel.includes("noopener")
+    || !Buffer.from(knownAnswerDownload.bytes).equals(KNOWN_ANSWER.source)) {
+    throw new Error(`Browser did not recover the exact published known-answer vector: ${JSON.stringify({
+      bytes: knownAnswerDownload.bytes.length,
+      mimeType: knownAnswerDownload.mimeType,
+      rel: knownAnswerDownload.rel,
+    })}`);
+  }
+
   const hostileEvent = finalizeEvent({
     kind: 1063,
     created_at: 1_700_000_001,
@@ -917,7 +978,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

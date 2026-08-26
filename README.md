@@ -109,8 +109,10 @@ path rejection. CI runs the browser path in system Chromium on Windows, Linux
 and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
 response security headers, zero ambient network activity, protected browser
 input hints, and no cookies, persistent browser-store mutations or retained
-browser state after the journey. It then exercises encrypted upload, exact
-Blossom authority,
+browser state after the journey. Each hosted browser engine also rejects a
+wrong key for the published independent AES-GCM vector without exposing a save
+link, then recovers its exact bytes. The journey exercises encrypted upload,
+exact Blossom authority,
 NIP-07 and exact external signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
 fallback. It rejects validly signed transformed hashes and false
@@ -148,7 +150,7 @@ gate proves a trustworthy production origin, no ambient application network or
 signer, external-signature encrypted upload and relay publication, exact
 recovery through both Blossom and a second real Firefox WebRTC peer, host-only
 ICE, peer cleanup after failed decryption and consent withdrawal, an
-published independently generated known-answer fixture, timeout, cancellation
+a published independently generated known-answer fixture, timeout, cancellation
 and denied-service failure. The active peer is also required to leave the
 tracker when the page session ends.
 
