@@ -20,8 +20,9 @@ not claim to create a new storage network.
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
 human Tor Browser usability review, extension-free Tor publication,
-branded-browser testing and cross-network packet evidence remain release
-gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
+real Safari and full branded-Firefox publication/WebTorrent testing, and
+cross-network packet evidence remain release gates. See
+[`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
 Linux and macOS. It is not currently a native desktop application; native
@@ -74,6 +75,7 @@ network defaults.
 ```sh
 npm run check
 npm run ci
+npm run acceptance:firefox
 npm run smoke:swarm
 npm run acceptance:tor
 npm run acceptance:tor-browser
@@ -107,6 +109,13 @@ parser: Wildbloom imports the prebuilt browser bundle, and the exception fails
 if the package exclusions, Wildbloom's exact import or the browser-bundle
 contents change. Vite also rejects that Node code from the actual production
 module graph. Every other advisory still fails CI.
+
+CI also drives the GitHub runner's genuine branded Mozilla Firefox release
+through a disposable profile and loopback-only WebDriver BiDi. That separate
+gate proves a trustworthy production origin, no ambient application network or
+signer, local encrypted preparation, an independently generated signed fixture,
+exact signer-free recovery, timeout, cancellation, denied-service failure and
+no WebRTC.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

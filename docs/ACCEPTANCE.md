@@ -13,6 +13,11 @@ the finish line.
   Linux and macOS.
 - The same production journey in Playwright Firefox on Linux and Playwright
   WebKit on macOS.
+- Branded Mozilla Firefox on Linux, through a disposable profile and
+  loopback-only WebDriver BiDi: trustworthy production origin, no ambient
+  application network or signer, local encrypted preparation, exact recovery
+  of an independently generated encrypted fixture, relay timeout, partial-body
+  cancellation, denied-service failure and no WebRTC.
 - Two isolated Chromium contexts publishing and retrieving the encrypted file
   through a real, ephemeral TLS WebSocket tracker.
 - Exact source recovery while the controlled Blossom web seed refuses every
@@ -76,6 +81,16 @@ npm run smoke:browser:webkit
 Playwright may freeze WebKit support on an older host operating system. A
 stalled or frozen local runtime is not stronger evidence than the current
 macOS CI job.
+
+Run the genuine installed Mozilla Firefox gate separately with:
+
+```sh
+npm run build
+npm run acceptance:firefox
+```
+
+This is a signer-free preparation and retrieval ceremony. It does not claim a
+complete branded-Firefox publication or WebTorrent journey.
 
 ## Real Tor transport gate
 
@@ -157,9 +172,10 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
   network boundary, with host-candidate and any future operator ICE traffic
   checked against packet capture. The automated two-context loopback gate does
   not prove NAT traversal or absence of lower-level browser traffic.
-- Branded Firefox and real Safari desktop coverage on their supported
-  operating systems; Playwright's patched Firefox and WebKit builds are useful
-  engine evidence but not those branded-browser releases.
+- A complete publication and WebTorrent journey in branded Firefox, plus real
+  Safari desktop coverage on its supported operating system. The automated
+  branded-Firefox preparation/retrieval gate and Playwright engine builds are
+  useful evidence but do not prove those remaining paths.
 - Manual screen-reader, real browser zoom, forced-colours appearance and human
   keyboard-usability review. Automated WCAG scanning, 320px reflow,
   forced-colours semantics and keyboard mechanics are covered.
