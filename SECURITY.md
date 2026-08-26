@@ -5,9 +5,10 @@ irreplaceable material.
 
 ## Report a problem
 
-Use GitHub's private vulnerability reporting for this repository. Do not put a
-working exploit, secret, private key, unpublished file or personal data in a
-public issue or relay event.
+Contact a ForgeSworn repository owner privately. GitHub private vulnerability
+reporting is not available for this private repository on the organisation's
+current plan. Do not put a working exploit, secret, private key, unpublished
+file or personal data in an issue or relay event.
 
 ## Non-negotiable boundaries
 
