@@ -258,13 +258,16 @@ async function assertAccessible(page, state) {
   throw new Error(`${state} has WCAG A/AA violations: ${summary}`);
 }
 
-async function assertKeyboardEntry(page) {
+async function assertKeyboardEntry(page, browserName) {
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
   let reachedSigner = false;
+  // macOS WebKit follows Safari's default Option-Tab traversal unless the
+  // host has enabled full keyboard access. Playwright maps Alt to Option.
+  const traversalKey = browserName === "webkit" ? "Alt+Tab" : "Tab";
   for (let index = 0; index < 16; index += 1) {
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(traversalKey);
     if (await page.evaluate(() => document.activeElement?.id === "connect-signer")) {
       reachedSigner = true;
       break;
@@ -396,7 +399,7 @@ try {
     throw new Error("The default encryption choice is not reflected in the upload authority copy.");
   }
   await assertAccessible(page, "Initial production page");
-  await assertKeyboardEntry(page);
+  await assertKeyboardEntry(page, browserName);
 
   await page.fill("#blossom-server", blossomOrigin);
   await page.fill("#relay-urls", relayUrl);

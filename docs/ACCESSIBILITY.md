@@ -7,10 +7,11 @@ Chrome on Windows, Linux and macOS, Playwright Firefox on Linux and Playwright
 WebKit on macOS.
 
 The browser gate also proves that keyboard traversal reaches the signer action
-in document order, focus has a visible three-pixel indicator, the recovery key
-can be revealed and hidden with Enter, and active upload and download requests
-can be cancelled from the keyboard. Checkbox and radio controls have a minimum
-24 by 24 CSS-pixel target; their surrounding labels remain clickable.
+in document order, using Option-Tab for macOS WebKit's default Safari behaviour,
+and that focus has a visible three-pixel indicator. The recovery key can be
+revealed and hidden with Enter, and active upload and download requests can be
+cancelled from the keyboard. Checkbox and radio controls have a minimum 24 by
+24 CSS-pixel target; their surrounding labels remain clickable.
 
 These checks catch semantic, contrast, target-size, focus and keyboard
 regressions. They are not a screen reader or human usability review.
