@@ -62,6 +62,19 @@ describe("Wildbloom privacy envelopes", () => {
     await expect(decryptPrivacyEnvelope(protectedFile.file, "not-a-key")).rejects.toThrow(/v1 key/u);
   });
 
+  it("rejects a non-canonical textual alias for the same recovery key bytes", async () => {
+    const protectedFile = await encryptPrivacyEnvelope(new File(["secret"], "secret.txt"));
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const finalCharacter = protectedFile.recoveryKey.at(-1) as string;
+    const finalIndex = alphabet.indexOf(finalCharacter);
+    expect(finalIndex).toBeGreaterThanOrEqual(0);
+    expect(finalIndex % 4).toBe(0);
+    const alias = `${protectedFile.recoveryKey.slice(0, -1)}${alphabet[finalIndex + 1]}`;
+
+    await expect(decryptPrivacyEnvelope(protectedFile.file, alias)).rejects.toThrow(/canonical base64url/u);
+    expect(await decryptPrivacyEnvelope(protectedFile.file, protectedFile.recoveryKey)).toHaveProperty("name", "secret.txt");
+  });
+
   it("cancels hashing, encryption and decryption without returning stale output", async () => {
     const hashController = new AbortController();
     hashController.abort();

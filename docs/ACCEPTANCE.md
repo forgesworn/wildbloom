@@ -48,7 +48,8 @@ the finish line.
   selections, signing handoff JSON, signer identity, object URLs and every
   consent. Navigation away and back cannot restore network authority; an active
   peer downloader must also leave the controlled tracker before page closure.
-- Randomised local encryption and recovery-key gate.
+- Randomised local encryption and a canonical recovery-key gate that rejects
+  alternate base64url spellings of the same key bytes.
 - Blossom upload of ciphertext rather than source bytes.
 - Exact hash, server and 90-second BUD-11 upload authority.
 - Exact external signed-event handoff: a validly signed changed template is

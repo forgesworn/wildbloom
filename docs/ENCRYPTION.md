@@ -10,7 +10,9 @@ before a public production release.
 ## Key and metadata
 
 - Each encryption creates a fresh random 32-byte key.
-- Recovery keys are encoded as `wbk1_` followed by unpadded base64url.
+- Recovery keys are encoded as `wbk1_` followed by canonical unpadded
+  base64url. The decoder re-encodes and compares the value so alternate final
+  characters that decode to the same 256 bits are rejected.
 - The source filename, MIME type and exact byte count live inside the encrypted
   first record.
 - The public payload always uses `wildbloom.wbenc` and
@@ -53,9 +55,10 @@ reduces exact-size leakage but does not conceal the approximate size class.
 ## Validation
 
 Decryption rejects unknown magic, versions represented by other magic,
-unexpected chunk sizes, impossible record counts or lengths, malformed keys,
-non-canonical metadata, excessive source sizes, altered headers, reordered
-records, modified ciphertext, wrong keys and invalid padding buckets.
+unexpected chunk sizes, impossible record counts or lengths, malformed or
+non-canonical keys, non-canonical metadata, excessive source sizes, altered
+headers, reordered records, modified ciphertext, wrong keys and invalid padding
+buckets.
 
 Hashing, encryption and decryption accept an abort signal and check it between
 bounded chunks. File, endpoint and profile changes cancel the active local

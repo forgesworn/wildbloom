@@ -105,6 +105,7 @@ function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   if (bytes.length !== 32) throw new Error("The recovery key must contain 256 bits.");
+  if (base64UrlEncode(bytes) !== value) throw new Error("The recovery key is not canonical base64url.");
   return bytes;
 }
 
