@@ -73,6 +73,7 @@ npm run check
 npm run ci
 npm run smoke:swarm
 npm run acceptance:tor
+npm run acceptance:maximum
 ```
 
 `check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
@@ -88,11 +89,15 @@ a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
 the exact source from the browser peer, observes host-only ICE, and proves that
 changing the source stops seeding. Browser acceptance also interrupts a real
 hung upload and partial download, checks that cancellation closes the
-connection, removes stale output and permits a safe retry. `ci` additionally
-audits dependencies. The audit script has one fail-closed exception for an
-`ip` advisory reachable only from WebTorrent's Node UDP-tracker parser:
-Wildbloom imports the prebuilt browser bundle, and the exception fails if the
-package's browser exclusions change. Every other advisory still fails CI.
+connection, removes stale output and permits a safe retry. It scans five
+dynamic states with axe-core WCAG A/AA rules and proves visible keyboard focus
+and keyboard-triggered reveal and cancellation actions. See
+[`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) for the remaining human review.
+`ci` additionally audits dependencies. The audit script has one fail-closed
+exception for an `ip` advisory reachable only from WebTorrent's Node UDP-tracker
+parser: Wildbloom imports the prebuilt browser bundle, and the exception fails
+if the package's browser exclusions change. Every other advisory still fails
+CI.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
@@ -102,6 +107,13 @@ override for Web Crypto on HTTP onion origins. This proves onion transport and
 fail-closed behaviour, not interaction in branded Tor Browser; that remains a
 manual release gate. The separate GitHub `tor-acceptance` workflow runs this
 gate on demand.
+
+`acceptance:maximum` drives the exact 256 MiB source limit through local
+encryption in system Chrome with a constrained V8 heap, checks the expected
+envelope size and source hash, then proves that 256 MiB plus one byte fails
+before recovery or upload authority remains. The separate
+`maximum-file-acceptance` workflow runs it on demand. This is not proof of
+operating-system memory pressure or a low-end device.
 
 ## What publication reveals
 

@@ -19,6 +19,12 @@ fallback. Runtime instrumentation observes the actual empty ICE-server
 configuration and host-only candidate classes. This remains same-host engine
 evidence, not cross-device NAT traversal or packet-capture evidence.
 
+An on-demand system-Chrome gate encrypts the exact 256 MiB source limit under a
+constrained V8 heap and refuses 256 MiB plus one byte. Chunked cryptography
+keeps individual plaintext buffers to 1 MiB, but source and encrypted `Blob`
+storage is browser-managed and may live outside the JavaScript heap. This is
+not a claim that low-memory operating systems or devices have been proven.
+
 Do not add a desktop shell merely for packaging. Reconsider one only if a
 validated requirement needs native streaming for very large files, reliable
 background seeding, OS key storage or a separately designed bundled-Tor

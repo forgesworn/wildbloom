@@ -4,6 +4,7 @@ import { accessSync, constants, readFileSync } from "node:fs";
 import { createServer, request as httpRequest } from "node:http";
 import { platform } from "node:os";
 import { join } from "node:path";
+import AxeBuilder from "@axe-core/playwright";
 import { sha3_256 } from "@noble/hashes/sha3.js";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
@@ -245,6 +246,40 @@ async function within(promise, milliseconds, message) {
   }
 }
 
+async function assertAccessible(page, state) {
+  const result = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  if (result.violations.length === 0) return;
+  const summary = result.violations.map((violation) => {
+    const targets = violation.nodes.slice(0, 3).map((node) => JSON.stringify(node.target)).join(", ");
+    return `${violation.id} (${violation.impact ?? "unknown"}): ${targets}`;
+  }).join("; ");
+  throw new Error(`${state} has WCAG A/AA violations: ${summary}`);
+}
+
+async function assertKeyboardEntry(page) {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  let reachedSigner = false;
+  for (let index = 0; index < 16; index += 1) {
+    await page.keyboard.press("Tab");
+    if (await page.evaluate(() => document.activeElement?.id === "connect-signer")) {
+      reachedSigner = true;
+      break;
+    }
+  }
+  if (!reachedSigner) throw new Error("Keyboard traversal did not reach the signer action in document order.");
+  const visibleFocus = await page.evaluate(() => {
+    const element = document.activeElement;
+    if (!(element instanceof HTMLElement)) return false;
+    const style = getComputedStyle(element);
+    return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) >= 2;
+  });
+  if (!visibleFocus) throw new Error("Keyboard focus on the signer action was not visibly indicated.");
+}
+
 async function waitForServer(server) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -318,7 +353,8 @@ try {
 
   const browserName = requestedBrowser();
   browser = await launchBrowser(browserName, proxyOrigin);
-  const page = await within(browser.newPage(), 30_000, `${browserName} did not create a page within 30 seconds.`);
+  const context = await within(browser.newContext(), 30_000, `${browserName} did not create a context within 30 seconds.`);
+  const page = await within(context.newPage(), 30_000, `${browserName} did not create a page within 30 seconds.`);
   const pageErrors = [];
   const remoteRequests = [];
 
@@ -359,6 +395,8 @@ try {
   if (!(await page.locator("#upload-consent-copy").textContent())?.includes("encrypted bytes")) {
     throw new Error("The default encryption choice is not reflected in the upload authority copy.");
   }
+  await assertAccessible(page, "Initial production page");
+  await assertKeyboardEntry(page);
 
   await page.fill("#blossom-server", blossomOrigin);
   await page.fill("#relay-urls", relayUrl);
@@ -374,9 +412,11 @@ try {
   const recoveryKey = await page.inputValue("#recovery-key-output");
   if (!/^wbk1_[A-Za-z0-9_-]{43}$/u.test(recoveryKey)) throw new Error("Browser did not generate a recovery key.");
   if (await page.getAttribute("#recovery-key-output", "type") !== "password") throw new Error("Recovery key was visible without a reveal action.");
-  await page.click("#toggle-recovery-key");
+  await page.focus("#toggle-recovery-key");
+  await page.keyboard.press("Enter");
   if (await page.getAttribute("#recovery-key-output", "type") !== "text") throw new Error("Recovery-key reveal action failed.");
-  await page.click("#toggle-recovery-key");
+  await page.keyboard.press("Enter");
+  await assertAccessible(page, "Prepared encrypted publication");
 
   await page.check("#upload-consent");
   if (await page.isEnabled("#upload-file")) throw new Error("Upload enabled before recovery-key acknowledgement.");
@@ -386,7 +426,8 @@ try {
   hangUpload = true;
   await page.click("#upload-file");
   await within(uploadStarted, 5_000, "Controlled interrupted upload did not reach Blossom.");
-  await page.click("#cancel-upload");
+  await page.focus("#cancel-upload");
+  await page.keyboard.press("Enter");
   await page.locator("#publish-status").filter({ hasText: "Blossom upload cancelled" }).waitFor();
   await within(uploadClosed, 5_000, "Cancelling the upload did not close the Blossom request.");
   hangUpload = false;
@@ -431,6 +472,7 @@ try {
   if (download.suggestedFilename() !== "hello.txt") throw new Error("Decrypted download exposed the wrong filename.");
   const downloadedPath = await download.path();
   if (!downloadedPath || !readFileSync(downloadedPath).equals(BYTES)) throw new Error("Browser recovery did not reproduce the source bytes.");
+  await assertAccessible(page, "Verified recovery result");
 
   await page.fill("#recovery-key-input", recoveryKey);
   const downloadStarted = new Promise((resolve) => { hangingDownloadStarted = resolve; });
@@ -438,7 +480,8 @@ try {
   hangDownload = true;
   await page.click("#fetch-blossom");
   await within(downloadStarted, 5_000, "Controlled interrupted download did not reach Blossom.");
-  await page.click("#cancel-download");
+  await page.focus("#cancel-download");
+  await page.keyboard.press("Enter");
   await page.locator("#retrieve-status").filter({ hasText: "Blossom retrieval cancelled" }).waitFor();
   await within(downloadClosed, 5_000, "Cancelling the download did not close the Blossom response.");
   hangDownload = false;
@@ -453,6 +496,7 @@ try {
   const seedHidden = await page.isHidden("#seed-gate");
   const iceBoundaryHidden = await page.isHidden("#ice-boundary");
   if (!trackerHidden || !seedHidden || !iceBoundaryHidden) throw new Error(`Tor-only mode did not remove tracker and WebRTC controls (${trackerHidden}/${seedHidden}/${iceBoundaryHidden}, profile=${await page.locator('input[name="network-profile"]:checked').getAttribute("value")}).`);
+  await assertAccessible(page, "Tor-only profile");
   await page.fill("#blossom-server", ONION_BLOSSOM);
   await page.check("#key-saved-consent");
   await page.check("#upload-consent");
@@ -497,12 +541,13 @@ try {
     throw new Error("Plaintext opt-out did not surface its public-content warning.");
   }
   if (!(await page.isHidden("#recovery-key-panel"))) throw new Error("Plaintext opt-out displayed a misleading recovery key.");
+  await assertAccessible(page, "Plaintext opt-out state");
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
   if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
   if (!onionProxyRequests.includes("PUT /upload")) throw new Error("Tor-only upload did not traverse the controlled onion proxy.");
 
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan and keyboard focus/actions, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

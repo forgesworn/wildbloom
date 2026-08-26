@@ -32,6 +32,10 @@ the finish line.
 - Consent invalidation when the file or network profile changes.
 - User cancellation closes an in-flight upload and partial-body download,
   clears stale output and leaves a safe retry path.
+- Axe-core WCAG A/AA scans of the initial, encrypted preparation, verified
+  recovery, Tor-only and plaintext opt-out states.
+- Keyboard traversal, visible focus, recovery-key reveal and active transfer
+  cancellation.
 - Tor-only rejection of clearnet endpoints and absence of torrent metadata or
   WebRTC controls.
 - Secret scan and guarded dependency audit.
@@ -86,6 +90,23 @@ Crypto path. The branded Tor Browser path is expected to supply that secure
 context, but remains part of its manual release gate. The automated gate is
 real Tor transport evidence, not branded Tor Browser interaction.
 
+## Maximum source gate
+
+Run the exact source boundary separately in system Chrome or Chromium:
+
+```sh
+npm run build
+npm run acceptance:maximum
+```
+
+The gate creates a real 256 MiB browser `File`, hashes and encrypts it through
+the production UI under a constrained V8 heap, checks the exact source hash and
+269,488,168-byte envelope, then proves 256 MiB plus one byte is rejected before
+recovery material or upload authority survives. The on-demand
+`maximum-file-acceptance` workflow runs the same test on Linux. Binary Blob
+storage is not all charged to the V8 heap, so this is exact-limit and
+heap-bounded evidence, not an operating-system low-memory simulation.
+
 ## Release gates not yet satisfied
 
 - Independent cryptographic and browser security review.
@@ -101,10 +122,11 @@ real Tor transport evidence, not branded Tor Browser interaction.
 - Branded Firefox and real Safari desktop coverage on their supported
   operating systems; Playwright's patched Firefox and WebKit builds are useful
   engine evidence but not those branded-browser releases.
-- Keyboard and screen-reader review.
-- Maximum-size and low-memory tests. Controlled browser interruption and
-  cancellation are automated; operating-system loss and device pressure are
-  not yet proven.
+- Manual screen-reader, zoom, forced-colours and human keyboard-usability
+  review. Automated WCAG scanning and keyboard mechanics are covered.
+- Operating-system memory-pressure and low-end-device tests. The exact maximum
+  size and a constrained JS heap are automated, but Blob storage may live
+  outside that heap. Operating-system loss is also not yet proven.
 - Production host selection, TLS/HSTS, onion address custody, monitoring,
   rollback and log-retention policy.
 - Legal name clearance, licence decision, privacy notice and operator support

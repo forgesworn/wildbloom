@@ -74,7 +74,7 @@ textarea { resize: vertical; }
 .profile-picker legend { margin-bottom: 0.7rem; color: var(--muted); font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
 .profile-option { display: flex; gap: 0.75rem; padding: 0.9rem; border: 1px solid #34443a; border-radius: 12px; background: #090d0a; cursor: pointer; }
 .profile-option:has(input:checked) { border-color: var(--moss); background: rgba(24, 53, 34, 0.62); }
-.profile-option input { width: 1rem; margin: 0.2rem 0 0; accent-color: var(--moss); }
+.profile-option input { flex: 0 0 auto; width: 1.5rem; height: 1.5rem; margin: 0.1rem 0 0; accent-color: var(--moss); }
 .profile-option span { display: grid; gap: 0.3rem; }
 .profile-option small { color: var(--muted); font-weight: 450; line-height: 1.4; }
 .privacy-boundary { margin: 0 0 1rem; padding: 0.9rem 1rem; border-left: 2px solid var(--rust); color: #ffd5bc; background: rgba(102, 68, 47, 0.18); line-height: 1.5; }
@@ -97,6 +97,7 @@ button {
 button:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 button:disabled { cursor: not-allowed; opacity: 0.38; }
 button.secondary { color: var(--ink); background: transparent; }
+.shell :where(button, input, textarea, a):focus-visible { outline: 3px solid #b9eea2; outline-offset: 3px; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 0.7rem; justify-content: flex-end; }
 .quiet { color: var(--muted); font: 0.82rem ui-monospace, monospace; overflow-wrap: anywhere; }
 
@@ -108,7 +109,7 @@ button.secondary { color: var(--ink); background: transparent; }
 .gate { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 1rem; align-items: center; margin-top: 1rem; padding: 1rem; border: 1px solid #2b3b31; border-radius: 12px; background: rgba(8, 12, 9, 0.68); }
 .gate.danger { border-color: #66442f; }
 .check { display: flex; grid-template-columns: none; gap: 0.7rem; align-items: flex-start; font-weight: 500; line-height: 1.45; }
-.check input { width: 1rem; margin-top: 0.2rem; accent-color: var(--moss); }
+.check input { flex: 0 0 auto; width: 1.5rem; height: 1.5rem; margin-top: 0.05rem; accent-color: var(--moss); }
 .check.compact { max-width: 340px; }
 
 .status { display: block; min-height: 3rem; margin-top: 1rem; padding: 1rem; border-left: 2px solid var(--moss); color: #dfe5dc; background: #090d0a; font: 0.84rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
