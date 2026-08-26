@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { privateRecordOutput } from "./private-record.mjs";
 import { inspectProductionBuild } from "./production-build.mjs";
 
 function git(...args) {
@@ -63,15 +64,7 @@ function run() {
     process.stdout.write(payload);
     return;
   }
-  const output = resolve(options.output);
-  const buildRoot = resolve(process.cwd(), "dist");
-  const fromBuildRoot = relative(buildRoot, output);
-  if (
-    fromBuildRoot === ""
-    || (fromBuildRoot !== ".." && !fromBuildRoot.startsWith(`..${sep}`) && !isAbsolute(fromBuildRoot))
-  ) {
-    throw new Error("Release evidence must not be written into the public build directory.");
-  }
+  const output = privateRecordOutput(options.output, "Release evidence");
   writeFileSync(output, payload, { encoding: "utf8", flag: "wx", mode: 0o600 });
   process.stdout.write(`Wrote release evidence to ${output}\n`);
 }

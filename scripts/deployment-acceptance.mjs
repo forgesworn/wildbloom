@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -80,6 +80,81 @@ function expectReleaseEvidenceCli(evidence) {
     expect(misspelt.status !== 0 && misspelt.stderr.includes("Unknown release-evidence argument"), "Release evidence ignored an unknown safety argument.");
     const publicOutput = spawnSync(process.execPath, ["scripts/release-evidence.mjs", "--output", "dist/evidence.json"], { encoding: "utf8" });
     expect(publicOutput.status !== 0 && publicOutput.stderr.includes("public build directory"), "Release evidence could be written into the public build.");
+  } finally {
+    rmSync(temporary, { recursive: true, force: true });
+  }
+}
+
+function expectDeploymentVerificationCli(evidence, port) {
+  const temporary = mkdtempSync(join(tmpdir(), "wildbloom-deployment-verification-"));
+  const evidencePath = join(temporary, "release.json");
+  const invalidEvidencePath = join(temporary, "invalid-release.json");
+  const output = join(temporary, "verification.json");
+  const command = [
+    "scripts/verify-deployment.mjs",
+    "--origin", `http://${HOST}:${port}`,
+    "--evidence", evidencePath,
+    "--allow-loopback",
+  ];
+  try {
+    const cleanEvidence = { ...evidence, sourceTreeClean: true };
+    writeFileSync(evidencePath, JSON.stringify(cleanEvidence));
+    const verified = spawnSync(process.execPath, [...command, "--output", output], {
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(verified.status === 0, `Deployment verifier failed against exact production bytes: ${verified.stderr}`);
+    const record = JSON.parse(readFileSync(output, "utf8"));
+    expect(record.format === "wildbloom-deployment-verification-v1", "Deployment verifier emitted an unknown record format.");
+    expect(record.origin === `http://${HOST}:${port}`, "Deployment verifier recorded a different origin.");
+    expect(record.sourceCommit === evidence.sourceCommit, "Deployment verifier lost the source commit.");
+    expect(record.buildSha256 === evidence.buildSha256, "Deployment verifier lost the aggregate build hash.");
+    expect(!Number.isNaN(Date.parse(record.verifiedAt)), "Deployment verifier omitted its observation time.");
+
+    const overwrite = spawnSync(process.execPath, [...command, "--output", output], {
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(overwrite.status !== 0 && overwrite.stderr.includes("EEXIST"), "Deployment verifier silently overwrote an existing record.");
+
+    const publicOutput = join(process.cwd(), "dist", "deployment-verification.json");
+    const publish = spawnSync(process.execPath, [...command, "--output", publicOutput], {
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(
+      publish.status !== 0 && publish.stderr.includes("public build directory") && !existsSync(publicOutput),
+      "Deployment verifier permitted its record to be published from the web root.",
+    );
+
+    const changedFile = { ...cleanEvidence.files[0], sha256: "00".repeat(32) };
+    writeFileSync(invalidEvidencePath, JSON.stringify({
+      ...cleanEvidence,
+      files: [changedFile, ...cleanEvidence.files.slice(1)],
+    }));
+    const inconsistent = spawnSync(process.execPath, [
+      "scripts/verify-deployment.mjs",
+      "--origin", `http://${HOST}:${port}`,
+      "--evidence", invalidEvidencePath,
+      "--allow-loopback",
+    ], { encoding: "utf8", timeout: 60_000 });
+    expect(
+      inconsistent.status !== 0 && inconsistent.stderr.includes("aggregate build hash is inconsistent"),
+      "Deployment verifier accepted internally inconsistent release evidence.",
+    );
+
+    const insecure = spawnSync(process.execPath, [
+      "scripts/verify-deployment.mjs",
+      "--origin", "http://clearnet.example",
+      "--evidence", evidencePath,
+    ], { encoding: "utf8", timeout: 60_000 });
+    expect(insecure.status !== 0 && insecure.stderr.includes("requires HTTPS"), "Deployment verifier accepted plaintext clearnet.");
+
+    const unknown = spawnSync(process.execPath, ["scripts/verify-deployment.mjs", "--originn"], {
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(unknown.status !== 0 && unknown.stderr.includes("Unknown deployment-verification argument"), "Deployment verifier ignored an unknown safety argument.");
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }
@@ -215,8 +290,10 @@ try {
   const post = await exchange(port, { method: "POST", path: "/healthz", body: "not accepted" });
   expect(post.status === 405 && post.headers.allow === "GET, HEAD", "Production server accepted a request body or omitted its method boundary.");
 
+  expectDeploymentVerificationCli(evidence, port);
+
   process.stdout.write(
-    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers and hostile host/method/path rejection.\n`,
+    `Deployment acceptance passed: ${evidence.files.length} exact built files (${evidence.buildSha256}), strict immutable hashes, no-store HTML/health/errors, security headers, hostile host/method/path rejection and independent release-evidence verification.\n`,
   );
 } finally {
   await stopChild(production);

@@ -13,6 +13,7 @@
     "preview": "vite preview",
     "serve:production": "node scripts/serve-production.mjs",
     "release:evidence": "node scripts/release-evidence.mjs",
+    "verify:deployment": "node scripts/verify-deployment.mjs",
     "acceptance:deployment": "node scripts/deployment-acceptance.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "smoke:browser:firefox": "node scripts/browser-smoke.mjs --browser firefox",

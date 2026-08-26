@@ -29,6 +29,9 @@ the finish line.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,
   traversal, source-map and repository-file rejection.
+- An explicit deployment verifier that consumes clean release evidence, follows
+  no redirect, streams the exact deployed bytes and fails on health, HSTS,
+  MIME, cache, security-header, size or SHA-256 drift.
 - No remote request on page load.
 - Randomised local encryption and recovery-key gate.
 - Blossom upload of ciphertext rather than source bytes.

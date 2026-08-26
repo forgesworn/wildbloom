@@ -1,6 +1,7 @@
 import { createReadStream, lstatSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
+import { SECURITY_HEADERS } from "./http-security.mjs";
 import { inspectProductionBuild, isProductionAssetPath } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
@@ -16,29 +17,6 @@ const root = resolve(process.cwd(), "dist");
 inspectProductionBuild(root);
 const allowedHosts = new Set((process.env.WILDBLOOM_ALLOWED_HOSTS ?? `localhost,127.0.0.1,${host}`)
   .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
-
-const csp = [
-  "default-src 'self'",
-  "base-uri 'none'",
-  "object-src 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'",
-  "script-src 'self'",
-  "style-src 'self'",
-  "img-src 'self' data: blob:",
-  "connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion",
-  "worker-src 'self' blob:",
-].join("; ");
-
-const securityHeaders = {
-  "Content-Security-Policy": csp,
-  "Cross-Origin-Opener-Policy": "same-origin",
-  "Cross-Origin-Resource-Policy": "same-origin",
-  "Permissions-Policy": "accelerometer=(), autoplay=(), bluetooth=(), browsing-topics=(), camera=(), geolocation=(), gyroscope=(), hid=(), microphone=(), payment=(), serial=(), usb=()",
-  "Referrer-Policy": "no-referrer",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-};
 
 const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -59,7 +37,7 @@ function hostAllowed(request) {
 }
 
 function respond(response, status, headers, body = "") {
-  response.writeHead(status, { ...securityHeaders, "Cache-Control": "no-store", ...headers });
+  response.writeHead(status, { ...SECURITY_HEADERS, "Cache-Control": "no-store", ...headers });
   response.end(body);
 }
 
@@ -121,7 +99,7 @@ const server = createServer((request, response) => {
     return;
   }
   response.writeHead(200, {
-    ...securityHeaders,
+    ...SECURITY_HEADERS,
     "Cache-Control": relative === "index.html" ? "no-store" : "public, max-age=31536000, immutable",
     "Content-Length": String(details.size),
     "Content-Type": contentTypes.get(extname(file)) ?? "application/octet-stream",

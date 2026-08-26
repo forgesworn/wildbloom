@@ -26,6 +26,35 @@ The command refuses to overwrite an existing record or to write into `dist`.
 Store it outside the repository with the release record rather than publishing
 it from the web root.
 
+## Verify the deployed origin
+
+After the release is live, verify it from a logged-out network location:
+
+```sh
+npm run verify:deployment -- \
+  --origin https://wildbloom.example \
+  --evidence ../wildbloom-release-evidence.json \
+  --output ../wildbloom-deployment-verification.json
+```
+
+Run the verifier from the `sourceCommit` recorded in that evidence so its
+expected HTTP policy is the policy shipped with the release.
+
+The verifier has no default target and performs no request until both an origin
+and release-evidence file are supplied. It accepts HTTPS clearnet origins and
+checksum-valid HTTP v3 onion origins, refuses credentials, redirects and URL
+paths, streams every response within the attested byte count, and checks exact
+hashes, MIME types, cache policy, health bytes and security headers. HTTPS must
+also provide at least one year of HSTS on every checked response. Verification
+is capped at 32 MiB per file and 64 MiB for the complete web build. Run onion
+verification through an operator-controlled Tor environment such as `torsocks`;
+the verifier validates the onion authority but does not silently configure a
+proxy.
+
+`--allow-loopback` exists only for controlled local acceptance. A timestamped
+verification record contains no secret material, cannot overwrite an existing
+file and cannot be written into `dist`.
+
 It binds to loopback by default and validates the HTTP Host header. Set an
 explicit comma-separated allowlist when a reverse proxy preserves the public
 host:
@@ -82,4 +111,6 @@ Tor-only mode deliberately omits both.
 A real deployment is complete only when the exact source commit, built asset
 hashes, public or onion address, health response, response headers, process
 identity, bind address, rollback target and logged-out reachability have been
-recorded. A GitHub Actions build is not live deployment proof.
+recorded. `verify:deployment` records the byte and edge-header portion; process
+identity, bind address, rollback and log policy remain operator evidence. A
+GitHub Actions build is not live deployment proof.

@@ -78,6 +78,7 @@ network defaults.
 npm run check
 npm run ci
 npm run acceptance:deployment
+npm run verify:deployment -- --origin https://wildbloom.example --evidence ../wildbloom-release-evidence.json
 npm run acceptance:firefox
 npm run smoke:swarm
 npm run acceptance:tor
@@ -176,6 +177,11 @@ configuration are deployment responsibilities. See
 `npm run release:evidence -- --require-clean` emits the full source commit,
 package-lock hash, aggregate build hash and the SHA-256 and length of every
 served file. Record that JSON beside the deployment and rollback evidence.
+
+After deployment, `verify:deployment` performs an explicit read-only probe of
+the chosen origin. It refuses redirects, verifies `/healthz`, HSTS on HTTPS,
+the exact release bytes and hashes, MIME and cache policy, and the complete
+security-header boundary before emitting a timestamped verification record.
 
 ## Specifications
 
