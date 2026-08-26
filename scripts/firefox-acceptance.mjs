@@ -1,5 +1,5 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
@@ -8,12 +8,12 @@ import { join } from "node:path";
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools/pure";
 import TrackerServer from "bittorrent-tracker/server";
 import { WebSocketServer } from "ws";
+import { generateKnownAnswerEnvelope } from "./encryption-vector.mjs";
 import { WebDriverBiDi } from "./webdriver-bidi.mjs";
 
 const HOST = "127.0.0.1";
 const ACTION_TIMEOUT_MS = 30_000;
 const PEER_TIMEOUT_MS = 60_000;
-const SOURCE_BYTES = Buffer.from("genuine Firefox exact recovery", "utf8");
 const PREPARED_BYTES = Buffer.from("prepared in genuine Firefox", "utf8");
 const SECRET = new Uint8Array(32).fill(23);
 const PUBKEY = getPublicKey(SECRET);
@@ -43,38 +43,9 @@ try {
 }
 
 async function makeIndependentFixture(blossomOrigin) {
-  const metadata = Buffer.from(JSON.stringify({
-    name: "branded-firefox.txt",
-    size: SOURCE_BYTES.length,
-    type: "text/plain",
-  }), "utf8");
-  const plaintext = randomBytes(64 * 1024);
-  plaintext.writeUInt32BE(metadata.length, 0);
-  metadata.copy(plaintext, 4);
-  SOURCE_BYTES.copy(plaintext, 4 + metadata.length);
-  const noncePrefix = randomBytes(8);
-  const header = Buffer.alloc(24);
-  header.write("WBLMENC1", 0, "ascii");
-  header.writeUInt32BE(1024 * 1024, 8);
-  header.writeUInt32BE(1, 12);
-  noncePrefix.copy(header, 16);
-  const nonce = Buffer.alloc(12);
-  noncePrefix.copy(nonce);
-  const additionalData = Buffer.alloc(28);
-  header.copy(additionalData);
-  const rawKey = randomBytes(32);
-  const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
-  const ciphertext = Buffer.from(await crypto.subtle.encrypt({
-    name: "AES-GCM",
-    iv: nonce,
-    additionalData,
-    tagLength: 128,
-  }, key, plaintext));
-  plaintext.fill(0);
-  const encrypted = Buffer.concat([header, ciphertext]);
-  const hash = createHash("sha256").update(encrypted).digest("hex");
-  const recoveryKey = `wbk1_${rawKey.toString("base64url")}`;
-  rawKey.fill(0);
+  const fixture = generateKnownAnswerEnvelope();
+  const encrypted = fixture.envelope;
+  const hash = fixture.envelopeSha256;
   const url = `${blossomOrigin}/${hash}.wbenc`;
   const event = finalizeEvent({
     kind: 1063,
@@ -90,7 +61,14 @@ async function makeIndependentFixture(blossomOrigin) {
     ],
     content: "wildbloom.wbenc",
   }, SECRET);
-  return { encrypted, event, hash, recoveryKey };
+  return {
+    encrypted,
+    event,
+    hash,
+    recoveryKey: fixture.recoveryKey,
+    source: fixture.source,
+    sourceName: fixture.sourceName,
+  };
 }
 
 function executable(candidates, label) {
@@ -961,11 +939,11 @@ try {
       rel: link.rel,
     };
   })()`);
-  if (recovered.name !== "branded-firefox.txt"
+  if (recovered.name !== fixture.sourceName
     || recovered.type !== "application/octet-stream"
     || !recovered.rel.includes("noopener")
-    || !Buffer.from(recovered.bytes).equals(SOURCE_BYTES)) {
-    throw new Error("Mozilla Firefox did not recover the exact source bytes.");
+    || !Buffer.from(recovered.bytes).equals(fixture.source)) {
+    throw new Error("Mozilla Firefox did not recover the exact published known-answer vector.");
   }
 
   await closeServer(blossom);
@@ -992,7 +970,7 @@ try {
     throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors, ...trackerErrors].join("; ")}`);
   }
   process.stdout.write(
-    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption, consent withdrawal and page lifecycle teardown, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
+    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption, consent withdrawal and page lifecycle teardown, recovery of the published independent known-answer vector through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } finally {
   await closeFirefox(downloaderRecord).catch(() => undefined);

@@ -89,6 +89,7 @@ network defaults.
 ```sh
 npm run check
 npm run ci
+npm run encryption:vector
 npm run acceptance:deployment
 npm run verify:deployment -- --origin https://wildbloom.example --evidence ../wildbloom-release-evidence.json
 npm run acceptance:firefox
@@ -98,9 +99,10 @@ npm run acceptance:tor-browser
 npm run acceptance:maximum
 ```
 
-`check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
-production build, adversarial deployment acceptance, a real headless-browser
-acceptance path and the local secret scanner. The deployment gate verifies the
+`check` verifies the published encryption known-answer vector, runs strict
+TypeScript, coverage-gated unit and adversarial tests, a production build,
+adversarial deployment acceptance, a real headless-browser acceptance path and
+the local secret scanner. The deployment gate verifies the
 exact served build hashes, strict immutable asset names, no-store HTML, health
 and error responses, response security headers and hostile host, method and
 path rejection. CI runs the browser path in system Chromium on Windows, Linux
@@ -146,9 +148,9 @@ gate proves a trustworthy production origin, no ambient application network or
 signer, external-signature encrypted upload and relay publication, exact
 recovery through both Blossom and a second real Firefox WebRTC peer, host-only
 ICE, peer cleanup after failed decryption and consent withdrawal, an
-independently generated fixture, timeout, cancellation and denied-service
-failure. The active peer is also required to leave the tracker when the page
-session ends.
+published independently generated known-answer fixture, timeout, cancellation
+and denied-service failure. The active peer is also required to leave the
+tracker when the page session ends.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

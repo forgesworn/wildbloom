@@ -27,11 +27,12 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "encryption:vector": "node scripts/encryption-vector.mjs",
     "install:policy": "node scripts/install-policy.mjs",
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "npm run install:policy && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
+    "check": "npm run install:policy && npm run encryption:vector && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {
