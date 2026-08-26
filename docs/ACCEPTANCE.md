@@ -84,7 +84,8 @@ the finish line.
   and fan-out limits.
 - Secret scan and guarded dependency audit.
 - Dependency lifecycle scripts disabled for local and hosted clean installs,
-  with strict engine and peer resolution and a pinned npm toolchain policy.
+  with strict engine and peer resolution and exact build-tool versions in
+  release evidence.
 
 Run the complete gate with:
 

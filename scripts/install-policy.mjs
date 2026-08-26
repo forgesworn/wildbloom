@@ -8,7 +8,8 @@ const EXPECTED_NPM_CONFIG = Object.freeze({
   "save-exact": "true",
   "strict-peer-deps": "true",
 });
-const EXPECTED_PACKAGE_MANAGER = "npm@11.11.0";
+const EXPECTED_NPM_ENGINE = ">=11 <12";
+const EXPECTED_NPM_MAJOR = 11;
 const EXPECTED_INSTALL_COMMAND = "npm ci --ignore-scripts";
 const EXPECTED_WORKFLOW_INSTALLS = 7;
 
@@ -37,13 +38,13 @@ for (const [key, value] of Object.entries(EXPECTED_NPM_CONFIG)) {
 }
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
-if (packageJson.packageManager !== EXPECTED_PACKAGE_MANAGER) {
-  fail(`package.json must pin ${EXPECTED_PACKAGE_MANAGER}.`);
+if (packageJson.engines?.npm !== EXPECTED_NPM_ENGINE) {
+  fail(`package.json must require npm ${EXPECTED_NPM_ENGINE}.`);
 }
 const userAgent = process.env.npm_config_user_agent ?? "";
 const runningNpm = /^npm\/([^\s]+)/u.exec(userAgent)?.[1];
-if (runningNpm && `npm@${runningNpm}` !== EXPECTED_PACKAGE_MANAGER) {
-  fail(`expected ${EXPECTED_PACKAGE_MANAGER}, received npm@${runningNpm}.`);
+if (runningNpm && Number(runningNpm.split(".", 1)[0]) !== EXPECTED_NPM_MAJOR) {
+  fail(`expected npm ${EXPECTED_NPM_MAJOR}.x, received npm@${runningNpm}.`);
 }
 
 const workflowFiles = globSync(".github/workflows/*.yml").sort();

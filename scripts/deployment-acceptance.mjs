@@ -73,6 +73,8 @@ function expectReleaseEvidenceCli(evidence) {
     const parsed = JSON.parse(readFileSync(output, "utf8"));
     expect(parsed.buildSha256 === evidence.buildSha256, "Written release evidence did not describe the inspected build.");
     expect(parsed.sourceCommit === evidence.sourceCommit, "Written release evidence did not describe the current source commit.");
+    expect(parsed.buildToolchain.node === process.version, "Written release evidence lost the exact Node build version.");
+    expect(parsed.buildToolchain.npm === evidence.buildToolchain.npm, "Written release evidence lost the exact npm build version.");
 
     const overwrite = spawnSync(process.execPath, ["scripts/release-evidence.mjs", "--output", output], { encoding: "utf8" });
     expect(overwrite.status !== 0 && overwrite.stderr.includes("EEXIST"), "Release evidence silently overwrote an existing record.");
@@ -105,10 +107,12 @@ function expectDeploymentVerificationCli(evidence, port) {
     });
     expect(verified.status === 0, `Deployment verifier failed against exact production bytes: ${verified.stderr}`);
     const record = JSON.parse(readFileSync(output, "utf8"));
-    expect(record.format === "wildbloom-deployment-verification-v1", "Deployment verifier emitted an unknown record format.");
+    expect(record.format === "wildbloom-deployment-verification-v2", "Deployment verifier emitted an unknown record format.");
     expect(record.origin === `http://${HOST}:${port}`, "Deployment verifier recorded a different origin.");
     expect(record.sourceCommit === evidence.sourceCommit, "Deployment verifier lost the source commit.");
     expect(record.buildSha256 === evidence.buildSha256, "Deployment verifier lost the aggregate build hash.");
+    expect(record.buildToolchain.node === evidence.buildToolchain.node, "Deployment verifier lost the Node build version.");
+    expect(record.buildToolchain.npm === evidence.buildToolchain.npm, "Deployment verifier lost the npm build version.");
     expect(!Number.isNaN(Date.parse(record.verifiedAt)), "Deployment verifier omitted its observation time.");
 
     const overwrite = spawnSync(process.execPath, [...command, "--output", output], {

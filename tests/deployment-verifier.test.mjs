@@ -52,10 +52,11 @@ function releaseEvidence() {
     { path: "index.html", bytes: 5, sha256: sha256("index") },
   ];
   return {
-    format: "wildbloom-release-evidence-v1",
+    format: "wildbloom-release-evidence-v2",
     sourceCommit: "ab".repeat(20),
     sourceTreeClean: true,
     packageLockSha256: "cd".repeat(32),
+    buildToolchain: { node: "v24.19.0", npm: "11.17.0" },
     buildSha256: sha256(files.map((file) => `${file.sha256}  ${file.bytes}  ${file.path}\n`).join("")),
     files,
   };
@@ -88,6 +89,7 @@ describe("release evidence validation", () => {
     expect(Object.isFrozen(validated)).toBe(true);
     expect(Object.isFrozen(validated.files)).toBe(true);
     expect(Object.isFrozen(validated.files[0])).toBe(true);
+    expect(Object.isFrozen(validated.buildToolchain)).toBe(true);
   });
 
   it("rejects dirty, non-canonical, unsafe and inconsistent evidence", () => {
@@ -100,6 +102,10 @@ describe("release evidence validation", () => {
     const inconsistent = releaseEvidence();
     inconsistent.files[0].sha256 = "00".repeat(32);
     expect(() => validateReleaseEvidence(inconsistent)).toThrow(/aggregate build hash/u);
+    expect(() => validateReleaseEvidence({
+      ...releaseEvidence(),
+      buildToolchain: { node: "v25.0.0", npm: "11.17.0" },
+    })).toThrow(/Node build version/u);
   });
 
   it("rejects invalid evidence before an imported caller can trigger a request", async () => {

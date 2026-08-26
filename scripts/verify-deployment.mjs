@@ -84,13 +84,20 @@ export function normaliseDeploymentOrigin(value, { allowLoopback = false } = {})
 export function validateReleaseEvidence(value) {
   expect(value && typeof value === "object" && !Array.isArray(value), "Release evidence must be a JSON object.");
   expect(
-    objectKeys(value) === "buildSha256,files,format,packageLockSha256,sourceCommit,sourceTreeClean",
+    objectKeys(value) === "buildSha256,buildToolchain,files,format,packageLockSha256,sourceCommit,sourceTreeClean",
     "Release evidence has an unexpected top-level shape.",
   );
-  expect(value.format === "wildbloom-release-evidence-v1", "Release evidence has an unsupported format.");
+  expect(value.format === "wildbloom-release-evidence-v2", "Release evidence has an unsupported format.");
   expect(HEX_40.test(value.sourceCommit), "Release evidence has an invalid source commit.");
   expect(value.sourceTreeClean === true, "Release evidence must attest a clean source tree.");
   expect(HEX_64.test(value.packageLockSha256), "Release evidence has an invalid package-lock hash.");
+  expect(
+    value.buildToolchain && typeof value.buildToolchain === "object" && !Array.isArray(value.buildToolchain)
+      && objectKeys(value.buildToolchain) === "node,npm",
+    "Release evidence has an invalid build toolchain shape.",
+  );
+  expect(/^v24\.[0-9]+\.[0-9]+$/u.test(value.buildToolchain.node), "Release evidence has an unsupported Node build version.");
+  expect(/^11\.[0-9]+\.[0-9]+$/u.test(value.buildToolchain.npm), "Release evidence has an unsupported npm build version.");
   expect(HEX_64.test(value.buildSha256), "Release evidence has an invalid aggregate build hash.");
   expect(Array.isArray(value.files) && value.files.length > 0 && value.files.length <= MAX_RELEASE_FILES, "Release evidence has an invalid file list.");
 
@@ -125,6 +132,7 @@ export function validateReleaseEvidence(value) {
     sourceCommit: value.sourceCommit,
     sourceTreeClean: value.sourceTreeClean,
     packageLockSha256: value.packageLockSha256,
+    buildToolchain: Object.freeze({ ...value.buildToolchain }),
     buildSha256: value.buildSha256,
     files: Object.freeze(value.files.map((file) => Object.freeze({ ...file }))),
   });
@@ -275,11 +283,12 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
   }
 
   return {
-    format: "wildbloom-deployment-verification-v1",
+    format: "wildbloom-deployment-verification-v2",
     verifiedAt: new Date().toISOString(),
     origin,
     sourceCommit: validatedEvidence.sourceCommit,
     packageLockSha256: validatedEvidence.packageLockSha256,
+    buildToolchain: validatedEvidence.buildToolchain,
     buildSha256: validatedEvidence.buildSha256,
     files: validatedEvidence.files,
   };

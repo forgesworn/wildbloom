@@ -25,8 +25,9 @@ It validates the complete build before listening, so `/healthz` cannot report
 ready for a missing or malformed build.
 
 The release-evidence JSON contains no secret material. It records the full
-source commit, whether the source tree was clean, the package-lock hash, an
-aggregate build hash and the byte length and SHA-256 of every serveable file.
+source commit, whether the source tree was clean, the exact Node and npm build
+versions, the package-lock hash, an aggregate build hash and the byte length
+and SHA-256 of every serveable file.
 The command refuses to overwrite an existing record or to write into `dist`.
 Store it outside the repository with the release record rather than publishing
 it from the web root.

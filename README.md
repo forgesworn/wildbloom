@@ -74,7 +74,7 @@ npm run dev
 ```
 
 Repository npm policy disables dependency lifecycle scripts, enforces the Node
-24 engine and strict peer resolution, and pins npm 11.11.0. GitHub Actions also
+24 and npm 11 engines and strict peer resolution. GitHub Actions also
 passes `--ignore-scripts` explicitly. The production browser build does not
 need the native Node install hooks carried by WebTorrent's cross-runtime
 dependency tree. Hosted Playwright commands also resolve the already locked

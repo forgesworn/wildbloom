@@ -42,12 +42,15 @@ export function collectReleaseEvidence({ root = resolve(process.cwd(), "dist") }
   const buildSha256 = createHash("sha256")
     .update(files.map((file) => `${file.sha256}  ${file.bytes}  ${file.path}\n`).join(""))
     .digest("hex");
+  const npmVersion = /^npm\/([0-9]+\.[0-9]+\.[0-9]+)\s/u.exec(process.env.npm_config_user_agent ?? "")?.[1];
+  if (!npmVersion) throw new Error("Release evidence must run through the declared npm toolchain.");
 
   return {
-    format: "wildbloom-release-evidence-v1",
+    format: "wildbloom-release-evidence-v2",
     sourceCommit,
     sourceTreeClean,
     packageLockSha256,
+    buildToolchain: Object.freeze({ node: process.version, npm: npmVersion }),
     buildSha256,
     files,
   };
