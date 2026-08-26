@@ -27,6 +27,8 @@ const PORT = await availablePort();
 const ORIGIN = `http://${HOST}:${PORT}`;
 const BYTES = Buffer.from("hello wildbloom", "utf8");
 const SOURCE_HASH = createHash("sha256").update(BYTES).digest("hex");
+const HOSTILE_BYTES = Buffer.from("<!doctype html><script>window.opener.document.body.textContent='compromised'</script>", "utf8");
+const HOSTILE_HASH = createHash("sha256").update(HOSTILE_BYTES).digest("hex");
 const SECRET = new Uint8Array(32).fill(11);
 const PUBKEY = getPublicKey(SECRET);
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
@@ -146,6 +148,15 @@ const blossom = createServer((request, response) => {
         "Content-Length": String(uploadedBytes.length),
       });
       response.end(uploadedBytes);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === `/${HOSTILE_HASH}.html`) {
+      response.writeHead(200, {
+        ...cors,
+        "Content-Type": "text/html",
+        "Content-Length": String(HOSTILE_BYTES.length),
+      });
+      response.end(HOSTILE_BYTES);
       return;
     }
     response.writeHead(404, { ...cors, "Content-Type": "text/plain; charset=utf-8" });
@@ -593,6 +604,35 @@ try {
     throw new Error("Cancelled retrieval retained a stale save link or active cancel authority.");
   }
 
+  const hostileEvent = finalizeEvent({
+    kind: 1063,
+    created_at: 1_700_000_001,
+    tags: [
+      ["url", `${blossomOrigin}/${HOSTILE_HASH}.html`],
+      ["m", "text/html"],
+      ["x", HOSTILE_HASH],
+      ["ox", HOSTILE_HASH],
+      ["size", String(HOSTILE_BYTES.length)],
+      ["alt", "Untrusted signed HTML fixture"],
+    ],
+    content: "signed-hostile.html",
+  }, SECRET);
+  relayEvents.set(hostileEvent.id, hostileEvent);
+  await page.fill("#event-id", hostileEvent.id);
+  await page.click("#resolve-event");
+  await page.locator("#retrieve-status").filter({ hasText: "advertised payload is plaintext" }).waitFor();
+  await page.click("#fetch-blossom");
+  await page.locator("#retrieve-status").filter({ hasText: "Blossom download verified" }).waitFor();
+  const hostileDownload = await page.getByRole("link", { name: "Save verified signed-hostile.html" }).evaluate(async (anchor) => {
+    const blob = window.__wildbloomObservedObjectUrls?.get(anchor.href);
+    return { mimeType: blob?.type, rel: anchor.rel, text: await blob?.text() };
+  });
+  if (hostileDownload.mimeType !== "application/octet-stream"
+    || !hostileDownload.rel.includes("noopener")
+    || hostileDownload.text !== "<!doctype html><script>window.opener.document.body.textContent='compromised'</script>") {
+    throw new Error(`Validly signed hostile HTML was not preserved inside an inert save: ${JSON.stringify(hostileDownload)}`);
+  }
+
   const signatureHeld = new Promise((resolve) => { heldSignatureStarted = resolve; });
   holdNextSignature = true;
   await page.click("#sign-events");
@@ -673,7 +713,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery with an inert verified save, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));
