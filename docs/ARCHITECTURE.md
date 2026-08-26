@@ -10,7 +10,7 @@ TypeScript core and built assets target current browsers on Windows, Linux and
 macOS; the complete automated gate runs in system Chromium on all three, plus
 Playwright Firefox on Linux and Playwright WebKit on macOS. This is an
 application compatibility claim, not a claim that native installers,
-background services, branded Firefox or real Safari have been proven.
+background services or real Safari have been proven.
 
 A separate Linux Chromium gate runs two isolated production contexts against
 an ephemeral TLS WebSocket tracker. Blossom retrieval is deliberately refused,
@@ -18,6 +18,15 @@ so exact recovery demonstrates real peer transport rather than a web-seed
 fallback. Runtime instrumentation observes the actual empty ICE-server
 configuration and host-only candidate classes. This remains same-host engine
 evidence, not cross-device NAT traversal or packet-capture evidence.
+
+A separate branded-Mozilla-Firefox gate uses two independent browser processes
+and profiles. An extension-free publisher supplies exact external signatures,
+then a signer-free downloader recovers the exact source through their WebRTC
+connection while the published Blossom object is unavailable. It observes the
+same empty ICE-server configuration and host-only candidates, and requires both
+peer sessions to leave the tracker after consent withdrawal and source change.
+The tracker certificate is disposable harness material accepted only by those
+automated browser sessions.
 
 An on-demand system-Chrome gate completes encryption, Blossom upload, signed
 publication, exact relay resolution, verified download and decryption at the

@@ -1,18 +1,45 @@
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { accessSync, constants, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { accessSync, constants, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import { finalizeEvent } from "nostr-tools/pure";
+import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools/pure";
+import TrackerServer from "bittorrent-tracker/server";
 import { WebSocketServer } from "ws";
 import { WebDriverBiDi } from "./webdriver-bidi.mjs";
 
 const HOST = "127.0.0.1";
 const ACTION_TIMEOUT_MS = 30_000;
+const PEER_TIMEOUT_MS = 60_000;
 const SOURCE_BYTES = Buffer.from("genuine Firefox exact recovery", "utf8");
+const PREPARED_BYTES = Buffer.from("prepared in genuine Firefox", "utf8");
 const SECRET = new Uint8Array(32).fill(23);
+const PUBKEY = getPublicKey(SECRET);
 const tempRoot = mkdtempSync(join(tmpdir(), "wildbloom-firefox-"));
+
+function createCertificate() {
+  const keyPath = join(tempRoot, "tracker.key");
+  const certificatePath = join(tempRoot, "tracker.crt");
+  execFileSync("openssl", [
+    "req", "-x509", "-newkey", "rsa:2048", "-sha256", "-nodes",
+    "-keyout", keyPath,
+    "-out", certificatePath,
+    "-days", "1",
+    "-subj", "/CN=127.0.0.1",
+    "-addext", "subjectAltName=IP:127.0.0.1",
+  ], { stdio: "ignore" });
+  return { key: readFileSync(keyPath), cert: readFileSync(certificatePath) };
+}
+
+let trackerCertificate;
+try {
+  trackerCertificate = createCertificate();
+} catch (error) {
+  rmSync(tempRoot, { recursive: true, force: true });
+  throw error;
+}
 
 async function makeIndependentFixture(blossomOrigin) {
   const metadata = Buffer.from(JSON.stringify({
@@ -178,6 +205,18 @@ async function setValue(record, selector, value) {
   })()`);
 }
 
+async function setChecked(record, selector, checked) {
+  const selectorLiteral = JSON.stringify(selector);
+  return evaluate(record, `(() => {
+    const element = document.querySelector(${selectorLiteral});
+    if (!(element instanceof HTMLInputElement)) throw new Error("Missing checkable control: " + ${selectorLiteral});
+    if (element.disabled) throw new Error("Disabled checkable control: " + ${selectorLiteral});
+    if (element.checked !== ${Boolean(checked)}) element.click();
+    if (element.checked !== ${Boolean(checked)}) throw new Error("Checkable control did not change: " + ${selectorLiteral});
+    return element.checked;
+  })()`);
+}
+
 async function snapshot(record, selector) {
   const literal = JSON.stringify(selector);
   return evaluate(record, `(() => {
@@ -201,8 +240,34 @@ async function waitForText(record, selector, pattern, timeoutMs = ACTION_TIMEOUT
   }, timeoutMs, () => `${record.label} did not show ${pattern}; latest text was ${JSON.stringify(latest)}.`);
 }
 
-async function launchFirefox(firefox, appOrigin, allowedOrigins) {
-  const profileDirectory = join(tempRoot, "profile");
+async function waitForUnsignedTemplate(record, expectedKind) {
+  let latest = null;
+  await waitFor(async () => {
+    try {
+      latest = await evaluate(record, `(() => {
+        const panel = document.querySelector("#external-signing-panel");
+        const field = document.querySelector("#external-unsigned-event");
+        if (!(panel instanceof HTMLElement) || panel.hidden || !(field instanceof HTMLTextAreaElement) || !field.value) return null;
+        return JSON.parse(field.value);
+      })()`);
+      return latest?.kind === expectedKind;
+    } catch {
+      return false;
+    }
+  }, ACTION_TIMEOUT_MS, () => `${record.label} did not expose unsigned kind ${expectedKind}: ${JSON.stringify(latest)}.`);
+  return latest;
+}
+
+async function completeExternalSignature(record, expectedKind) {
+  const template = await waitForUnsignedTemplate(record, expectedKind);
+  const signed = finalizeEvent(template, SECRET);
+  await setValue(record, "#external-signed-event", JSON.stringify(signed));
+  await click(record, "#accept-external-signature");
+  return signed;
+}
+
+async function launchFirefox(firefox, appOrigin, allowedOrigins, ceremony) {
+  const profileDirectory = join(tempRoot, `profile-${ceremony}`);
   mkdirSync(profileDirectory, { mode: 0o700 });
   writeFileSync(join(profileDirectory, "user.js"), [
     'user_pref("browser.shell.checkDefaultBrowser", false);',
@@ -238,7 +303,7 @@ async function launchFirefox(firefox, appOrigin, allowedOrigins) {
   }, ACTION_TIMEOUT_MS, () => `Mozilla Firefox did not expose loopback WebDriver BiDi: ${output}`, 250);
   if (!bidi) throw new Error("Mozilla Firefox BiDi connection disappeared.");
 
-  const created = await bidi.command("session.new", { capabilities: { alwaysMatch: { acceptInsecureCerts: false } } });
+  const created = await bidi.command("session.new", { capabilities: { alwaysMatch: { acceptInsecureCerts: true } } });
   const expectedEngine = /Firefox ([0-9.]+)/u.exec(firefox.version)?.[1];
   if (!expectedEngine || created.capabilities?.browserVersion !== expectedEngine) {
     throw new Error(`Firefox capability version ${created.capabilities?.browserVersion ?? "missing"} did not match ${firefox.version}.`);
@@ -247,6 +312,8 @@ async function launchFirefox(firefox, appOrigin, allowedOrigins) {
   await bidi.command("script.addPreloadScript", {
     functionDeclaration: `() => {
       window.__wildbloomFirefoxWebRtcUsed = false;
+      const peerEvidence = { configurations: [], candidates: [], states: [] };
+      Object.defineProperty(window, "__wildbloomPeerEvidence", { configurable: false, value: peerEvidence });
       window.__wildbloomPageErrors = [];
       window.addEventListener("error", (event) => {
         window.__wildbloomPageErrors.push(event.error?.message ?? event.message ?? "unknown page error");
@@ -272,9 +339,20 @@ async function launchFirefox(firefox, appOrigin, allowedOrigins) {
       Object.defineProperty(window, "RTCPeerConnection", {
         configurable: false,
         value: class ObservedPeerConnection extends NativePeerConnection {
-          constructor(...arguments_) {
-            super(...arguments_);
+          constructor(configuration, constraints) {
+            super(configuration, constraints);
             window.__wildbloomFirefoxWebRtcUsed = true;
+            peerEvidence.configurations.push(configuration ? JSON.parse(JSON.stringify(configuration)) : null);
+            this.addEventListener("icecandidate", (event) => {
+              if (!event.candidate) return;
+              if (!event.candidate.candidate && !event.candidate.type) return;
+              const candidateType = event.candidate.type ?? / typ ([a-z]+)/u.exec(event.candidate.candidate)?.[1] ?? "unknown";
+              peerEvidence.candidates.push({
+                type: candidateType,
+                protocol: event.candidate.protocol ?? "unknown",
+              });
+            });
+            this.addEventListener("connectionstatechange", () => peerEvidence.states.push(this.connectionState));
           }
         },
       });
@@ -290,7 +368,7 @@ async function launchFirefox(firefox, appOrigin, allowedOrigins) {
   const record = {
     bidi,
     context,
-    label: firefox.version,
+    label: `${firefox.version} ${ceremony}`,
     output: () => output,
     process: processHandle,
     requests,
@@ -323,19 +401,114 @@ async function closeFirefox(record) {
   await stopChild(record.process);
 }
 
+function peerCount(tracker, infoHash) {
+  return tracker.torrents[infoHash]?.peers.keys.length ?? 0;
+}
+
+async function assertPeerEvidence(record) {
+  const evidence = await evaluate(record, "window.__wildbloomPeerEvidence");
+  if (evidence.configurations.length === 0) {
+    throw new Error(`${record.label} did not create a WebRTC peer connection.`);
+  }
+  for (const configuration of evidence.configurations) {
+    if (JSON.stringify(configuration?.iceServers ?? []) !== "[]") {
+      throw new Error(`${record.label} created a peer connection with an undeclared ICE service.`);
+    }
+  }
+  if (!evidence.candidates.some((candidate) => candidate.type === "host")) {
+    throw new Error(`${record.label} did not gather a host ICE candidate.`);
+  }
+  const nonHost = evidence.candidates.filter((candidate) => candidate.type !== "host");
+  if (nonHost.length > 0) {
+    throw new Error(`${record.label} gathered non-host ICE candidates: ${JSON.stringify(nonHost)}.`);
+  }
+  if (!evidence.states.includes("connected")) {
+    throw new Error(`${record.label} never reached a connected WebRTC state.`);
+  }
+}
+
+function assertAllowedRequests(record, allowedOrigins) {
+  for (const request of record.requests) {
+    const url = new URL(request);
+    if (["http:", "https:", "ws:", "wss:"].includes(url.protocol) && !requestAllowed(request, allowedOrigins)) {
+      throw new Error(`${record.label} made an undeclared application request to ${request}.`);
+    }
+  }
+}
+
 let blossomMode = "normal";
+let publishedRetrievalDenied = false;
+let webSeedAttempts = 0;
 let hangingStarted = 0;
 let hangingClosed = 0;
 let encryptedBytes;
 let encryptedHash;
+let publishedBytes;
+let publishedHash;
+const uploadAuthorisations = [];
 const blossomErrors = [];
 const blossomRequests = [];
 const blossom = createServer((request, response) => {
   void (async () => {
-    const cors = { "Access-Control-Allow-Origin": "*" };
+    const cors = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, X-SHA-256",
+      "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+    };
     const url = new URL(request.url ?? "/", "http://localhost");
     blossomRequests.push(`${request.method} ${url.pathname}`);
-    if (request.method === "GET" && encryptedBytes && url.pathname === `/${encryptedHash}.wbenc`) {
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, cors);
+      response.end();
+      return;
+    }
+    if (request.method === "PUT" && url.pathname === "/upload") {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = Buffer.concat(chunks);
+      if (body.length === 0 || body.includes(PREPARED_BYTES)) throw new Error("Mozilla Firefox upload omitted ciphertext or exposed source bytes.");
+      const hash = createHash("sha256").update(body).digest("hex");
+      if (request.headers["x-sha-256"] !== hash
+        || request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") {
+        throw new Error("Mozilla Firefox upload changed its encrypted payload facts.");
+      }
+      const authorisation = request.headers.authorization;
+      if (!authorisation?.startsWith("Nostr ")) throw new Error("Mozilla Firefox upload omitted Nostr authority.");
+      const event = JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8"));
+      const expiration = Number(event.tags?.find((tag) => tag[0] === "expiration")?.[1]);
+      if (!verifyEvent(event)
+        || event.pubkey !== PUBKEY
+        || expiration - event.created_at !== 300
+        || !event.tags.some((tag) => tag[0] === "server" && tag[1] === HOST)
+        || !event.tags.some((tag) => tag[0] === "x" && tag[1] === hash)) {
+        throw new Error("Mozilla Firefox upload authority was not an exact five-minute external signature.");
+      }
+      uploadAuthorisations.push(event);
+      publishedBytes = body;
+      publishedHash = hash;
+      const origin = `http://${request.headers.host}`;
+      response.writeHead(201, { ...cors, "Content-Type": "application/json" });
+      response.end(JSON.stringify({
+        url: `${origin}/${hash}.wbenc`,
+        sha256: hash,
+        size: body.length,
+        type: "application/vnd.wildbloom.encrypted",
+        uploaded: 1_700_000_000,
+      }));
+      return;
+    }
+    const selectedBytes = url.pathname === `/${encryptedHash}.wbenc`
+      ? encryptedBytes
+      : url.pathname === `/${publishedHash}.wbenc`
+        ? publishedBytes
+        : undefined;
+    if (request.method === "GET" && selectedBytes) {
+      if (url.pathname === `/${publishedHash}.wbenc` && publishedRetrievalDenied) {
+        webSeedAttempts += 1;
+        response.writeHead(503, { ...cors, "Content-Type": "text/plain; charset=utf-8" });
+        response.end("Web seed deliberately unavailable during genuine Firefox peer acceptance");
+        return;
+      }
       if (blossomMode === "hanging") {
         hangingStarted += 1;
         let counted = false;
@@ -350,18 +523,18 @@ const blossom = createServer((request, response) => {
         });
         response.writeHead(200, {
           ...cors,
-          "Content-Length": String(encryptedBytes.length),
+          "Content-Length": String(selectedBytes.length),
           "Content-Type": "application/vnd.wildbloom.encrypted",
         });
-        response.write(encryptedBytes.subarray(0, 1024));
+        response.write(selectedBytes.subarray(0, 1024));
         return;
       }
       response.writeHead(200, {
         ...cors,
-        "Content-Length": String(encryptedBytes.length),
+        "Content-Length": String(selectedBytes.length),
         "Content-Type": "application/vnd.wildbloom.encrypted",
       });
-      response.end(encryptedBytes);
+      response.end(selectedBytes);
       return;
     }
     response.writeHead(404, { ...cors, "Content-Type": "text/plain; charset=utf-8" });
@@ -375,17 +548,26 @@ const blossom = createServer((request, response) => {
 
 let relaySilent = false;
 let fixtureEvent;
+const relayEvents = new Map();
 const relayErrors = [];
 const relay = new WebSocketServer({ host: HOST, port: 0, maxPayload: 1024 * 1024 });
 relay.on("connection", (socket) => {
   socket.on("message", (raw) => {
     try {
       const message = JSON.parse(raw.toString("utf8"));
-      if (message[0] !== "REQ" || relaySilent) return;
-      const subscription = message[1];
-      const requestedId = message[2]?.ids?.[0];
-      if (fixtureEvent && requestedId === fixtureEvent.id) socket.send(JSON.stringify(["EVENT", subscription, fixtureEvent]));
-      socket.send(JSON.stringify(["EOSE", subscription]));
+      if (message[0] === "EVENT") {
+        const event = message[1];
+        if (!verifyEvent(event) || event.pubkey !== PUBKEY) throw new Error("Mozilla Firefox relay received an invalid or unexpected signature.");
+        relayEvents.set(event.id, event);
+        socket.send(JSON.stringify(["OK", event.id, true, "stored by controlled Firefox relay"]));
+      }
+      if (message[0] === "REQ" && !relaySilent) {
+        const subscription = message[1];
+        const requestedId = message[2]?.ids?.[0];
+        const event = relayEvents.get(requestedId);
+        if (event) socket.send(JSON.stringify(["EVENT", subscription, event]));
+        socket.send(JSON.stringify(["EOSE", subscription]));
+      }
     } catch (error) {
       relayErrors.push(error instanceof Error ? error.message : String(error));
     }
@@ -393,26 +575,48 @@ relay.on("connection", (socket) => {
 });
 relay.on("error", (error) => relayErrors.push(error.message));
 
+const trackerErrors = [];
+const trackerEvents = [];
+const tracker = new TrackerServer({ http: false, udp: false, ws: { noServer: true }, stats: false, interval: 30_000 });
+tracker.on("error", (error) => trackerErrors.push(error.message));
+tracker.on("warning", (error) => trackerErrors.push(error.message));
+for (const event of ["start", "complete", "stop", "update"]) {
+  tracker.on(event, (_address, parameters) => trackerEvents.push({ event, infoHash: parameters.info_hash }));
+}
+const secureTracker = createHttpsServer(trackerCertificate);
+secureTracker.on("upgrade", (request, socket, head) => {
+  if (new URL(request.url ?? "/", `https://${HOST}`).pathname !== "/announce") {
+    socket.destroy();
+    return;
+  }
+  tracker.ws.handleUpgrade(request, socket, head, (websocket) => tracker.ws.emit("connection", websocket, request));
+});
+
 let production;
 let record;
+let downloaderRecord;
 let blossomClosed = false;
 try {
   const firefox = findFirefox();
   await Promise.all([listen(blossom), new Promise((resolve, reject) => {
     relay.once("listening", resolve);
     relay.once("error", reject);
-  })]);
+  }), listen(secureTracker)]);
   const blossomAddress = blossom.address();
   const relayAddress = relay.address();
+  const trackerAddress = secureTracker.address();
   if (!blossomAddress || typeof blossomAddress === "string") throw new Error("Controlled Blossom did not expose a port.");
   if (!relayAddress || typeof relayAddress === "string") throw new Error("Controlled relay did not expose a port.");
+  if (!trackerAddress || typeof trackerAddress === "string") throw new Error("Controlled tracker did not expose a port.");
   const blossomOrigin = `http://${HOST}:${blossomAddress.port}`;
   const relayUrl = `ws://${HOST}:${relayAddress.port}`;
+  const trackerUrl = `wss://${HOST}:${trackerAddress.port}/announce`;
 
   const fixture = await makeIndependentFixture(blossomOrigin);
   encryptedBytes = fixture.encrypted;
   encryptedHash = fixture.hash;
   fixtureEvent = fixture.event;
+  relayEvents.set(fixtureEvent.id, fixtureEvent);
 
   const appPort = await availablePort();
   const appOrigin = `http://${HOST}:${appPort}`;
@@ -428,8 +632,8 @@ try {
     }
   }, ACTION_TIMEOUT_MS, "Production server did not start for Mozilla Firefox acceptance.");
 
-  const allowedOrigins = new Set([appOrigin, blossomOrigin, new URL(relayUrl).origin]);
-  record = await launchFirefox(firefox, appOrigin, allowedOrigins);
+  const allowedOrigins = new Set([appOrigin, blossomOrigin, new URL(relayUrl).origin, new URL(trackerUrl).origin]);
+  record = await launchFirefox(firefox, appOrigin, allowedOrigins, "publisher");
   const initialExternalRequests = record.requests.filter((request) => {
     const url = new URL(request);
     return ["http:", "https:", "ws:", "wss:"].includes(url.protocol) && url.origin !== appOrigin;
@@ -470,8 +674,176 @@ try {
     throw new Error(`Mozilla Firefox did not prepare an encrypted local-only file safely: ${JSON.stringify(prepared)}.`);
   }
 
+  await setChecked(record, 'input[name="signing-method"][value="external"]', true);
+  await setValue(record, "#external-signer-pubkey", PUBKEY);
   await setValue(record, "#blossom-server", blossomOrigin);
   await setValue(record, "#relay-urls", relayUrl);
+  await setValue(record, "#tracker-urls", trackerUrl);
+  await click(record, "#connect-signer");
+  await waitForText(record, "#publish-status", /External signer public key confirmed/iu);
+  await setChecked(record, "#upload-consent", true);
+  await setChecked(record, "#key-saved-consent", true);
+  const uploadsBeforeSignature = blossomRequests.filter((value) => value === "PUT /upload").length;
+  await click(record, "#upload-file");
+  await waitForUnsignedTemplate(record, 24242);
+  if (blossomRequests.filter((value) => value === "PUT /upload").length !== uploadsBeforeSignature) {
+    throw new Error("Mozilla Firefox uploaded before exact external authority was returned.");
+  }
+  await completeExternalSignature(record, 24242);
+  await waitForText(record, "#publish-status", /hybrid metadata is staged/iu);
+  if (uploadAuthorisations.length !== 1 || !publishedBytes || !publishedHash) {
+    throw new Error("Mozilla Firefox did not complete the externally authorised encrypted upload.");
+  }
+
+  await click(record, "#sign-events");
+  const publishedFileEvent = await completeExternalSignature(record, 1063);
+  await completeExternalSignature(record, 2003);
+  await waitForText(record, "#publish-status", /Exact external signatures accepted/iu);
+  await setChecked(record, "#publish-consent", true);
+  await click(record, "#publish-events");
+  await waitForText(record, "#publish-status", /2\/2 acknowledgements/iu);
+  if (!relayEvents.has(publishedFileEvent.id)) throw new Error("Mozilla Firefox publication did not reach the controlled relay.");
+
+  await setValue(record, "#event-id", publishedFileEvent.id);
+  await click(record, "#resolve-event");
+  await waitForText(record, "#retrieve-status", /separately received recovery key/iu);
+  await setValue(record, "#recovery-key-input", prepared.recoveryKey);
+  await click(record, "#fetch-blossom");
+  await waitForText(record, "#retrieve-status", /locally decrypted bytes/iu);
+  const publishedRecovery = await evaluate(record, `(async () => {
+    const link = document.querySelector("#retrieve-links a");
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Published Firefox download link is missing.");
+    const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
+    if (!(blob instanceof Blob)) throw new Error("Published Firefox download Blob was not observed.");
+    return {
+      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+      name: link.download,
+      type: blob.type,
+      rel: link.rel,
+    };
+  })()`);
+  if (publishedRecovery.name !== "firefox-prepared.txt"
+    || publishedRecovery.type !== "application/octet-stream"
+    || !publishedRecovery.rel.includes("noopener")
+    || !Buffer.from(publishedRecovery.bytes).equals(PREPARED_BYTES)) {
+    throw new Error("Mozilla Firefox did not recover its own externally signed publication exactly.");
+  }
+
+  const publishedFacts = (await snapshot(record, "#file-facts"))?.text ?? "";
+  const infoHash = /Info hash([0-9a-f]{40})/u.exec(publishedFacts)?.[1];
+  if (!infoHash) throw new Error("Mozilla Firefox did not expose the reviewed torrent info hash.");
+  await setChecked(record, "#seed-consent", true);
+  await click(record, "#start-seeding");
+  await waitForText(record, "#publish-status", new RegExp(`Seeding ${infoHash}`, "u"), PEER_TIMEOUT_MS);
+
+  publishedRetrievalDenied = true;
+  downloaderRecord = await launchFirefox(firefox, appOrigin, allowedOrigins, "downloader");
+  const downloaderInitialExternalRequests = downloaderRecord.requests.filter((request) => {
+    const url = new URL(request);
+    return ["http:", "https:", "ws:", "wss:"].includes(url.protocol) && url.origin !== appOrigin;
+  });
+  const downloaderInitial = await evaluate(downloaderRecord, `(() => ({
+    errors: [...window.__wildbloomPageErrors],
+    hasSigner: Boolean(window.nostr),
+    webRtcUsed: window.__wildbloomFirefoxWebRtcUsed,
+  }))()`);
+  if (downloaderInitialExternalRequests.length > 0 || downloaderInitial.errors.length > 0
+    || downloaderInitial.hasSigner || downloaderInitial.webRtcUsed) {
+    throw new Error(`Fresh Mozilla Firefox downloader crossed its initial privacy boundary: ${JSON.stringify({
+      downloaderInitial,
+      requests: downloaderInitialExternalRequests,
+    })}.`);
+  }
+  await setValue(downloaderRecord, "#blossom-server", blossomOrigin);
+  await setValue(downloaderRecord, "#relay-urls", relayUrl);
+  await setValue(downloaderRecord, "#tracker-urls", trackerUrl);
+  await setValue(downloaderRecord, "#event-id", publishedFileEvent.id);
+  await click(downloaderRecord, "#resolve-event");
+  await waitForText(downloaderRecord, "#retrieve-status", /separately received recovery key/iu);
+  await setValue(downloaderRecord, "#recovery-key-input", prepared.recoveryKey);
+  await setChecked(downloaderRecord, "#download-swarm-consent", true);
+  await click(downloaderRecord, "#fetch-swarm");
+  await waitForText(downloaderRecord, "#retrieve-status", /Swarm ciphertext/iu, PEER_TIMEOUT_MS);
+  const peerRecovery = await evaluate(downloaderRecord, `(async () => {
+    const link = document.querySelector("#retrieve-links a");
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Peer-recovered Firefox download link is missing.");
+    const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
+    if (!(blob instanceof Blob)) throw new Error("Peer-recovered Firefox Blob was not observed.");
+    return {
+      bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
+      name: link.download,
+      type: blob.type,
+      rel: link.rel,
+    };
+  })()`, PEER_TIMEOUT_MS);
+  if (peerRecovery.name !== "firefox-prepared.txt"
+    || peerRecovery.type !== "application/octet-stream"
+    || !peerRecovery.rel.includes("noopener")
+    || !Buffer.from(peerRecovery.bytes).equals(PREPARED_BYTES)) {
+    throw new Error("Two genuine Mozilla Firefox processes did not recover the exact peer bytes.");
+  }
+  await waitFor(
+    () => peerCount(tracker, infoHash) >= 2,
+    ACTION_TIMEOUT_MS,
+    "The controlled tracker never observed two live genuine Firefox peers.",
+  );
+  const starts = trackerEvents.filter((entry) => entry.event === "start" && entry.infoHash === infoHash);
+  if (starts.length < 2) throw new Error("The controlled WSS tracker did not receive both genuine Firefox start announcements.");
+  await Promise.all([assertPeerEvidence(record), assertPeerEvidence(downloaderRecord)]);
+  assertAllowedRequests(record, allowedOrigins);
+  assertAllowedRequests(downloaderRecord, allowedOrigins);
+  const peerPageState = await Promise.all([record, downloaderRecord].map((browserRecord) => evaluate(browserRecord, `(() => ({
+    errors: [...window.__wildbloomPageErrors],
+    hasSigner: Boolean(window.nostr),
+    webRtcUsed: window.__wildbloomFirefoxWebRtcUsed,
+  }))()`)));
+  if (peerPageState.some((state) => state.errors.length > 0 || state.hasSigner || !state.webRtcUsed)) {
+    throw new Error(`Genuine Firefox peer pages crossed their page, signer or WebRTC boundary: ${JSON.stringify(peerPageState)}.`);
+  }
+
+  await setChecked(downloaderRecord, "#download-swarm-consent", false);
+  await waitForText(downloaderRecord, "#retrieve-status", /Swarm participation stopped/iu);
+  await waitFor(
+    () => peerCount(tracker, infoHash) <= 1,
+    ACTION_TIMEOUT_MS,
+    "Withdrawing genuine Firefox swarm consent did not stop the downloading peer.",
+  );
+  const withdrawn = await evaluate(downloaderRecord, `(() => ({
+    consent: document.querySelector("#download-swarm-consent")?.checked,
+    fetchDisabled: document.querySelector("#fetch-swarm")?.disabled,
+  }))()`);
+  if (withdrawn.consent !== false || withdrawn.fetchDisabled !== true) {
+    throw new Error(`Withdrawing genuine Firefox swarm consent retained authority: ${JSON.stringify(withdrawn)}.`);
+  }
+
+  await evaluate(record, `(() => {
+    const input = document.querySelector("#publish-file");
+    if (!(input instanceof HTMLInputElement)) throw new Error("Publication file input is missing.");
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new TextEncoder().encode("replacement")], "replacement.txt", {
+      type: "text/plain",
+      lastModified: 0,
+    }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return input.files.length;
+  })()`);
+  await waitFor(
+    () => peerCount(tracker, infoHash) === 0,
+    ACTION_TIMEOUT_MS,
+    "Changing the genuine Firefox source did not stop the publishing peer.",
+  );
+  const publisherWithdrawn = await evaluate(record, `(() => ({
+    consent: document.querySelector("#seed-consent")?.checked,
+    seedDisabled: document.querySelector("#start-seeding")?.disabled,
+  }))()`);
+  if (publisherWithdrawn.consent !== false || publisherWithdrawn.seedDisabled !== true) {
+    throw new Error(`Changing the genuine Firefox source retained swarm authority: ${JSON.stringify(publisherWithdrawn)}.`);
+  }
+  await closeFirefox(downloaderRecord);
+  downloaderRecord = undefined;
+  if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the withdrawn Firefox downloader restored peer authority.");
+
   await setValue(record, "#event-id", fixtureEvent.id);
   relaySilent = true;
   try {
@@ -547,25 +919,23 @@ try {
     hasSigner: Boolean(window.nostr),
     webRtcUsed: window.__wildbloomFirefoxWebRtcUsed,
   }))()`);
-  if (finalState.errors.length > 0 || finalState.hasSigner || finalState.webRtcUsed) {
+  if (finalState.errors.length > 0 || finalState.hasSigner || !finalState.webRtcUsed) {
     throw new Error(`Mozilla Firefox crossed its page, signer or WebRTC boundary: ${JSON.stringify(finalState)}.`);
   }
-  for (const request of record.requests) {
-    const url = new URL(request);
-    if (["http:", "https:", "ws:", "wss:"].includes(url.protocol) && !requestAllowed(request, allowedOrigins)) {
-      throw new Error(`Mozilla Firefox made an undeclared application request to ${request}.`);
-    }
-  }
-  if (blossomErrors.length > 0 || relayErrors.length > 0) {
-    throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors].join("; ")}`);
+  assertAllowedRequests(record, allowedOrigins);
+  if (blossomErrors.length > 0 || relayErrors.length > 0 || trackerErrors.length > 0) {
+    throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors, ...trackerErrors].join("; ")}`);
   }
   process.stdout.write(
-    `${firefox.version} acceptance passed through a disposable profile: trustworthy production origin, no ambient network or signer, local encrypted preparation, exact signer-free recovery through an inert save, relay timeout, download cancellation, denied-service failure and no WebRTC.\n`,
+    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup, recovery of an independent fixture through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } finally {
+  await closeFirefox(downloaderRecord).catch(() => undefined);
   await closeFirefox(record).catch(() => undefined);
   if (!blossomClosed) await closeServer(blossom).catch(() => undefined);
   await new Promise((resolve) => relay.close(() => resolve())).catch(() => undefined);
+  await new Promise((resolve) => tracker.close(resolve)).catch(() => undefined);
+  await closeServer(secureTracker).catch(() => undefined);
   await stopChild(production);
   rmSync(tempRoot, { recursive: true, force: true });
 }

@@ -19,9 +19,8 @@ not claim to create a new storage network.
 
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
-human Tor Browser usability review, real Safari and full branded-Firefox
-publication/WebTorrent testing, and
-cross-network packet evidence remain release gates. See
+human Tor Browser usability review, real Safari and cross-network packet
+evidence remain release gates. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
@@ -128,11 +127,12 @@ contents change. Vite also rejects that Node code from the actual production
 module graph. Every other advisory still fails CI.
 
 CI also drives the GitHub runner's genuine branded Mozilla Firefox release
-through a disposable profile and loopback-only WebDriver BiDi. That separate
+through two disposable profiles and loopback-only WebDriver BiDi. That separate
 gate proves a trustworthy production origin, no ambient application network or
-signer, local encrypted preparation, an independently generated signed fixture,
-exact signer-free recovery, timeout, cancellation, denied-service failure and
-no WebRTC.
+signer, external-signature encrypted upload and relay publication, exact
+recovery through both Blossom and a second real Firefox WebRTC peer, host-only
+ICE, peer cleanup after consent withdrawal, an independently generated fixture,
+timeout, cancellation and denied-service failure.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

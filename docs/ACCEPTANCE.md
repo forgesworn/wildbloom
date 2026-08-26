@@ -13,11 +13,12 @@ the finish line.
   Linux and macOS.
 - The same production journey in Playwright Firefox on Linux and Playwright
   WebKit on macOS.
-- Branded Mozilla Firefox on Linux, through a disposable profile and
+- Branded Mozilla Firefox on Linux, through two disposable profiles and
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
-  application network or signer, local encrypted preparation, exact recovery
-  of an independently generated encrypted fixture, relay timeout, partial-body
-  cancellation, denied-service failure and no WebRTC.
+  application network or signer, external-signature encrypted upload and
+  two-event relay publication, exact Blossom and real WebRTC-peer recovery,
+  host-only ICE, peer cleanup, an independently generated encrypted fixture,
+  relay timeout, partial-body cancellation and denied-service failure.
 - Two isolated Chromium contexts publishing and retrieving the encrypted file
   through a real, ephemeral TLS WebSocket tracker.
 - Exact source recovery while the controlled Blossom web seed refuses every
@@ -76,9 +77,11 @@ npm run ci
 npm run smoke:swarm
 ```
 
-The local swarm gate also requires `openssl` to create a disposable test-only
-tracker certificate. CI installs the pinned Chromium build and runs the same
-gate on Linux.
+The local Chromium and branded-Firefox peer gates require `openssl` to create a
+disposable test-only tracker certificate. The harness accepts only that
+ephemeral self-signed tracker certificate; this does not weaken the production
+application's transport validation. CI installs the pinned Chromium build and
+runs the Chromium gate on Linux.
 
 Run the additional engines locally after installing their exact Playwright
 builds:
@@ -101,8 +104,11 @@ npm run build
 npm run acceptance:firefox
 ```
 
-This is a signer-free preparation and retrieval ceremony. It does not claim a
-complete branded-Firefox publication or WebTorrent journey.
+This drives two independent Firefox processes. One completes extension-free
+encrypted publication and seeding; the other performs signer-free exact peer
+recovery while the published Blossom object is unavailable. The gate requires
+the declared WSS tracker, host-only ICE and confirmed peer cleanup after
+consent withdrawal and source change.
 
 ## Real Tor transport gate
 
@@ -187,10 +193,8 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
   network boundary, with host-candidate and any future operator ICE traffic
   checked against packet capture. The automated two-context loopback gate does
   not prove NAT traversal or absence of lower-level browser traffic.
-- A complete publication and WebTorrent journey in branded Firefox, plus real
-  Safari desktop coverage on its supported operating system. The automated
-  branded-Firefox preparation/retrieval gate and Playwright engine builds are
-  useful evidence but do not prove those remaining paths.
+- Real Safari desktop coverage on its supported operating system. Playwright
+  WebKit is useful engine evidence but is not the installed Safari product.
 - Manual screen-reader, real browser zoom, forced-colours appearance and human
   keyboard-usability review. Automated WCAG scanning, 320px reflow,
   forced-colours semantics and keyboard mechanics are covered.
