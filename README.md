@@ -84,7 +84,11 @@ response security headers and zero ambient network activity, then exercises
 encrypted upload, exact Blossom authority,
 NIP-07 signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
-fallback. A separate Chromium gate drives two isolated production pages through
+fallback. It also supersedes an active local encryption, holds a signer request
+across a direct-to-Tor profile change, and proves that neither older operation
+can restore stale recovery, identity or publication state. Withdrawing Tor
+confirmation clears signer identity and downstream network authority. A
+separate Chromium gate drives two isolated production pages through
 a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
 the exact source from the browser peer, observes host-only ICE, and proves that
 changing the source stops seeding. Browser acceptance also interrupts a real

@@ -58,7 +58,7 @@ describe("Blossom authorisation", () => {
       ["x", sha256],
     ]);
     const signed = await signEventExactly(template, signer, pubkey);
-    const encoded = encodeNostrAuthorisation(signed);
+    const encoded = encodeNostrAuthorisation(signed, 1_000);
     expect(encoded).toMatch(/^Nostr [A-Za-z0-9_-]+$/u);
     expect(encoded).not.toContain("=");
   });
@@ -73,6 +73,31 @@ describe("Blossom authorisation", () => {
     await expect(signEventExactly(buildUploadAuthorisation(sha256, "https://cdn.example.com"), malicious, pubkey))
       .rejects.toThrow(/changed/u);
   });
+
+  it("refuses validly signed duplicate or long-lived upload scopes", () => {
+    const template = buildUploadAuthorisation(sha256, "https://cdn.example.com", 1_000, 90);
+    const duplicateServer = finalizeEvent({
+      ...template,
+      tags: [...template.tags, ["server", "evil.example"]],
+    }, secret) as SignedNostrEvent;
+    expect(() => encodeNostrAuthorisation(duplicateServer, 1_000)).toThrow(/scalar server/u);
+
+    const longLived = finalizeEvent({
+      ...template,
+      tags: template.tags.map((tag) => tag[0] === "expiration" ? ["expiration", "1300"] : tag),
+    }, secret) as SignedNostrEvent;
+    expect(() => encodeNostrAuthorisation(longLived, 1_000)).toThrow(/short-lived/u);
+  });
+
+  it("refuses stale, future and misleading validly signed upload authority", () => {
+    const template = buildUploadAuthorisation(sha256, "https://cdn.example.com", 1_000, 90);
+    const signed = finalizeEvent(template, secret) as SignedNostrEvent;
+    expect(() => encodeNostrAuthorisation(signed, 1_089)).toThrow(/not currently valid/u);
+    expect(() => encodeNostrAuthorisation(signed, 999)).toThrow(/not currently valid/u);
+
+    const misleading = finalizeEvent({ ...template, content: "Upload anything anywhere" }, secret) as SignedNostrEvent;
+    expect(() => encodeNostrAuthorisation(misleading, 1_000)).toThrow(/human-readable purpose/u);
+  });
 });
 
 describe("hybrid Nostr events", () => {
@@ -81,6 +106,7 @@ describe("hybrid Nostr events", () => {
     const torrentTemplate = buildTorrentEvent(publication.inspected, publication.torrent!, 2_000);
     expect(fileTemplate.kind).toBe(1063);
     expect(fileTemplate.tags).toContainEqual(["x", sha256]);
+    expect(fileTemplate.tags).toContainEqual(["ox", sha256]);
     expect(fileTemplate.tags).toContainEqual(["i", infoHash]);
     expect(fileTemplate.tags).toContainEqual(["alt", "File: hello.txt"]);
     expect(torrentTemplate.kind).toBe(2003);
@@ -135,11 +161,28 @@ describe("hybrid Nostr events", () => {
     const template = buildFileEvent(encryptedPublication, 2_000);
     expect(template.tags).toContainEqual(["encryption", WILDBLOOM_ENCRYPTION]);
     expect(template.tags).toContainEqual(["alt", "Encrypted Wildbloom file"]);
+    expect(template.tags).toContainEqual(["x", sha256]);
+    expect(template.tags).toContainEqual(["ox", sha256]);
     expect(template.tags.some((tag) => tag[0] === "magnet")).toBe(false);
     const resolved = resolveHybridEvent(finalizeEvent(template, secret) as SignedNostrEvent);
     expect(resolved.encryption).toBe(WILDBLOOM_ENCRYPTION);
     expect(resolved.magnetUri).toBeUndefined();
     expect(resolved.trackers).toEqual([]);
+  });
+
+  it("rejects validly signed ambiguous scalar tags and unsupported encryption claims", () => {
+    const template = buildFileEvent(publication, 2_000);
+    const malformedDuplicate = finalizeEvent({
+      ...template,
+      tags: [...template.tags, ["x"]],
+    }, secret) as SignedNostrEvent;
+    expect(() => resolveHybridEvent(malformedDuplicate)).toThrow(/scalar x/u);
+
+    const unsupportedEncryption = finalizeEvent({
+      ...template,
+      tags: [...template.tags, ["encryption", "unknown-scheme"]],
+    }, secret) as SignedNostrEvent;
+    expect(() => resolveHybridEvent(unsupportedEncryption)).toThrow(/unsupported encryption/u);
   });
 });
 

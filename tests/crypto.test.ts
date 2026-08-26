@@ -61,4 +61,49 @@ describe("Wildbloom privacy envelopes", () => {
     const protectedFile = await encryptPrivacyEnvelope(new File(["secret"], "secret.txt"));
     await expect(decryptPrivacyEnvelope(protectedFile.file, "not-a-key")).rejects.toThrow(/v1 key/u);
   });
+
+  it("cancels hashing, encryption and decryption without returning stale output", async () => {
+    const hashController = new AbortController();
+    hashController.abort();
+    await expect(sha256Hex(new Blob(["secret"]), hashController.signal)).rejects.toThrow(/cancelled/u);
+
+    const encryptionController = new AbortController();
+    const encryption = encryptPrivacyEnvelope(
+      new File([new Uint8Array(2 * 1024 * 1024)], "large.bin"),
+      encryptionController.signal,
+    );
+    queueMicrotask(() => encryptionController.abort());
+    await expect(encryption).rejects.toThrow(/cancelled/u);
+
+    const protectedFile = await encryptPrivacyEnvelope(new File([new Uint8Array(2 * 1024 * 1024)], "large.bin"));
+    const decryptionController = new AbortController();
+    const decryption = decryptPrivacyEnvelope(protectedFile.file, protectedFile.recoveryKey, decryptionController.signal);
+    queueMicrotask(() => decryptionController.abort());
+    await expect(decryption).rejects.toThrow(/cancelled/u);
+  });
+
+  it("authenticates the header, record positions and exact envelope length", async () => {
+    const protectedFile = await encryptPrivacyEnvelope(
+      new File([new Uint8Array(1024 * 1024 + 32)], "two-records.bin"),
+    );
+    const original = new Uint8Array(await protectedFile.file.arrayBuffer());
+    for (const offset of [0, 8, 12, 16]) {
+      const changed = original.slice();
+      changed[offset] = (changed[offset] ?? 0) ^ 1;
+      await expect(decryptPrivacyEnvelope(new Blob([changed]), protectedFile.recoveryKey)).rejects.toThrow();
+    }
+
+    await expect(decryptPrivacyEnvelope(new Blob([original.subarray(0, original.length - 1)]), protectedFile.recoveryKey))
+      .rejects.toThrow();
+    await expect(decryptPrivacyEnvelope(new Blob([original, new Uint8Array([0])]), protectedFile.recoveryKey))
+      .rejects.toThrow();
+
+    const recordBytes = 1024 * 1024 + 16;
+    const reordered = original.slice();
+    const first = original.slice(24, 24 + recordBytes);
+    const second = original.slice(24 + recordBytes);
+    reordered.set(second, 24);
+    reordered.set(first, 24 + second.length);
+    await expect(decryptPrivacyEnvelope(new Blob([reordered]), protectedFile.recoveryKey)).rejects.toThrow(/modified/u);
+  });
 });

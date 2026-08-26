@@ -279,7 +279,7 @@ async function createPage(context, label, appOrigin, allowedOrigins, signer) {
     if (allowedOrigins.has(url.origin)) await route.continue();
     else await route.abort("blockedbyclient");
   });
-  await page.goto(appOrigin, { waitUntil: "networkidle", timeout: 60_000 });
+  await navigateOnionPage(page, label, appOrigin);
   const capabilities = await page.evaluate(() => ({
     secureContext: window.isSecureContext,
     subtleCrypto: Boolean(window.crypto?.subtle),
@@ -337,6 +337,27 @@ function usedOnlyExactRelay(record, relayUrl) {
       && actual.search === ""
       && actual.hash === "";
   });
+}
+
+async function navigateOnionPage(page, label, appOrigin) {
+  const deadline = Date.now() + ONION_ACTION_TIMEOUT_MS;
+  let attempts = 0;
+  let lastError = "no navigation attempt completed";
+  while (Date.now() < deadline) {
+    attempts += 1;
+    try {
+      const response = await page.goto(appOrigin, { waitUntil: "load", timeout: 30_000 });
+      if (!response?.ok()) throw new Error(`onion document returned HTTP ${response?.status() ?? "no response"}`);
+      if (new URL(page.url()).origin !== appOrigin) throw new Error(`onion document left ${appOrigin}`);
+      await page.locator("#inspect-file").waitFor({ state: "visible", timeout: 5_000 });
+      if (attempts > 1) process.stdout.write(`${label} onion navigation became ready on attempt ${attempts}.\n`);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+  }
+  throw new Error(`${label} onion origin did not become reachable within three minutes after ${attempts} attempts: ${lastError}`);
 }
 
 let torProcess;
@@ -461,6 +482,8 @@ try {
 
   retrieverContext = await browser.newContext({ acceptDownloads: true });
   const retriever = await createPage(retrieverContext, "onion retriever", appOrigin, allowedOrigins, false);
+  await warmOnionTargets(retriever.page, blossomOnionOrigin, relayUrl);
+  process.stdout.write("The rotated identity reached the controlled Blossom and relay onions before retrieval.\n");
   await retriever.page.check('input[name="network-profile"][value="tor"]');
   await retriever.page.fill("#blossom-server", blossomOnionOrigin);
   await retriever.page.fill("#relay-urls", relayUrl);

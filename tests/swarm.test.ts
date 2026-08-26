@@ -222,4 +222,26 @@ describe("WebTorrent safety boundary", () => {
     await expect(result).rejects.toThrow(/cancelled/u);
     expect(Client.last.destroyed).toBe(true);
   });
+
+  it("does not construct a peer client when cancellation wins during module loading", async () => {
+    let releaseLoader: ((value: { default: never }) => void) | undefined;
+    let constructions = 0;
+    class Client {
+      constructor() { constructions += 1; }
+    }
+    const loader = () => new Promise<{ default: never }>((resolve) => { releaseLoader = resolve; });
+    const resolved = {
+      magnetUri: `magnet:?xt=urn:btih:${infoHash}`,
+      infoHash,
+      trackers: [tracker],
+      size: 5,
+      sha256: "ab".repeat(32),
+    } as unknown as ResolvedHybridEvent;
+    const controller = new AbortController();
+    const result = downloadFromSwarm(resolved, () => undefined, "direct", loader, controller.signal);
+    controller.abort();
+    releaseLoader?.({ default: Client as never });
+    await expect(result).rejects.toThrow(/cancelled/u);
+    expect(constructions).toBe(0);
+  });
 });

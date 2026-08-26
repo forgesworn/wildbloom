@@ -62,6 +62,9 @@ let hangingUploadStarted;
 let hangingUploadClosed;
 let hangingDownloadStarted;
 let hangingDownloadClosed;
+let holdNextSignature = false;
+let heldSignatureStarted;
+let releaseHeldSignature;
 
 const blossom = createServer((request, response) => {
   void (async () => {
@@ -394,7 +397,14 @@ try {
 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.exposeFunction("__wildbloomGetPublicKey", () => PUBKEY);
-  await page.exposeFunction("__wildbloomSignEvent", (template) => finalizeEvent(template, SECRET));
+  await page.exposeFunction("__wildbloomSignEvent", async (template) => {
+    if (holdNextSignature) {
+      holdNextSignature = false;
+      heldSignatureStarted?.();
+      await new Promise((resolve) => { releaseHeldSignature = resolve; });
+    }
+    return finalizeEvent(template, SECRET);
+  });
   await page.addInitScript(() => {
     Object.defineProperty(window, "nostr", {
       configurable: false,
@@ -437,7 +447,29 @@ try {
   await page.fill("#relay-urls", relayUrl);
   await page.fill("#tracker-urls", "wss://tracker.example.com/announce");
   await page.click("#connect-signer");
+  await page.evaluate(() => {
+    const chunk = new Uint8Array(1024 * 1024);
+    const file = new File(Array.from({ length: 32 }, () => chunk), "superseded.bin", {
+      type: "application/octet-stream",
+      lastModified: 0,
+    });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.querySelector("#publish-file");
+    if (!(input instanceof HTMLInputElement)) throw new Error("File input is missing.");
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.click("#inspect-file");
+  await page.locator("#publish-status").filter({ hasText: /Hashing the source|Encrypting and padding/u }).waitFor();
   await page.setInputFiles("#publish-file", { name: "hello.txt", mimeType: "text/plain", buffer: BYTES });
+  await page.locator("#publish-status").filter({ hasText: "File selection changed" }).waitFor();
+  await page.waitForTimeout(500);
+  if (!(await page.isHidden("#recovery-key-panel"))
+    || await page.locator("#file-facts").textContent() !== ""
+    || await page.isEnabled("#upload-file")) {
+    throw new Error("A superseded local encryption repopulated stale file or recovery state.");
+  }
   await page.click("#inspect-file");
   await page.locator("#publish-status").filter({ hasText: "Encrypted transfer payload prepared" }).waitFor();
   const facts = await page.locator("#file-facts").textContent();
@@ -526,20 +558,34 @@ try {
     throw new Error("Cancelled retrieval retained a stale save link or active cancel authority.");
   }
 
+  const signatureHeld = new Promise((resolve) => { heldSignatureStarted = resolve; });
+  holdNextSignature = true;
+  await page.click("#sign-events");
+  await within(signatureHeld, 5_000, "Controlled signer did not hold the cross-profile signing request.");
   await page.check('input[name="network-profile"][value="tor"]');
+  releaseHeldSignature?.();
+  releaseHeldSignature = undefined;
+  heldSignatureStarted = undefined;
+  await page.waitForTimeout(100);
+  if (!(await page.isDisabled("#publish-events"))
+    || !(await page.locator("#signer-status").textContent())?.includes("not connected")) {
+    throw new Error("A superseded direct-mode signature or signer identity survived the switch to Tor-only mode.");
+  }
   const trackerHidden = await page.isHidden("#tracker-field");
   const seedHidden = await page.isHidden("#seed-gate");
   const iceBoundaryHidden = await page.isHidden("#ice-boundary");
   if (!trackerHidden || !seedHidden || !iceBoundaryHidden) throw new Error(`Tor-only mode did not remove tracker and WebRTC controls (${trackerHidden}/${seedHidden}/${iceBoundaryHidden}, profile=${await page.locator('input[name="network-profile"]:checked').getAttribute("value")}).`);
   await assertAccessible(page, "Tor-only profile");
   await page.fill("#blossom-server", ONION_BLOSSOM);
-  await page.check("#key-saved-consent");
-  await page.check("#upload-consent");
-  await page.click("#upload-file");
+  await page.click("#connect-signer");
   await page.locator("#publish-status").filter({ hasText: "Confirm that the entire browser is configured through Tor" }).waitFor();
-  if (uploadAuthorisations.length !== 1) throw new Error("Tor-only mode used the network before Tor confirmation.");
+  if (uploadAuthorisations.length !== 1 || !(await page.locator("#signer-status").textContent())?.includes("not connected")) {
+    throw new Error("Tor-only mode retained identity or used the network before Tor confirmation.");
+  }
 
   await page.check("#tor-consent");
+  await page.click("#connect-signer");
+  if ((await page.locator("#signer-status").textContent()) !== PUBKEY) throw new Error("Tor-only signer did not require a fresh connection.");
   await page.fill("#blossom-server", blossomOrigin);
   await page.check("#key-saved-consent");
   await page.check("#upload-consent");
@@ -563,6 +609,13 @@ try {
   await page.locator("#publish-status").filter({ hasText: "Signed locally through NIP-07" }).waitFor();
   const torSigned = await page.locator("#publish-status").textContent();
   if ((torSigned?.match(/[0-9]+: [0-9a-f]{64}/gu) ?? []).length !== 1) throw new Error("Tor-only mode signed more than one event.");
+  await page.uncheck("#tor-consent");
+  await page.locator("#publish-status").filter({ hasText: "Tor confirmation withdrawn" }).waitFor();
+  if (!(await page.isDisabled("#upload-file"))
+    || !(await page.isDisabled("#publish-events"))
+    || !(await page.locator("#signer-status").textContent())?.includes("not connected")) {
+    throw new Error("Withdrawing Tor confirmation retained signer identity or network authority.");
+  }
 
   await page.setInputFiles("#publish-file", { name: "replacement.txt", mimeType: "text/plain", buffer: Buffer.from("replacement") });
   for (const selector of ["#upload-consent", "#key-saved-consent", "#seed-consent", "#publish-consent"]) {
@@ -585,7 +638,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

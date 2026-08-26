@@ -67,7 +67,11 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-export async function inspectFile(file: File, purpose: "source" | "transfer" = "source"): Promise<InspectedFile> {
+export async function inspectFile(
+  file: File,
+  purpose: "source" | "transfer" = "source",
+  signal?: AbortSignal,
+): Promise<InspectedFile> {
   if (purpose === "source") assertPrototypeFileSize(file.size);
   else assertPrototypeTransferSize(file.size);
   const name = sanitiseFileName(file.name);
@@ -75,7 +79,7 @@ export async function inspectFile(file: File, purpose: "source" | "transfer" = "
     file,
     name,
     extension: fileExtension(name),
-    sha256: await sha256Hex(file),
+    sha256: await sha256Hex(file, signal),
     size: file.size,
     type: (file.type || "application/octet-stream").toLowerCase(),
   };
@@ -108,7 +112,9 @@ export async function uploadToBlossom(
   const template = buildUploadAuthorisation(inspected.sha256, server, undefined, undefined, profile);
   const deadline = requestDeadline(options, "upload");
   try {
+    if (deadline.signal.aborted) throw deadline.signal.reason;
     const authorisation = await abortable(signEventExactly(template, signer, pubkey), deadline.signal);
+    if (deadline.signal.aborted) throw deadline.signal.reason;
     const response = await abortable(fetchImpl(`${server}/upload`, {
       method: "PUT",
       headers: {
@@ -186,6 +192,7 @@ export async function fetchVerifiedBlob(
   const url = normaliseBlossomUrl(resolved.url, resolved.sha256, profile);
   const deadline = requestDeadline(options, "retrieval");
   try {
+    if (deadline.signal.aborted) throw deadline.signal.reason;
     const response = await abortable(fetchImpl(url, {
       method: "GET",
       credentials: "omit",
@@ -224,7 +231,7 @@ export async function fetchVerifiedBlob(
     }
     if (received !== resolved.size) throw new Error("Blossom returned fewer bytes than the signed event declares.");
     const blob = new Blob(chunks as BlobPart[], { type: resolved.mimeType });
-    if (await abortable(sha256Hex(blob), deadline.signal) !== resolved.sha256) {
+    if (await abortable(sha256Hex(blob, deadline.signal), deadline.signal) !== resolved.sha256) {
       throw new Error("Blossom bytes failed SHA-256 verification.");
     }
     return blob;

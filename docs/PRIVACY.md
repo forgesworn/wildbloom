@@ -8,7 +8,9 @@ Neither control implies the other.
 The source content, filename and MIME type are encrypted locally before any
 network request. The public Nostr event, Blossom descriptor and torrent refer
 only to the randomised encrypted envelope. The recovery key must be shared
-through a separate trusted channel.
+through a separate trusted channel. A protected NIP-94 event's `x` and `ox`
+tags both cover the randomised encrypted envelope, which is the unchanged file
+given to the upload server. Neither tag contains a plaintext source fingerprint.
 
 This profile still reveals:
 
@@ -59,6 +61,12 @@ discouraged from installing extra add-ons.
 Until Wildbloom has an independently reviewed extension-free signing path,
 Tor-only publication is a network-transport control rather than a claim of
 anonymous publication. Tor-only retrieval does not need a signer.
+
+Changing network profile or withdrawing Tor confirmation clears Wildbloom's
+connected signer identity and requires an explicit connection again. A signer
+approval that completes from the previous profile is discarded. This prevents
+stale direct-mode events from becoming publishable in Tor-only state, but it
+cannot make a reused Nostr key or the signer's own network activity anonymous.
 
 ## Operational rules
 

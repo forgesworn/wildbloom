@@ -53,6 +53,13 @@ unexpected chunk sizes, impossible record counts or lengths, malformed keys,
 non-canonical metadata, excessive source sizes, altered headers, reordered
 records, modified ciphertext, wrong keys and invalid padding buckets.
 
+Hashing, encryption and decryption accept an abort signal and check it between
+bounded chunks. File, endpoint and profile changes cancel the active local
+operation; a completion from an older state revision is discarded rather than
+restoring stale recovery material or a save link. Web Crypto cannot interrupt
+an individual in-flight primitive, so cancellation takes effect at the next
+one-MiB record boundary.
+
 The encrypted Blob's SHA-256 and signed byte count are verified before
 decryption. GCM authentication is then verified independently for every
 record. Plaintext is offered for saving only after every record succeeds.

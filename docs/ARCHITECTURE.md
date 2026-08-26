@@ -76,6 +76,10 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
    library-supplied public STUN/TURN infrastructure.
 6. The signer signs a NIP-94 file event and, in direct mode, a NIP-35 torrent
    index. The encryption scheme is an explicit versioned extension tag.
+   For protected events, `x` and NIP-94's pre-upload-server-transformation
+   `ox` both hash the randomised encrypted envelope. Neither may contain the
+   plaintext source hash, which would create a confirmation oracle. The URL,
+   MIME type and size likewise describe only the encrypted public envelope.
 7. Only the explicit publish action sends those events to chosen relays.
 
 Seeding is deliberately independent from relay publication. A Blossom-backed
@@ -116,3 +120,18 @@ and not branded Tor Browser evidence.
 - No password-derived keys or server-side key recovery.
 - No claim that deleting a relay event retracts metadata or replicated bytes.
 - No automatic fallback from a privacy-preserving transport to clearnet.
+
+## Asynchronous authority
+
+Publication and retrieval state use monotonic revisions. File, endpoint,
+event-ID, consent or profile changes abort the relevant controllers and clear
+downstream state. Hashing and envelope cryptography check cancellation between
+bounded chunks; signer results and other operations that cannot be interrupted
+are committed only if their captured revision still matches. Switching to or
+from Tor also clears the connected signer identity. This prevents an older
+direct-mode result from repopulating or becoming publishable in newer Tor-only
+state.
+
+Relay publication is irreversible once a relay has received an event.
+Cancellation closes pending sockets and discards stale acknowledgements; it is
+not a retraction mechanism.

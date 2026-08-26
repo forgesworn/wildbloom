@@ -74,6 +74,23 @@ describe("Blossom publication", () => {
     await vi.advanceTimersByTimeAsync(25);
     await assertion;
   });
+
+  it("does not invoke a signer or fetch after upload authority is already cancelled", async () => {
+    const inspected = await inspectFile(new File(["hello"], "hello.txt", { type: "text/plain" }));
+    const signEvent = vi.fn(signer.signEvent);
+    const fetchMock = vi.fn<typeof fetch>();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(uploadToBlossom(
+      inspected,
+      "https://cdn.example.com",
+      { ...signer, signEvent },
+      pubkey,
+      { fetchImpl: fetchMock, signal: controller.signal },
+    )).rejects.toThrow(/cancelled/u);
+    expect(signEvent).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("verified Blossom retrieval", () => {
@@ -141,5 +158,18 @@ describe("verified Blossom retrieval", () => {
     const assertion = expect(result).rejects.toThrow("Blossom retrieval timed out.");
     await vi.advanceTimersByTimeAsync(25);
     await assertion;
+  });
+
+  it("does not invoke fetch when retrieval was cancelled before it began", async () => {
+    const hash = "ab".repeat(32);
+    const resolved = {
+      url: `https://cdn.example.com/${hash}.bin`, sha256: hash, size: 5, mimeType: "application/octet-stream",
+    } as ResolvedHybridEvent;
+    const fetchMock = vi.fn<typeof fetch>();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(fetchVerifiedBlob(resolved, { fetchImpl: fetchMock, signal: controller.signal }))
+      .rejects.toThrow(/cancelled/u);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

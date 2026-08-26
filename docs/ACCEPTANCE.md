@@ -30,6 +30,12 @@ the finish line.
 - Blossom ciphertext retrieval, signed size/hash verification and local
   authenticated decryption back to the original file.
 - Consent invalidation when the file or network profile changes.
+- Superseded local encryption cannot restore stale file facts or recovery
+  material after the selected file changes.
+- A delayed direct-mode signer result is discarded across a Tor-profile
+  switch; signer identity is cleared and must be connected again.
+- Withdrawing Tor confirmation clears signer identity and pending network
+  authority.
 - User cancellation closes an in-flight upload and partial-body download,
   clears stale output and leaves a safe retry path.
 - Axe-core WCAG A/AA scans of the initial, encrypted preparation, verified
@@ -40,6 +46,9 @@ the finish line.
   plus visible focus and scanning under Chromium forced-colours emulation.
 - Tor-only rejection of clearnet endpoints and absence of torrent metadata or
   WebRTC controls.
+- Adversarial envelope header, length and record-order authentication; exact
+  scalar event tags; bounded upload authority; relay split views, cancellation
+  and fan-out limits.
 - Secret scan and guarded dependency audit.
 
 Run the complete gate with:
@@ -85,6 +94,15 @@ context without a signer, refuses WebRTC and proves a denied Blossom target
 does not retain a stale download. Temporary onion keys are deleted after Tor
 has stopped. The on-demand `tor-acceptance` GitHub workflow runs the same gate
 on Linux.
+
+Tor bootstrap and hostname-file creation are not treated as application
+readiness. Initial onion navigation is retried within the same bounded
+three-minute window before the publication ceremony begins. Readiness requires
+an HTTP-successful exact-origin document load and a visible application marker;
+it does not depend on Playwright's unreliable `networkidle` heuristic over Tor.
+After `NEWNYM`, the fresh browser context must independently re-establish both
+controlled service onions before the one-shot signed-event lookup begins; the
+product's bounded relay timeout is not weakened or silently retried.
 
 Chromium does not treat HTTP onion origins as secure contexts, so the harness
 uses Chromium's test-only secure-origin override to exercise Wildbloom's Web

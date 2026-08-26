@@ -25,14 +25,12 @@ const AUTH_KIND = 24242;
 const FILE_KIND = 1063;
 const TORRENT_KIND = 2003;
 
-function exactTag(template: EventTemplate, name: string, value: string): boolean {
-  return template.tags.some((tag) => tag.length === 2 && tag[0] === name && tag[1] === value);
-}
-
 function uniqueTag(tags: readonly string[][], name: string, maximumLength = 8192): string {
-  const values = tags.filter((tag) => tag[0] === name && typeof tag[1] === "string").map((tag) => tag[1] as string);
-  if (values.length !== 1) throw new Error(`Signed event must contain exactly one ${name} tag.`);
-  const value = values[0] as string;
+  const matches = tags.filter((tag) => tag[0] === name);
+  if (matches.length !== 1 || matches[0]?.length !== 2 || typeof matches[0][1] !== "string") {
+    throw new Error(`Signed event must contain exactly one scalar ${name} tag.`);
+  }
+  const value = matches[0][1];
   if (value.length > maximumLength) throw new Error(`Signed event ${name} tag is unexpectedly large.`);
   return value;
 }
@@ -89,13 +87,40 @@ export function buildUploadAuthorisation(
   };
 }
 
-export function encodeNostrAuthorisation(event: SignedNostrEvent): string {
+export function encodeNostrAuthorisation(
+  event: SignedNostrEvent,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): string {
   if (!validateEvent(event) || !verifyEvent(event)) throw new Error("Invalid Blossom authorisation signature.");
-  if (event.kind !== AUTH_KIND || !exactTag(event, "t", "upload")) throw new Error("Not a Blossom upload authorisation event.");
-  if (!event.tags.some((tag) => tag[0] === "expiration")
-    || !event.tags.some((tag) => tag[0] === "server")
-    || !event.tags.some((tag) => tag[0] === "x")) {
-    throw new Error("Blossom upload authorisation is not fully scoped.");
+  if (event.kind !== AUTH_KIND || uniqueTag(event.tags, "t", 32) !== "upload") {
+    throw new Error("Not a Blossom upload authorisation event.");
+  }
+  if (!Number.isSafeInteger(event.created_at) || event.created_at < 0) throw new Error("Invalid Blossom authorisation timestamp.");
+  const expirationText = uniqueTag(event.tags, "expiration", 16);
+  if (!/^[0-9]{1,16}$/u.test(expirationText)) throw new Error("Invalid Blossom authorisation expiration.");
+  const expiration = Number(expirationText);
+  if (!Number.isSafeInteger(expiration)
+    || expiration - event.created_at < 30
+    || expiration - event.created_at > 300) {
+    throw new Error("Blossom upload authorisation is not short-lived.");
+  }
+  if (!Number.isSafeInteger(nowSeconds) || nowSeconds < 0) throw new Error("Invalid current timestamp.");
+  if (event.created_at >= nowSeconds || expiration <= nowSeconds) {
+    throw new Error("Blossom upload authorisation is not currently valid.");
+  }
+  const server = uniqueTag(event.tags, "server", 255);
+  let serverUrl: URL;
+  try {
+    serverUrl = new URL(`https://${server}`);
+  } catch {
+    throw new Error("Blossom upload authorisation has an invalid server scope.");
+  }
+  if (server !== server.toLowerCase() || serverUrl.hostname !== server || serverUrl.port || serverUrl.pathname !== "/") {
+    throw new Error("Blossom upload authorisation has an invalid server scope.");
+  }
+  const hash = assertHex64(uniqueTag(event.tags, "x", 64), "Authorisation blob SHA-256");
+  if (event.content !== `Upload blob ${hash} to ${server}`) {
+    throw new Error("Blossom upload authorisation has an unexpected human-readable purpose.");
   }
   const bytes = new TextEncoder().encode(JSON.stringify(event));
   let binary = "";
@@ -118,6 +143,9 @@ export function buildFileEvent(publication: HybridPublication, nowSeconds = Math
       ["url", descriptor.url],
       ["m", inspected.type.toLowerCase()],
       ["x", inspected.sha256],
+      // Client-side encryption happens before upload. NIP-94's `ox` is the
+      // blob before any upload-server transformation, so it is the public
+      // envelope hash too and must never be replaced with the source hash.
       ["ox", inspected.sha256],
       ["size", String(inspected.size)],
       ...torrentTags,

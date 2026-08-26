@@ -39,13 +39,15 @@
 | Attack | Behaviour |
 | --- | --- |
 | NIP-07 signer mutates reviewed fields | Reject unless the returned valid signature covers the exact template |
-| Upload token replayed elsewhere | `server` and `x` tags constrain it; expiry limits time |
+| Upload token replayed elsewhere | Exact scalar `server` and `x` tags constrain it; duplicate scopes are rejected, the human-readable purpose is canonical, and Wildbloom issues a 90-second signed lifetime (the encoder rejects stale authority or anything beyond a five-minute hard cap) |
+| Encrypted event identifies known source bytes | Both NIP-94 `x` and pre-upload-server-transformation `ox` hash only the randomised encrypted envelope, never the plaintext source |
 | Blossom descriptor points at different bytes | Reject URL/hash/size mismatch |
 | Blossom response is truncated or enlarged | Reject signed byte-count mismatch |
 | Blossom response changes content | Reject SHA-256 mismatch |
 | Blossom silently redirects | Reject; transport authority never follows redirects |
 | Relay returns malformed/oversized data | Ignore or reject; cap each message at 1 MiB |
 | Relay returns an event for another ID | Ignore |
+| One relay presents a validly signed event for another ID while another has the requested event | Continue until the exact cryptographic event ID wins; an exact ID cannot name two different valid events |
 | Validly signed event has conflicting duplicate tags | Reject |
 | Magnet and Nostr info hash disagree | Reject before joining swarm |
 | Magnet adds an extra tracker, web seed or metadata source | Rebuild from validated fields and strip unrecognised parameters |
@@ -59,6 +61,9 @@
 | Upload or retrieval stalls | Bound the operation by a deadline; explicit cancellation aborts fetches and destroys in-flight peer clients |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
 | User changes file, endpoint or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority |
+| Local crypto, signer or relay result finishes after that state change | Abort local hashing/crypto where possible and discard every result whose monotonic state revision is stale |
+| Direct-mode signer approval finishes after a switch to Tor-only mode | Discard the signature, clear the signer identity and require a fresh Tor-profile connection |
+| User withdraws Tor, upload, relay-publication or swarm consent during active work | Abort the corresponding pending work and clear downstream authority; already uploaded bytes or sent relay events cannot be retracted |
 
 ## Before any public deployment
 

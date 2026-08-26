@@ -105,6 +105,7 @@ export async function downloadFromSwarm(
     throw new Error("The signed event does not contain a usable WebTorrent transport.");
   }
   const { default: WebTorrent } = await loader();
+  if (signal?.aborted) throw new Error("Swarm download cancelled.");
   const client = new WebTorrent(privateWebTorrentClientOptions());
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -139,7 +140,7 @@ export async function downloadFromSwarm(
       });
       void torrent.files[0].blob().then((blob) => {
         if (settled) return;
-        return sha256Hex(blob).then((hash) => {
+        return sha256Hex(blob, signal).then((hash) => {
           if (settled) return;
           if (hash !== resolved.sha256) {
             fail(new Error("Swarm bytes failed the signed SHA-256 check."));

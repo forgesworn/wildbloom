@@ -34,24 +34,47 @@ function toHex(bytes: Uint8Array): string {
   return result;
 }
 
-async function updateBlobHash(hasher: ReturnType<typeof sha256.create>, blob: Blob): Promise<void> {
+function assertActive(signal: AbortSignal | undefined, operation: string): void {
+  if (signal?.aborted) throw new Error(`${operation} cancelled.`);
+}
+
+async function updateBlobHash(
+  hasher: ReturnType<typeof sha256.create>,
+  blob: Blob,
+  signal?: AbortSignal,
+): Promise<void> {
   const reader = blob.stream().getReader();
+  const abort = (): void => { void reader.cancel(signal?.reason).catch(() => undefined); };
+  signal?.addEventListener("abort", abort, { once: true });
   try {
     while (true) {
+      assertActive(signal, "Local hashing");
       const { done, value } = await reader.read();
+      assertActive(signal, "Local hashing");
       if (done) return;
       if (value) hasher.update(value);
     }
   } finally {
+    signal?.removeEventListener("abort", abort);
     reader.releaseLock();
   }
 }
 
-export async function sha256Hex(input: Blob | ArrayBuffer | Uint8Array): Promise<string> {
+export async function sha256Hex(
+  input: Blob | ArrayBuffer | Uint8Array,
+  signal?: AbortSignal,
+): Promise<string> {
   const hasher = sha256.create();
-  if (input instanceof Blob) await updateBlobHash(hasher, input);
-  else if (input instanceof Uint8Array) hasher.update(input);
-  else hasher.update(new Uint8Array(input));
+  if (input instanceof Blob) await updateBlobHash(hasher, input, signal);
+  else {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    for (let offset = 0; offset < bytes.length; offset += ENVELOPE_CHUNK_BYTES) {
+      assertActive(signal, "Local hashing");
+      hasher.update(bytes.subarray(offset, offset + ENVELOPE_CHUNK_BYTES));
+      await Promise.resolve();
+    }
+  }
+  assertActive(signal, "Local hashing");
   return toHex(hasher.digest());
 }
 
@@ -114,7 +137,9 @@ async function makePlaintextChunk(
   prefix: Uint8Array,
   offset: number,
   length: number,
+  signal?: AbortSignal,
 ): Promise<Uint8Array<ArrayBuffer>> {
+  assertActive(signal, "Local encryption");
   const chunk = new Uint8Array(length);
   fillRandom(chunk);
   const prefixStart = Math.max(offset, 0);
@@ -128,12 +153,18 @@ async function makePlaintextChunk(
     const sourceStart = overlapStart - fileStart;
     const sourceEnd = overlapEnd - fileStart;
     const source = new Uint8Array(await file.slice(sourceStart, sourceEnd).arrayBuffer());
-    chunk.set(source, overlapStart - offset);
+    try {
+      assertActive(signal, "Local encryption");
+      chunk.set(source, overlapStart - offset);
+    } finally {
+      source.fill(0);
+    }
   }
   return chunk;
 }
 
-export async function encryptPrivacyEnvelope(file: File): Promise<EncryptedEnvelope> {
+export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): Promise<EncryptedEnvelope> {
+  assertActive(signal, "Local encryption");
   assertPrototypeFileSize(file.size);
   const metadata: EnvelopeMetadata = {
     name: sanitiseFileName(file.name),
@@ -162,19 +193,26 @@ export async function encryptPrivacyEnvelope(file: File): Promise<EncryptedEnvel
   const recoveryKey = `${RECOVERY_KEY_PREFIX}${base64UrlEncode(rawKey)}`;
   const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
   rawKey.fill(0);
+  assertActive(signal, "Local encryption");
 
   const parts: BlobPart[] = [header];
   for (let counter = 0; counter < recordCount; counter += 1) {
+    assertActive(signal, "Local encryption");
     const offset = counter * ENVELOPE_CHUNK_BYTES;
     const length = Math.min(ENVELOPE_CHUNK_BYTES, plaintextLength - offset);
-    const plaintext = await makePlaintextChunk(file, prefix, offset, length);
-    const ciphertext = await crypto.subtle.encrypt({
-      name: "AES-GCM",
-      iv: makeNonce(noncePrefix, counter),
-      additionalData: makeAdditionalData(header, counter),
-      tagLength: 128,
-    }, key, plaintext);
-    plaintext.fill(0);
+    const plaintext = await makePlaintextChunk(file, prefix, offset, length, signal);
+    let ciphertext: ArrayBuffer;
+    try {
+      ciphertext = await crypto.subtle.encrypt({
+        name: "AES-GCM",
+        iv: makeNonce(noncePrefix, counter),
+        additionalData: makeAdditionalData(header, counter),
+        tagLength: 128,
+      }, key, plaintext);
+    } finally {
+      plaintext.fill(0);
+    }
+    assertActive(signal, "Local encryption");
     parts.push(ciphertext);
   }
 
@@ -190,13 +228,15 @@ export async function encryptPrivacyEnvelope(file: File): Promise<EncryptedEnvel
   };
 }
 
-async function parseEnvelopeHeader(file: Blob): Promise<{
+async function parseEnvelopeHeader(file: Blob, signal?: AbortSignal): Promise<{
   header: Uint8Array;
   chunkSize: number;
   recordCount: number;
   noncePrefix: Uint8Array;
 }> {
+  assertActive(signal, "Local decryption");
   const header = new Uint8Array(await file.slice(0, ENVELOPE_HEADER_BYTES).arrayBuffer());
+  assertActive(signal, "Local decryption");
   if (header.length !== ENVELOPE_HEADER_BYTES || ENVELOPE_MAGIC.some((byte, index) => header[index] !== byte)) {
     throw new Error("This is not a Wildbloom encrypted envelope.");
   }
@@ -243,56 +283,75 @@ function parseEnvelopeMetadata(plaintext: Uint8Array): { metadata: EnvelopeMetad
   return { metadata: { name, size, type }, prefixLength: 4 + metadataLength };
 }
 
-export async function decryptPrivacyEnvelope(file: Blob, recoveryKey: string): Promise<File> {
+export async function decryptPrivacyEnvelope(
+  file: Blob,
+  recoveryKey: string,
+  signal?: AbortSignal,
+): Promise<File> {
+  assertActive(signal, "Local decryption");
   assertPrototypeTransferSize(file.size);
   if (!recoveryKey.startsWith(RECOVERY_KEY_PREFIX)) throw new Error("The recovery key is not a Wildbloom v1 key.");
   const rawKey = base64UrlDecode(recoveryKey.slice(RECOVERY_KEY_PREFIX.length));
   const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
   rawKey.fill(0);
-  const { header, chunkSize, recordCount, noncePrefix } = await parseEnvelopeHeader(file);
+  assertActive(signal, "Local decryption");
+  const { header, chunkSize, recordCount, noncePrefix } = await parseEnvelopeHeader(file, signal);
   const plaintextLength = file.size - ENVELOPE_HEADER_BYTES - recordCount * ENVELOPE_TAG_BYTES;
 
   let metadata: EnvelopeMetadata | null = null;
   let prefixLength = 0;
-  const parts: BlobPart[] = [];
+  const parts: Uint8Array<ArrayBuffer>[] = [];
   let copied = 0;
-  for (let counter = 0; counter < recordCount; counter += 1) {
-    const ciphertextStart = ENVELOPE_HEADER_BYTES + counter * (chunkSize + ENVELOPE_TAG_BYTES);
-    const ciphertextEnd = counter === recordCount - 1 ? file.size : ciphertextStart + chunkSize + ENVELOPE_TAG_BYTES;
-    const ciphertext = await file.slice(ciphertextStart, ciphertextEnd).arrayBuffer();
-    let plaintext: Uint8Array;
-    try {
-      plaintext = new Uint8Array(await crypto.subtle.decrypt({
-        name: "AES-GCM",
-        iv: makeNonce(noncePrefix, counter),
-        additionalData: makeAdditionalData(header, counter),
-        tagLength: 128,
-      }, key, ciphertext));
-    } catch {
-      throw new Error("The recovery key is wrong or the encrypted envelope was modified.");
-    }
-    if (!metadata) {
-      const parsed = parseEnvelopeMetadata(plaintext);
-      metadata = parsed.metadata;
-      prefixLength = parsed.prefixLength;
-      if (paddedPlaintextLength(prefixLength + metadata.size) !== plaintextLength) {
+  try {
+    for (let counter = 0; counter < recordCount; counter += 1) {
+      assertActive(signal, "Local decryption");
+      const ciphertextStart = ENVELOPE_HEADER_BYTES + counter * (chunkSize + ENVELOPE_TAG_BYTES);
+      const ciphertextEnd = counter === recordCount - 1 ? file.size : ciphertextStart + chunkSize + ENVELOPE_TAG_BYTES;
+      const ciphertext = await file.slice(ciphertextStart, ciphertextEnd).arrayBuffer();
+      assertActive(signal, "Local decryption");
+      let plaintext: Uint8Array<ArrayBuffer>;
+      try {
+        plaintext = new Uint8Array(await crypto.subtle.decrypt({
+          name: "AES-GCM",
+          iv: makeNonce(noncePrefix, counter),
+          additionalData: makeAdditionalData(header, counter),
+          tagLength: 128,
+        }, key, ciphertext));
+      } catch {
+        throw new Error("The recovery key is wrong or the encrypted envelope was modified.");
+      }
+      try {
+        assertActive(signal, "Local decryption");
+        if (!metadata) {
+          const parsed = parseEnvelopeMetadata(plaintext);
+          metadata = parsed.metadata;
+          prefixLength = parsed.prefixLength;
+          if (paddedPlaintextLength(prefixLength + metadata.size) !== plaintextLength) {
+            throw new Error("The encrypted envelope padding is invalid.");
+          }
+        }
+
+        const globalStart = counter * chunkSize;
+        const wantedStart = prefixLength;
+        const wantedEnd = prefixLength + metadata.size;
+        const overlapStart = Math.max(globalStart, wantedStart);
+        const overlapEnd = Math.min(globalStart + plaintext.length, wantedEnd);
+        if (overlapEnd > overlapStart) {
+          const part = plaintext.slice(overlapStart - globalStart, overlapEnd - globalStart);
+          copied += part.length;
+          parts.push(part);
+        }
+      } finally {
         plaintext.fill(0);
-        throw new Error("The encrypted envelope padding is invalid.");
       }
     }
-
-    const globalStart = counter * chunkSize;
-    const wantedStart = prefixLength;
-    const wantedEnd = prefixLength + metadata.size;
-    const overlapStart = Math.max(globalStart, wantedStart);
-    const overlapEnd = Math.min(globalStart + plaintext.length, wantedEnd);
-    if (overlapEnd > overlapStart) {
-      const part = plaintext.slice(overlapStart - globalStart, overlapEnd - globalStart);
-      copied += part.length;
-      parts.push(part);
-    }
-    plaintext.fill(0);
+    if (!metadata || copied !== metadata.size) throw new Error("The encrypted envelope did not contain the declared file.");
+    assertActive(signal, "Local decryption");
+    const recovered = new File(parts, metadata.name, { type: metadata.type, lastModified: 0 });
+    for (const part of parts) part.fill(0);
+    return recovered;
+  } catch (error) {
+    for (const part of parts) part.fill(0);
+    throw error;
   }
-  if (!metadata || copied !== metadata.size) throw new Error("The encrypted envelope did not contain the declared file.");
-  return new File(parts, metadata.name, { type: metadata.type, lastModified: 0 });
 }
