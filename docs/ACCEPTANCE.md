@@ -26,6 +26,9 @@ the finish line.
   host candidates only, reach a connected WebRTC state, and leave the tracker
   after source change or browser closure.
 - Response CSP, framing, referrer, permissions and MIME-sniffing headers.
+- Exact release-file hashes and lengths, no-store HTML, health and errors,
+  immutable content-hashed assets, and hostile host, method, absolute-target,
+  traversal, source-map and repository-file rejection.
 - No remote request on page load.
 - Randomised local encryption and recovery-key gate.
 - Blossom upload of ciphertext rather than source bytes.

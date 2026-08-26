@@ -75,6 +75,7 @@ network defaults.
 ```sh
 npm run check
 npm run ci
+npm run acceptance:deployment
 npm run acceptance:firefox
 npm run smoke:swarm
 npm run acceptance:tor
@@ -83,9 +84,12 @@ npm run acceptance:maximum
 ```
 
 `check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
-production build, a real headless-browser acceptance path and the local secret
-scanner. CI runs the browser path in system Chromium on Windows, Linux and
-macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
+production build, adversarial deployment acceptance, a real headless-browser
+acceptance path and the local secret scanner. The deployment gate verifies the
+exact served build hashes, strict immutable asset names, no-store HTML, health
+and error responses, response security headers and hostile host, method and
+path rejection. CI runs the browser path in system Chromium on Windows, Linux
+and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
 response security headers and zero ambient network activity, then exercises
 encrypted upload, exact Blossom authority,
 NIP-07 signing, controlled relay publication and retrieval, ciphertext
@@ -162,6 +166,10 @@ loopback with the repository's response security headers and `/healthz`.
 Production TLS, HSTS, host allowlisting, reverse-proxy logging and onion-service
 configuration are deployment responsibilities. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+`npm run release:evidence -- --require-clean` emits the full source commit,
+package-lock hash, aggregate build hash and the SHA-256 and length of every
+served file. Record that JSON beside the deployment and rollback evidence.
 
 ## Specifications
 

@@ -8,12 +8,23 @@ static server. The server has no account, signer, upload or relay authority.
 ```sh
 npm ci
 npm run ci
+npm run release:evidence -- --require-clean --output ../wildbloom-release-evidence.json
 npm run serve:production -- --host 127.0.0.1 --port 8080
 ```
 
-The production server exposes `/healthz`, serves only `index.html` and hashed
-assets, accepts only `GET` and `HEAD`, applies no-store to the HTML and health
-response, and applies immutable caching to hashed assets.
+The production server exposes `/healthz`, serves only `index.html` and
+eight-character content-hashed JavaScript and CSS assets, rejects source maps
+and symbolic links, accepts only `GET` and `HEAD`, applies no-store to HTML,
+health and error responses, and applies immutable caching to hashed assets.
+It validates the complete build before listening, so `/healthz` cannot report
+ready for a missing or malformed build.
+
+The release-evidence JSON contains no secret material. It records the full
+source commit, whether the source tree was clean, the package-lock hash, an
+aggregate build hash and the byte length and SHA-256 of every serveable file.
+The command refuses to overwrite an existing record or to write into `dist`.
+Store it outside the repository with the release record rather than publishing
+it from the web root.
 
 It binds to loopback by default and validates the HTTP Host header. Set an
 explicit comma-separated allowlist when a reverse proxy preserves the public

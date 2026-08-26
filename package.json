@@ -12,6 +12,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "serve:production": "node scripts/serve-production.mjs",
+    "release:evidence": "node scripts/release-evidence.mjs",
+    "acceptance:deployment": "node scripts/deployment-acceptance.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "smoke:browser:firefox": "node scripts/browser-smoke.mjs --browser firefox",
     "acceptance:firefox": "node scripts/firefox-acceptance.mjs",
@@ -26,7 +28,7 @@
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "npm run typecheck && npm run test:coverage && npm run build && npm run smoke:browser && npm run secrets",
+    "check": "npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {

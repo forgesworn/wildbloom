@@ -1,6 +1,7 @@
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, lstatSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
+import { inspectProductionBuild, isProductionAssetPath } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
 function argument(name, fallback) {
@@ -12,6 +13,7 @@ const host = argument("--host", "127.0.0.1");
 const port = Number(argument("--port", "8080"));
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("Production port must be between 1 and 65535.");
 const root = resolve(process.cwd(), "dist");
+inspectProductionBuild(root);
 const allowedHosts = new Set((process.env.WILDBLOOM_ALLOWED_HOSTS ?? `localhost,127.0.0.1,${host}`)
   .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean));
 
@@ -42,14 +44,15 @@ const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
-  [".map", "application/json; charset=utf-8"],
 ]);
 
 function hostAllowed(request) {
   const authority = request.headers.host;
   if (!authority) return false;
   try {
-    return allowedHosts.has(new URL(`http://${authority}`).hostname.toLowerCase());
+    const parsed = new URL(`http://${authority}`);
+    if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return false;
+    return allowedHosts.has(parsed.hostname.toLowerCase());
   } catch {
     return false;
   }
@@ -69,7 +72,26 @@ const server = createServer((request, response) => {
     respond(response, 405, { Allow: "GET, HEAD", "Content-Type": "text/plain; charset=utf-8" }, "Method not allowed\n");
     return;
   }
-  const url = new URL(request.url ?? "/", "http://localhost");
+  const target = request.url ?? "";
+  const rawPath = target.split("?", 1)[0] ?? "";
+  if (
+    !target.startsWith("/")
+    || target.startsWith("//")
+    || rawPath.includes("\\")
+    || rawPath.includes("%")
+    || target.includes("#")
+    || rawPath.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    respond(response, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
+    return;
+  }
+  let url;
+  try {
+    url = new URL(target, "http://localhost");
+  } catch {
+    respond(response, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
+    return;
+  }
   if (url.pathname === "/healthz") {
     respond(response, 200, { "Content-Type": "application/json; charset=utf-8" }, request.method === "HEAD" ? "" : '{"status":"ok"}\n');
     return;
@@ -82,19 +104,19 @@ const server = createServer((request, response) => {
     respond(response, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
     return;
   }
-  if (relative !== "index.html" && !/^assets\/[A-Za-z0-9_.-]+$/u.test(relative)) {
+  if (relative !== "index.html" && !isProductionAssetPath(relative)) {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
   const file = resolve(root, relative);
   let details;
   try {
-    details = statSync(file);
+    details = lstatSync(file);
   } catch {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
-  if (!details.isFile()) {
+  if (!details.isFile() || details.isSymbolicLink()) {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
