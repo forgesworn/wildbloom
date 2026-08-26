@@ -101,8 +101,9 @@ and keyboard-triggered reveal and cancellation actions. See
 `ci` additionally audits dependencies. The audit script has one fail-closed
 exception for an `ip` advisory reachable only from WebTorrent's Node UDP-tracker
 parser: Wildbloom imports the prebuilt browser bundle, and the exception fails
-if the package's browser exclusions change. Every other advisory still fails
-CI.
+if the package exclusions, Wildbloom's exact import or the browser-bundle
+contents change. Vite also rejects that Node code from the actual production
+module graph. Every other advisory still fails CI.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr

@@ -1,12 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 
 // npm reports GHSA-2p57-rm9w-gvfp through WebTorrent's Node-only UDP tracker
 // parser. Production imports WebTorrent's prebuilt browser bundle, whose package
-// maps both the server and UDP client out of browser builds. The acceptance-only
-// tracker server is configured with UDP disabled. Keep the production exception
-// fail-closed: it is accepted only while the browser exclusions still hold. Any
-// other advisory fails the build.
+// maps both the server and UDP client out of browser builds. Wildbloom imports
+// that prebuilt browser bundle directly, while its acceptance-only tracker server
+// has UDP disabled. Keep the production exception fail-closed: it is accepted
+// only while the package exclusions, exact import boundary and browser bundle
+// contents still hold. Vite separately rejects the Node modules from its actual
+// production graph. Any other advisory fails the build.
 const ALLOWED_ADVISORY = "GHSA-2p57-rm9w-gvfp";
 
 let report;
@@ -27,9 +29,22 @@ try {
 const trackerPackage = JSON.parse(readFileSync("node_modules/bittorrent-tracker/package.json", "utf8"));
 const browserMap = trackerPackage.browser ?? {};
 const parser = readFileSync("node_modules/bittorrent-tracker/lib/server/parse-udp.js", "utf8");
+const browserBundle = readFileSync("node_modules/webtorrent/dist/webtorrent.min.js", "utf8");
+const webTorrentModuleSpecifiers = globSync("src/**/*.ts").flatMap((file) => {
+  const source = readFileSync(file, "utf8");
+  return [...source.matchAll(/(?:from\s+|import\s*\()\s*["']([^"']*webtorrent[^"']*)["']/gu)]
+    .map((match) => match[1]);
+});
+const exactBrowserImports = webTorrentModuleSpecifiers.length > 0
+  && webTorrentModuleSpecifiers.every((specifier) => specifier === "webtorrent/dist/webtorrent.min.js");
+const browserBundleExcludesNodeIp = !browserBundle.includes("Invalid ip address:")
+  && !browserBundle.includes("lib/server/parse-udp")
+  && !browserBundle.includes("lib/client/udp-tracker");
 const reachabilityGuard = browserMap["./server.js"] === false
   && browserMap["./lib/client/udp-tracker.js"] === false
-  && parser.includes("from 'ip'");
+  && parser.includes("from 'ip'")
+  && exactBrowserImports
+  && browserBundleExcludesNodeIp;
 
 const vulnerabilities = report.vulnerabilities ?? {};
 const memo = new Map();

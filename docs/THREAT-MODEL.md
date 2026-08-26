@@ -70,7 +70,8 @@
 - Complete the release gates in `docs/ACCEPTANCE.md`, including independent
   cryptographic and browser security review.
 - Re-evaluate the documented WebTorrent Node-only `ip` advisory exception on
-  every WebTorrent upgrade; CI fails if its browser reachability guard changes.
+  every WebTorrent upgrade; CI fails if its browser exclusions, exact import,
+  bundle contents or production module graph cross that boundary.
 - Repeat the automated real-onion transport gate, complete its branded Tor
   Browser counterpart, and exercise direct mode with a controlled live
   WebTorrent tracker and two browser peers.
