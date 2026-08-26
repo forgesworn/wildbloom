@@ -132,3 +132,12 @@ footer { padding: 2rem 0; color: var(--muted); font-size: 0.82rem; text-align: c
   button { width: 100%; }
   .inline-actions { width: 100%; }
 }
+
+@media (forced-colors: active) {
+  .profile-option, input, textarea, .status {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+  }
+  .profile-option small { color: CanvasText; }
+}

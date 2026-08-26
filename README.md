@@ -108,10 +108,11 @@ fail-closed behaviour, not interaction in branded Tor Browser; that remains a
 manual release gate. The separate GitHub `tor-acceptance` workflow runs this
 gate on demand.
 
-`acceptance:maximum` drives the exact 256 MiB source limit through local
-encryption in system Chrome with a constrained V8 heap, checks the expected
-envelope size and source hash, then proves that 256 MiB plus one byte fails
-before recovery or upload authority remains. The separate
+`acceptance:maximum` drives the exact 256 MiB source limit through encryption,
+Blossom upload, signed relay publication, exact-ID resolution, ciphertext
+download, verification and local decryption in system Chrome with a constrained
+V8 heap. It hashes the recovered download and proves that 256 MiB plus one byte
+fails before recovery or upload authority remains. The separate
 `maximum-file-acceptance` workflow runs it on demand. This is not proof of
 operating-system memory pressure or a low-end device.
 

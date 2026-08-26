@@ -36,6 +36,8 @@ the finish line.
   recovery, Tor-only and plaintext opt-out states.
 - Keyboard traversal, visible focus, recovery-key reveal and active transfer
   cancellation.
+- WCAG scanning and absence of horizontal overflow at a 320 CSS-pixel viewport,
+  plus visible focus and scanning under Chromium forced-colours emulation.
 - Tor-only rejection of clearnet endpoints and absence of torrent metadata or
   WebRTC controls.
 - Secret scan and guarded dependency audit.
@@ -90,7 +92,7 @@ Crypto path. The branded Tor Browser path is expected to supply that secure
 context, but remains part of its manual release gate. The automated gate is
 real Tor transport evidence, not branded Tor Browser interaction.
 
-## Maximum source gate
+## Maximum source round-trip gate
 
 Run the exact source boundary separately in system Chrome or Chromium:
 
@@ -100,12 +102,14 @@ npm run acceptance:maximum
 ```
 
 The gate creates a real 256 MiB browser `File`, hashes and encrypts it through
-the production UI under a constrained V8 heap, checks the exact source hash and
-269,488,168-byte envelope, then proves 256 MiB plus one byte is rejected before
-recovery material or upload authority survives. The on-demand
-`maximum-file-acceptance` workflow runs the same test on Linux. Binary Blob
-storage is not all charged to the V8 heap, so this is exact-limit and
-heap-bounded evidence, not an operating-system low-memory simulation.
+the production UI under a constrained V8 heap, uploads the exact
+269,488,168-byte envelope, signs and publishes its events, resolves the NIP-94
+event by exact ID, downloads and verifies the ciphertext, decrypts locally and
+stream-hashes the downloaded 256 MiB result. It also proves 256 MiB plus one
+byte is rejected before recovery material or upload authority survives. The
+on-demand `maximum-file-acceptance` workflow runs the same test on Linux.
+Binary Blob storage is not all charged to the V8 heap, so this is exact-limit
+and heap-bounded evidence, not an operating-system low-memory simulation.
 
 ## Release gates not yet satisfied
 
@@ -122,8 +126,9 @@ heap-bounded evidence, not an operating-system low-memory simulation.
 - Branded Firefox and real Safari desktop coverage on their supported
   operating systems; Playwright's patched Firefox and WebKit builds are useful
   engine evidence but not those branded-browser releases.
-- Manual screen-reader, zoom, forced-colours and human keyboard-usability
-  review. Automated WCAG scanning and keyboard mechanics are covered.
+- Manual screen-reader, real browser zoom, forced-colours appearance and human
+  keyboard-usability review. Automated WCAG scanning, 320px reflow,
+  forced-colours semantics and keyboard mechanics are covered.
 - Operating-system memory-pressure and low-end-device tests. The exact maximum
   size and a constrained JS heap are automated, but Blob storage may live
   outside that heap. Operating-system loss is also not yet proven.

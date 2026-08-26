@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   maximum-source:
-    name: exact maximum under constrained JS heap
+    name: exact maximum round-trip under constrained JS heap
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

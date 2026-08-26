@@ -283,6 +283,37 @@ async function assertKeyboardEntry(page, browserName) {
   if (!visibleFocus) throw new Error("Keyboard focus on the signer action was not visibly indicated.");
 }
 
+async function assertAdaptivePresentation(page, browserName) {
+  const originalViewport = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 320, height: 800 });
+    const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    if (horizontalOverflow) throw new Error("The production page overflowed horizontally at a 320 CSS-pixel viewport.");
+    await assertAccessible(page, "320 CSS-pixel reflow");
+
+    if (browserName === "system-chromium" || browserName === "chromium") {
+      await page.emulateMedia({ forcedColors: "active" });
+      if (!(await page.evaluate(() => matchMedia("(forced-colors: active)").matches))) {
+        throw new Error("Chromium did not enter forced-colours mode.");
+      }
+      await page.focus("#connect-signer");
+      const focusVisible = await page.evaluate(() => {
+        const element = document.activeElement;
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        return style.outlineStyle !== "none" && Number.parseFloat(style.outlineWidth) >= 2;
+      });
+      if (!focusVisible) throw new Error("Forced-colours mode removed the visible keyboard focus indicator.");
+      await assertAccessible(page, "Forced-colours production page");
+    }
+  } finally {
+    if (browserName === "system-chromium" || browserName === "chromium") {
+      await page.emulateMedia({ forcedColors: "none" });
+    }
+    if (originalViewport) await page.setViewportSize(originalViewport);
+  }
+}
+
 async function waitForServer(server) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -400,6 +431,7 @@ try {
   }
   await assertAccessible(page, "Initial production page");
   await assertKeyboardEntry(page, browserName);
+  await assertAdaptivePresentation(page, browserName);
 
   await page.fill("#blossom-server", blossomOrigin);
   await page.fill("#relay-urls", relayUrl);
@@ -550,7 +582,10 @@ try {
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
   if (!onionProxyRequests.includes("PUT /upload")) throw new Error("Tor-only upload did not traverse the controlled onion proxy.");
 
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan and keyboard focus/actions, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
+  const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
+    ? "320px reflow and forced-colours"
+    : "320px reflow";
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, controlled relay round-trip, upload/download cancellation with closed connections, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));
