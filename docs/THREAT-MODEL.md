@@ -64,6 +64,7 @@
 | Local crypto, signer or relay result finishes after that state change | Abort local hashing/crypto where possible and discard every result whose monotonic state revision is stale |
 | Direct-mode signer approval finishes after a switch to Tor-only mode | Discard the signature, clear the signer identity and require a fresh Tor-profile connection |
 | User withdraws Tor, upload, relay-publication or swarm consent during active work | Abort the corresponding pending work and clear downstream authority; already uploaded bytes or sent relay events cannot be retracted |
+| User withdraws swarm consent after verified bytes arrive | Confirm destruction of the retained peer session before reporting that participation stopped; if cleanup cannot be confirmed, instruct the user to close the tab |
 
 ## Before any public deployment
 

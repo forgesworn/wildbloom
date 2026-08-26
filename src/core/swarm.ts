@@ -4,6 +4,7 @@ import type { InspectedFile, NetworkProfile, ResolvedHybridEvent, StopHandle, To
 
 const SWARM_TIMEOUT_MS = 30 * 60 * 1000;
 const SWARM_START_TIMEOUT_MS = 30_000;
+const CLIENT_DESTROY_TIMEOUT_MS = 5_000;
 function privateWebTorrentClientOptions() {
   // WebTorrent otherwise inherits public Google and Twilio STUN servers from
   // simple-peer. Wildbloom never contacts undeclared ICE infrastructure. This
@@ -23,7 +24,40 @@ export type WebTorrentLoader = () => Promise<{ default: WebTorrentConstructor }>
 const loadWebTorrent: WebTorrentLoader = () => import("webtorrent/dist/webtorrent.min.js");
 
 async function destroyClient(client: { destroy(callback?: (error?: Error) => void): void }): Promise<void> {
-  await new Promise<void>((resolve) => client.destroy(() => resolve()));
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error instanceof Error ? error : new Error(safeDiagnostic(error)));
+      else resolve();
+    };
+    const timer = globalThis.setTimeout(
+      () => finish(new Error("WebTorrent client cleanup timed out.")),
+      CLIENT_DESTROY_TIMEOUT_MS,
+    );
+    try {
+      client.destroy((error) => finish(error));
+    } catch (error) {
+      finish(error);
+    }
+  });
+}
+
+function cleanupFailure(operation: unknown, cleanup: unknown): Error {
+  const operationMessage = operation instanceof Error ? operation.message : safeDiagnostic(operation);
+  return new Error(`${operationMessage} WebTorrent cleanup failed: ${safeDiagnostic(cleanup)}`);
+}
+
+function clientStopHandle(client: { destroy(callback?: (error?: Error) => void): void }): StopHandle {
+  let stopping: Promise<void> | undefined;
+  return {
+    stop: () => {
+      stopping ??= destroyClient(client);
+      return stopping;
+    },
+  };
 }
 
 export async function startBrowserSeeding(
@@ -40,20 +74,24 @@ export async function startBrowserSeeding(
   const client = new WebTorrent(privateWebTorrentClientOptions());
   return new Promise((resolve, reject) => {
     let settled = false;
+    const rejectAfterDestroy = (error: unknown): void => {
+      void destroyClient(client).then(
+        () => reject(error instanceof Error ? error : new Error(safeDiagnostic(error))),
+        (cleanup) => reject(cleanupFailure(error, cleanup)),
+      );
+    };
     const abort = (): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      void destroyClient(client);
-      reject(new Error("WebTorrent seeding cancelled."));
+      rejectAfterDestroy(new Error("WebTorrent seeding cancelled."));
     };
     const timer = globalThis.setTimeout(() => {
       if (settled) return;
       settled = true;
       signal?.removeEventListener("abort", abort);
-      void destroyClient(client);
-      reject(new Error("WebTorrent did not start seeding before the safety timeout."));
+      rejectAfterDestroy(new Error("WebTorrent did not start seeding before the safety timeout."));
     }, SWARM_START_TIMEOUT_MS);
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) {
@@ -65,8 +103,7 @@ export async function startBrowserSeeding(
         settled = true;
         clearTimeout(timer);
         signal?.removeEventListener("abort", abort);
-        void destroyClient(client);
-        reject(new Error(`WebTorrent failed: ${safeDiagnostic(error)}`));
+        rejectAfterDestroy(new Error(`WebTorrent failed: ${safeDiagnostic(error)}`));
       }
     });
     client.seed(inspected.file, {
@@ -80,14 +117,13 @@ export async function startBrowserSeeding(
         settled = true;
         clearTimeout(timer);
         signal?.removeEventListener("abort", abort);
-        void destroyClient(client);
-        reject(new Error("WebTorrent generated a different info hash from the reviewed torrent metadata."));
+        rejectAfterDestroy(new Error("WebTorrent generated a different info hash from the reviewed torrent metadata."));
         return;
       }
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      resolve({ stop: () => destroyClient(client) });
+      resolve(clientStopHandle(client));
     });
   });
 }
@@ -115,8 +151,10 @@ export async function downloadFromSwarm(
       settled = true;
       clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      void destroyClient(client);
-      reject(error instanceof Error ? error : new Error(safeDiagnostic(error)));
+      void destroyClient(client).then(
+        () => reject(error instanceof Error ? error : new Error(safeDiagnostic(error))),
+        (cleanup) => reject(cleanupFailure(error, cleanup)),
+      );
     };
     const timer = globalThis.setTimeout(() => fail(new Error("Swarm download timed out.")), SWARM_TIMEOUT_MS);
     signal?.addEventListener("abort", abort, { once: true });
@@ -149,7 +187,7 @@ export async function downloadFromSwarm(
           settled = true;
           clearTimeout(timer);
           signal?.removeEventListener("abort", abort);
-          resolve({ blob, session: { stop: () => destroyClient(client) } });
+          resolve({ blob, session: clientStopHandle(client) });
         });
       }).catch(fail);
     });

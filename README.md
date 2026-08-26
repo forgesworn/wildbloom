@@ -101,8 +101,9 @@ confirmation clears signer identity and downstream network authority. A
 separate Chromium gate drives two isolated production pages through
 a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
 the exact source from the browser peer, observes host-only ICE, and proves that
-changing the source stops seeding. Browser acceptance also interrupts a real
-hung upload and partial download, checks that cancellation closes the
+withdrawing swarm consent stops the downloading peer before tab closure and
+changing the source stops the publishing peer. Browser acceptance also
+interrupts a real hung upload and partial download, checks that cancellation closes the
 connection, removes stale output and permits a safe retry. It scans five
 dynamic states with axe-core WCAG A/AA rules and proves visible keyboard focus
 and keyboard-triggered reveal and cancellation actions. See

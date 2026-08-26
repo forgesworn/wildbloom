@@ -6,8 +6,8 @@ the finish line.
 ## Automated on every push
 
 - Node 24 strict TypeScript on GitHub-hosted Windows, Linux and macOS runners.
-- Unit and adversarial tests with global core thresholds of 80% statements,
-  70% branches, 85% functions and 90% lines.
+- Unit and adversarial tests with global core thresholds of 85% statements,
+  75% branches, 88% functions and 94% lines.
 - Production bundle generation.
 - Real Chromium acceptance against the production static server on Windows,
   Linux and macOS.
@@ -24,7 +24,7 @@ the finish line.
   retrieval, proving the bytes came from the other browser peer.
 - Runtime observation that both peers receive an empty ICE-server list, gather
   host candidates only, reach a connected WebRTC state, and leave the tracker
-  after source change or browser closure.
+  after swarm-consent withdrawal and source change, before browser closure.
 - Response CSP, framing, referrer, permissions and MIME-sniffing headers.
 - Exact release-file hashes and lengths, no-store HTML, health and errors,
   immutable content-hashed assets, and hostile host, method, absolute-target,

@@ -395,21 +395,28 @@ try {
   if (relayErrors.length > 0) throw new Error(`Controlled relay errors: ${relayErrors.join("; ")}`);
   if (trackerErrors.length > 0) throw new Error(`Controlled tracker errors: ${trackerErrors.join("; ")}`);
 
+  await downloader.page.uncheck("#download-swarm-consent");
+  await downloader.page.locator("#retrieve-status").filter({ hasText: "Swarm participation stopped" }).waitFor({ timeout: 10_000 });
+  await waitFor(() => peerCount(tracker, infoHash) <= 1, 10_000, "Withdrawing swarm consent did not stop the downloading peer.");
+  if (await downloader.page.isChecked("#download-swarm-consent") || await downloader.page.isEnabled("#fetch-swarm")) {
+    throw new Error("Withdrawing swarm consent retained peer-download authority.");
+  }
+
   await publisher.page.setInputFiles("#publish-file", {
     name: "replacement.txt",
     mimeType: "text/plain",
     buffer: Buffer.from("replacement", "utf8"),
   });
-  await waitFor(() => peerCount(tracker, infoHash) <= 1, 10_000, "Changing the source did not stop the publishing peer.");
+  await waitFor(() => peerCount(tracker, infoHash) === 0, 10_000, "Changing the source did not stop the publishing peer.");
   if (await publisher.page.isChecked("#seed-consent") || await publisher.page.isEnabled("#start-seeding")) {
     throw new Error("Changing the source retained stale swarm authority.");
   }
   await downloaderContext.close();
   downloaderContext = undefined;
-  await waitFor(() => peerCount(tracker, infoHash) === 0, 10_000, "Closing the downloader did not remove the final peer.");
+  if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the downloader restored a withdrawn peer session.");
 
   process.stdout.write(
-    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE and cleanup after interruption (${webSeedAttempts} refused web-seed requests).\n`,
+    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE and confirmed peer cleanup after consent withdrawal and source change (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } catch (error) {
   const diagnostics = [];
