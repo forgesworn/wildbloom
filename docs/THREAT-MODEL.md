@@ -54,6 +54,8 @@
 | Tor-only endpoint is clearnet, v2 onion or checksum-invalid v3 onion | Reject before network access |
 | Tor-only flow requests WebTorrent | Reject before the WebTorrent bundle loads |
 | WebTorrent library supplies undeclared public STUN defaults | Override with an explicit empty ICE-server list; keep cross-network peer delivery unpromised |
+| Web seed masks a broken browser peer path | Two-context acceptance refuses every web-seed retrieval and requires exact recovery through the WSS-signalled peer |
+| File changes while the browser is seeding | Stop the seeding client and clear swarm consent before the replacement can be prepared |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
 | User changes file or transport profile after consent | Clear all publication and swarm consents |
 

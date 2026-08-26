@@ -13,6 +13,13 @@ the finish line.
   Linux and macOS.
 - The same production journey in Playwright Firefox on Linux and Playwright
   WebKit on macOS.
+- Two isolated Chromium contexts publishing and retrieving the encrypted file
+  through a real, ephemeral TLS WebSocket tracker.
+- Exact source recovery while the controlled Blossom web seed refuses every
+  retrieval, proving the bytes came from the other browser peer.
+- Runtime observation that both peers receive an empty ICE-server list, gather
+  host candidates only, reach a connected WebRTC state, and leave the tracker
+  after source change or browser closure.
 - Response CSP, framing, referrer, permissions and MIME-sniffing headers.
 - No remote request on page load.
 - Randomised local encryption and recovery-key gate.
@@ -32,7 +39,12 @@ Run the complete gate with:
 ```sh
 npm ci
 npm run ci
+npm run smoke:swarm
 ```
+
+The local swarm gate also requires `openssl` to create a disposable test-only
+tracker certificate. CI installs the pinned Chromium build and runs the same
+gate on Linux.
 
 Run the additional engines locally after installing their exact Playwright
 builds:
@@ -54,9 +66,10 @@ macOS CI job.
 - Tor Browser exercise against disposable real v3 onion Nostr and Blossom
   services, including denial, timeout and circuit-change behaviour.
 - A supported extension-free signer path for high-anonymity Tor publication.
-- Controlled two-browser WebTorrent seeding and retrieval through a real WSS
-  tracker, with host-candidate and any operator ICE traffic checked against
-  packet evidence.
+- Two-device WebTorrent seeding and retrieval across the intended production
+  network boundary, with host-candidate and any future operator ICE traffic
+  checked against packet capture. The automated two-context loopback gate does
+  not prove NAT traversal or absence of lower-level browser traffic.
 - Branded Firefox and real Safari desktop coverage on their supported
   operating systems; Playwright's patched Firefox and WebKit builds are useful
   engine evidence but not those branded-browser releases.

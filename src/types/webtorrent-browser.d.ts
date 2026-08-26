@@ -2,7 +2,7 @@ declare module "webtorrent/dist/webtorrent.min.js" {
   interface TorrentFile {
     readonly name: string;
     readonly length: number;
-    getBlob(callback: (error: Error | null, blob?: Blob) => void): void;
+    blob(options?: { start?: number; end?: number }): Promise<Blob>;
   }
 
   interface Torrent {

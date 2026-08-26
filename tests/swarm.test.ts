@@ -115,7 +115,7 @@ describe("WebTorrent safety boundary", () => {
           length: 5,
           progress: 1,
           downloadSpeed: 100,
-          files: [{ length: 5, getBlob: (done: (error: Error | null, blob: Blob) => void) => done(null, bytes) }],
+          files: [{ length: 5, blob: async () => bytes }],
           on: (event: string, listener: () => void) => { if (event === "download") listener(); },
         });
       }
@@ -150,5 +150,32 @@ describe("WebTorrent safety boundary", () => {
       sha256: "ab".repeat(32),
     } as unknown as ResolvedHybridEvent;
     await expect(downloadFromSwarm(resolved, () => undefined, "direct", loaderFor(Client))).rejects.toThrow(/does not match/u);
+  });
+
+  it("destroys the client when the real promise-based file read fails", async () => {
+    class Client {
+      static last: Client;
+      destroyed = false;
+      constructor() { Client.last = this; }
+      on(): void {}
+      add(_magnet: string, _options: unknown, callback: (torrent: object) => void): void {
+        callback({
+          infoHash,
+          length: 5,
+          files: [{ length: 5, blob: async () => { throw new Error("store interrupted"); } }],
+          on: () => undefined,
+        });
+      }
+      destroy(callback?: () => void): void { this.destroyed = true; callback?.(); }
+    }
+    const resolved = {
+      magnetUri: `magnet:?xt=urn:btih:${infoHash}`,
+      infoHash,
+      trackers: [tracker],
+      size: 5,
+      sha256: "ab".repeat(32),
+    } as unknown as ResolvedHybridEvent;
+    await expect(downloadFromSwarm(resolved, () => undefined, "direct", loaderFor(Client))).rejects.toThrow(/store interrupted/u);
+    expect(Client.last.destroyed).toBe(true);
   });
 });

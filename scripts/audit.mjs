@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // npm reports GHSA-2p57-rm9w-gvfp through WebTorrent's Node-only UDP tracker
-// server parser. Wildbloom imports WebTorrent's prebuilt browser bundle, whose
-// package maps both the server and UDP client out of browser builds. Keep this
-// exception fail-closed: it is accepted only while those exact reachability
-// facts remain true. Any other advisory fails the build.
+// parser. Production imports WebTorrent's prebuilt browser bundle, whose package
+// maps both the server and UDP client out of browser builds. The acceptance-only
+// tracker server is configured with UDP disabled. Keep the production exception
+// fail-closed: it is accepted only while the browser exclusions still hold. Any
+// other advisory fails the build.
 const ALLOWED_ADVISORY = "GHSA-2p57-rm9w-gvfp";
 
 let report;

@@ -19,8 +19,8 @@ not claim to create a new storage network.
 
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
-onion-service acceptance, cross-browser testing and a controlled live swarm
-remain release gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
+onion-service acceptance, branded-browser testing and cross-network packet
+evidence remain release gates. See [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
 Linux and macOS. It is not currently a native desktop application; native
@@ -80,11 +80,14 @@ response security headers and zero ambient network activity, then exercises
 encrypted upload, exact Blossom authority,
 NIP-07 signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
-fallback. `ci` additionally audits dependencies. The audit script has one
-fail-closed exception for an `ip` advisory reachable only from WebTorrent's
-Node UDP-tracker server parser: Wildbloom imports the prebuilt browser bundle,
-and the exception fails if the package's browser exclusions change. Every
-other advisory still fails CI.
+fallback. A separate Chromium gate drives two isolated production pages through
+a real TLS WebSocket tracker, refuses every Blossom web-seed request, recovers
+the exact source from the browser peer, observes host-only ICE, and proves that
+changing the source stops seeding. `ci` additionally audits dependencies. The
+audit script has one fail-closed exception for an `ip` advisory reachable only
+from WebTorrent's Node UDP-tracker parser: Wildbloom imports the prebuilt
+browser bundle, and the exception fails if the package's browser exclusions
+change. Every other advisory still fails CI.
 
 ## What publication reveals
 

@@ -12,6 +12,13 @@ Playwright Firefox on Linux and Playwright WebKit on macOS. This is an
 application compatibility claim, not a claim that native installers,
 background services, branded Firefox or real Safari have been proven.
 
+A separate Linux Chromium gate runs two isolated production contexts against
+an ephemeral TLS WebSocket tracker. Blossom retrieval is deliberately refused,
+so exact recovery demonstrates real peer transport rather than a web-seed
+fallback. Runtime instrumentation observes the actual empty ICE-server
+configuration and host-only candidate classes. This remains same-host engine
+evidence, not cross-device NAT traversal or packet-capture evidence.
+
 Do not add a desktop shell merely for packaging. Reconsider one only if a
 validated requirement needs native streaming for very large files, reliable
 background seeding, OS key storage or a separately designed bundled-Tor

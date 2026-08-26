@@ -104,12 +104,8 @@ export async function downloadFromSwarm(
         return;
       }
       torrent.on("download", () => onProgress(torrent.progress, torrent.downloadSpeed));
-      torrent.files[0].getBlob((error, blob) => {
-        if (error || !blob) {
-          fail(error ?? new Error("WebTorrent did not return the downloaded file."));
-          return;
-        }
-        void sha256Hex(blob).then((hash) => {
+      void torrent.files[0].blob().then((blob) => {
+        return sha256Hex(blob).then((hash) => {
           if (hash !== resolved.sha256) {
             fail(new Error("Swarm bytes failed the signed SHA-256 check."));
             return;
@@ -117,8 +113,8 @@ export async function downloadFromSwarm(
           settled = true;
           clearTimeout(timer);
           resolve({ blob, session: { stop: () => destroyClient(client) } });
-        }).catch(fail);
-      });
+        });
+      }).catch(fail);
     });
   });
 }
