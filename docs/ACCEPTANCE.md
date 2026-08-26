@@ -36,6 +36,9 @@ the finish line.
 - Randomised local encryption and recovery-key gate.
 - Blossom upload of ciphertext rather than source bytes.
 - Exact hash, server and 90-second BUD-11 upload authority.
+- Exact external signed-event handoff: a validly signed changed template is
+  rejected before network access, the injected NIP-07 signer is never called,
+  and deliberate upload authority is capped at five minutes.
 - Controlled Nostr relay publish, acknowledgement, exact-ID lookup and signed
   event validation.
 - Blossom ciphertext retrieval, signed size/hash verification and local
@@ -135,12 +138,14 @@ controlled service onions before the one-shot signed-event lookup begins; the
 product's bounded relay timeout is not weakened or silently retried.
 
 The extended gate requests another `NEWNYM`, launches the actual Tor Project
-Firefox binary with a disposable profile and loopback-only WebDriver BiDi,
-and uses the controlled Tor daemon as its SOCKS transport. No signer extension
-or privileged browser access is enabled. It proves secure-context loading,
-exact onion authorities, a bounded relay timeout, cancellation of a partial
-Blossom response, exact signer-free recovery, absence of WebRTC and fail-closed
-service denial. The on-demand `tor-browser-acceptance` workflow downloads a
+Firefox binary with a disposable profile and loopback-only WebDriver BiDi.
+With no signer extension or privileged browser access, that profile prepares
+ciphertext, imports exact externally produced signatures, uploads and publishes
+through the controlled onions. The browser is closed, Tor acknowledges
+`NEWNYM`, and a second fresh profile proves secure-context loading, exact onion
+authorities, a bounded relay timeout, cancellation of a partial Blossom
+response, exact signer-free recovery, absence of WebRTC and fail-closed service
+denial. The on-demand `tor-browser-acceptance` workflow downloads a
 pinned Linux Tor Browser archive and verifies its Tor Browser Developers
 signature before running the same gate.
 
@@ -148,7 +153,7 @@ Chromium does not treat HTTP onion origins as secure contexts, so the base
 harness uses Chromium's test-only secure-origin override to exercise
 Wildbloom's Web Crypto path. Branded Tor Browser supplies the onion secure
 context without that override. Headless remote-control evidence is still not a
-human usability, fingerprint-equivalence or extension-free publication claim.
+human usability or fingerprint-equivalence claim.
 
 ## Maximum source round-trip gate
 
@@ -175,8 +180,9 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 - Human Tor Browser publication and retrieval review, including browser chrome,
   security-level changes, new-identity behaviour, cancellation and timeout UI.
   The automated headless branded-browser gate covers the content-engine
-  retrieval ceremony, not human usability or fingerprint equivalence.
-- A supported extension-free signer path for high-anonymity Tor publication.
+  publication and retrieval ceremony, not human usability or fingerprint
+  equivalence. External-signer interoperability also needs human review with
+  the intended signing application and transfer medium.
 - Two-device WebTorrent seeding and retrieval across the intended production
   network boundary, with host-candidate and any future operator ICE traffic
   checked against packet capture. The automated two-context loopback gate does

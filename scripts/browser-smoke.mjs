@@ -79,6 +79,8 @@ let hangingDownloadClosed;
 let holdNextSignature = false;
 let heldSignatureStarted;
 let releaseHeldSignature;
+let nip07PublicKeyCalls = 0;
+let nip07SignatureCalls = 0;
 
 const blossom = createServer((request, response) => {
   void (async () => {
@@ -419,8 +421,12 @@ try {
   const remoteRequests = [];
 
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.exposeFunction("__wildbloomGetPublicKey", () => PUBKEY);
+  await page.exposeFunction("__wildbloomGetPublicKey", () => {
+    nip07PublicKeyCalls += 1;
+    return PUBKEY;
+  });
   await page.exposeFunction("__wildbloomSignEvent", async (template) => {
+    nip07SignatureCalls += 1;
     if (holdNextSignature) {
       holdNextSignature = false;
       heldSignatureStarted?.();
@@ -705,6 +711,90 @@ try {
   }
   if (!(await page.isHidden("#recovery-key-panel"))) throw new Error("Plaintext opt-out displayed a misleading recovery key.");
   await assertAccessible(page, "Plaintext opt-out state");
+
+  const nip07CallsBeforeExternal = { publicKey: nip07PublicKeyCalls, signatures: nip07SignatureCalls };
+  await page.check('input[name="network-profile"][value="direct"]');
+  await page.check('input[name="signing-method"][value="external"]');
+  await page.check("#protect-file");
+  await page.click("#inspect-file");
+  await page.locator("#publish-status").filter({ hasText: "Encrypted transfer payload prepared" }).waitFor();
+  await page.fill("#external-signer-pubkey", PUBKEY);
+  await page.fill("#blossom-server", blossomOrigin);
+  await page.fill("#relay-urls", relayUrl);
+  await page.fill("#tracker-urls", "wss://tracker.example.com/announce");
+  await page.click("#connect-signer");
+  await page.check("#upload-consent");
+  await page.check("#key-saved-consent");
+  const authorisationsBeforeExternal = uploadAuthorisations.length;
+  await page.click("#upload-file");
+  await page.locator("#external-signing-panel").waitFor({ state: "visible" });
+  await page.click("#cancel-external-signature");
+  await page.locator("#external-signing-panel").waitFor({ state: "hidden" });
+  await page.locator("#upload-file:enabled").waitFor();
+  if (uploadAuthorisations.length !== authorisationsBeforeExternal) {
+    throw new Error("Cancelling external upload signing reached Blossom.");
+  }
+  await page.click("#upload-file");
+  await page.locator("#external-signing-panel").waitFor({ state: "visible" });
+  await assertAccessible(page, "External upload-authorisation handoff");
+  const uploadTemplate = JSON.parse(await page.inputValue("#external-unsigned-event"));
+  if (uploadTemplate.kind !== 24242) throw new Error("External handoff did not expose the Blossom upload template first.");
+  const handoffDownload = await page.locator("#external-signing-links a").evaluate((anchor) => ({
+    mimeType: window.__wildbloomObservedObjectUrls?.get(anchor.href)?.type,
+    download: anchor.download,
+  }));
+  if (handoffDownload.mimeType !== "application/octet-stream" || handoffDownload.download !== "wildbloom-unsigned-24242.json") {
+    throw new Error(`External unsigned-event download was not inert and explicit: ${JSON.stringify(handoffDownload)}`);
+  }
+  const changedUploadTemplate = {
+    ...uploadTemplate,
+    tags: uploadTemplate.tags.map((tag) => tag[0] === "x" ? ["x", "00".repeat(32)] : tag),
+  };
+  await page.fill("#external-signed-event", JSON.stringify(finalizeEvent(changedUploadTemplate, SECRET)));
+  await page.click("#accept-external-signature");
+  await page.locator("#publish-status.error").filter({ hasText: "changed the event" }).waitFor();
+  if (uploadAuthorisations.length !== authorisationsBeforeExternal || await page.isHidden("#external-signing-panel")) {
+    throw new Error("A changed external upload signature reached the network or destroyed the retry ceremony.");
+  }
+  await page.fill("#external-signed-event", JSON.stringify(finalizeEvent(uploadTemplate, SECRET)));
+  await page.click("#accept-external-signature");
+  await page.locator("#publish-status").filter({ hasText: "hybrid metadata is staged" }).waitFor();
+  const externalAuthorisation = uploadAuthorisations[authorisationsBeforeExternal];
+  const externalExpiration = Number(externalAuthorisation?.tags.find((tag) => tag[0] === "expiration")?.[1]);
+  if (!externalAuthorisation || externalExpiration - externalAuthorisation.created_at !== 300) {
+    throw new Error("External Blossom authority was not bounded to the deliberate five-minute handoff window.");
+  }
+
+  await page.click("#sign-events");
+  await page.waitForFunction(() => {
+    const value = document.querySelector("#external-unsigned-event")?.value;
+    return value ? JSON.parse(value).kind === 1063 : false;
+  });
+  const externalFileTemplate = JSON.parse(await page.inputValue("#external-unsigned-event"));
+  await page.fill("#external-signed-event", JSON.stringify(finalizeEvent(externalFileTemplate, SECRET)));
+  await page.click("#accept-external-signature");
+  await page.waitForFunction(() => {
+    const value = document.querySelector("#external-unsigned-event")?.value;
+    return value ? JSON.parse(value).kind === 2003 : false;
+  });
+  const externalTorrentTemplate = JSON.parse(await page.inputValue("#external-unsigned-event"));
+  await page.fill("#external-signed-event", JSON.stringify(finalizeEvent(externalTorrentTemplate, SECRET)));
+  await page.click("#accept-external-signature");
+  await page.locator("#publish-status").filter({ hasText: "Exact external signatures accepted" }).waitFor();
+  await page.check("#publish-consent");
+  await page.click("#publish-events");
+  await page.locator("#publish-status").filter({ hasText: "2/2 acknowledgements" }).waitFor();
+  if (nip07PublicKeyCalls !== nip07CallsBeforeExternal.publicKey || nip07SignatureCalls !== nip07CallsBeforeExternal.signatures) {
+    throw new Error("External signer mode invoked the injected NIP-07 signer.");
+  }
+  await page.check('input[name="network-profile"][value="tor"]');
+  if ((await page.inputValue("#external-signer-pubkey")) !== ""
+    || !(await page.locator("#signer-status").textContent())?.includes("not connected")
+    || !(await page.isDisabled("#publish-events"))
+    || !(await page.isHidden("#external-signing-panel"))) {
+    throw new Error("A profile change retained external signer identity or publication authority.");
+  }
+
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
   if (blossomErrors.length > 0) throw new Error(`Controlled Blossom errors: ${blossomErrors.join("; ")}`);
   if (onionProxyErrors.length > 0) throw new Error(`Controlled onion proxy errors: ${onionProxyErrors.join("; ")}`);
@@ -713,7 +803,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

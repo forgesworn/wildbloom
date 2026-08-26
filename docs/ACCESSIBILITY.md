@@ -1,10 +1,10 @@
 # Accessibility evidence
 
 Wildbloom's production browser journey runs axe-core WCAG A/AA rules against
-the initial page, prepared encrypted publication, verified recovery result,
-Tor-only profile and plaintext opt-out state. The same journey runs in system
-Chrome on Windows, Linux and macOS, Playwright Firefox on Linux and Playwright
-WebKit on macOS.
+the initial page, prepared encrypted publication, external signing handoff,
+verified recovery result, Tor-only profile and plaintext opt-out state. The
+same journey runs in system Chrome on Windows, Linux and macOS, Playwright
+Firefox on Linux and Playwright WebKit on macOS.
 
 The browser gate also proves that keyboard traversal reaches the signer action
 in document order, using Option-Tab for macOS WebKit's default Safari behaviour,

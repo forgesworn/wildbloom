@@ -19,8 +19,8 @@ not claim to create a new storage network.
 
 This is a hardened production candidate, not a deployed service. It currently
 supports source files up to 256 MiB. Independent cryptographic review, live
-human Tor Browser usability review, extension-free Tor publication,
-real Safari and full branded-Firefox publication/WebTorrent testing, and
+human Tor Browser usability review, real Safari and full branded-Firefox
+publication/WebTorrent testing, and
 cross-network packet evidence remain release gates. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
@@ -29,8 +29,9 @@ Linux and macOS. It is not currently a native desktop application; native
 packaging remains conditional on a proven requirement that the browser sandbox
 cannot meet. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-No private key enters Wildbloom. Every signature is requested from an injected
-NIP-07 signer, and no network action runs on page load. Uploading, relay
+No private key enters Wildbloom. Signatures come from an injected NIP-07 signer
+or an exact copy/sign/paste handoff to an external signer. Wildbloom accepts
+only the returned signed event and never contacts that signer. No network action runs on page load. Uploading, relay
 publication, seeding, relay lookup and downloading are separate user actions.
 
 Local encryption is enabled by default. Wildbloom creates a random 256-bit
@@ -54,12 +55,17 @@ normal browser lacks Tor Browser's fingerprint protections and may not provide
 Web Crypto on HTTP onion origins. The Tor Project also discourages both
 torrenting over Tor and installing extra Tor Browser add-ons. A NIP-07 add-on
 or reused Nostr identity therefore remains an identity and fingerprinting
-boundary. Read [`docs/PRIVACY.md`](docs/PRIVACY.md) before treating Tor as
+boundary. External handoff avoids the add-on but still exposes the public event
+and identity to the chosen signer and transfer medium. Read
+[`docs/PRIVACY.md`](docs/PRIVACY.md) and
+[`docs/EXTERNAL-SIGNING.md`](docs/EXTERNAL-SIGNING.md) before treating Tor as
 useful for a particular threat model.
 
 ## Run it locally
 
-Requirements: Node.js 24.x and a browser with a NIP-07 extension. Later Node
+Requirements: Node.js 24.x and a current browser. Publishing needs either a
+NIP-07 extension or a separate signer that can return canonical signed Nostr
+event JSON. Later Node
 majors require a deliberate platform-matrix upgrade rather than an assumed
 compatibility claim.
 
@@ -95,7 +101,7 @@ path rejection. CI runs the browser path in system Chromium on Windows, Linux
 and macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
 response security headers and zero ambient network activity, then exercises
 encrypted upload, exact Blossom authority,
-NIP-07 signing, controlled relay publication and retrieval, ciphertext
+NIP-07 and exact external signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
 fallback. It rejects validly signed transformed hashes and false
 encrypted-envelope metadata, while verified saves use inert octet-stream object
@@ -135,10 +141,12 @@ Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only secure-origin
 override for Web Crypto on HTTP onion origins. The extended
 `acceptance:tor-browser` gate rotates identity again and drives a signed Tor
 Project Firefox build through a disposable profile and loopback WebDriver BiDi.
-It proves signer-free exact retrieval, relay timeout, partial-download
-cancellation, no WebRTC and denied-service failure without adding a signer
-extension. The separate GitHub workflows run both gates on demand. Headless
-automation is not a manual usability or extension-free publication claim.
+With no signer extension, one profile encrypts, externally signs, uploads and
+publishes through the controlled onions. After `NEWNYM`, a second fresh profile
+proves signer-free exact retrieval, relay timeout, partial-download
+cancellation, no WebRTC and denied-service failure. The separate GitHub
+workflows run both gates on demand. Headless automation is not a manual
+usability or fingerprint-equivalence claim.
 
 `acceptance:maximum` drives the exact 256 MiB source limit through encryption,
 Blossom upload, signed relay publication, exact-ID resolution, ciphertext

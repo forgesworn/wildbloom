@@ -1,7 +1,7 @@
 import "./style.css";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
-import { buildFileEvent, buildTorrentEvent, signEventExactly } from "./core/nostr.js";
+import { buildFileEvent, buildTorrentEvent, parseSignedEventJson, signEventExactly } from "./core/nostr.js";
 import { publishToRelays, resolveFromRelays } from "./core/relay.js";
 import {
   assertHex64,
@@ -15,6 +15,7 @@ import { downloadFromSwarm, startBrowserSeeding } from "./core/swarm.js";
 import { createHybridTorrent } from "./core/torrent.js";
 import type {
   BlobDescriptor,
+  EventTemplate,
   HybridPublication,
   InspectedFile,
   NetworkProfile,
@@ -45,7 +46,17 @@ const iceBoundary = element<HTMLElement>("ice-boundary");
 const torBoundary = element<HTMLElement>("tor-boundary");
 const torConsentField = element<HTMLElement>("tor-consent-field");
 const torConsent = element<HTMLInputElement>("tor-consent");
+const connectSignerButton = element<HTMLButtonElement>("connect-signer");
 const signerStatus = element<HTMLOutputElement>("signer-status");
+const externalSignerIdentity = element<HTMLElement>("external-signer-identity");
+const externalPubkeyInput = element<HTMLInputElement>("external-signer-pubkey");
+const externalSigningPanel = element<HTMLElement>("external-signing-panel");
+const externalSigningPurpose = element<HTMLElement>("external-signing-purpose");
+const externalUnsignedEvent = element<HTMLTextAreaElement>("external-unsigned-event");
+const externalSignedEvent = element<HTMLTextAreaElement>("external-signed-event");
+const externalSigningLinks = element<HTMLDivElement>("external-signing-links");
+const acceptExternalSignatureButton = element<HTMLButtonElement>("accept-external-signature");
+const cancelExternalSignatureButton = element<HTMLButtonElement>("cancel-external-signature");
 const publishStatus = element<HTMLOutputElement>("publish-status");
 const retrieveStatus = element<HTMLOutputElement>("retrieve-status");
 const fileInput = element<HTMLInputElement>("publish-file");
@@ -104,10 +115,27 @@ let resolutionRevision = 0;
 let profileRevision = 0;
 const objectUrls = new Set<string>();
 const SAFE_DOWNLOAD_MIME_TYPE = "application/octet-stream";
+type SigningMethod = "nip07" | "external";
+
+class SupersededSigningError extends Error {}
+
+interface ExternalSigningRequest {
+  readonly template: EventTemplate;
+  readonly expectedPubkey: string;
+  readonly resolve: (event: SignedNostrEvent) => void;
+  readonly reject: (error: Error) => void;
+}
+
+let externalSigningRequest: ExternalSigningRequest | null = null;
 
 function profile(): NetworkProfile {
   const selected = document.querySelector<HTMLInputElement>('input[name="network-profile"]:checked');
   return selected?.value === "tor" ? "tor" : "direct";
+}
+
+function signingMethod(): SigningMethod {
+  const selected = document.querySelector<HTMLInputElement>('input[name="signing-method"]:checked');
+  return selected?.value === "external" ? "external" : "nip07";
 }
 
 function assertTorReady(): void {
@@ -117,6 +145,7 @@ function assertTorReady(): void {
 }
 
 function signer(): SignerPort {
+  if (signingMethod() === "external") return externalSigner;
   if (!window.nostr) throw new Error("No NIP-07 signer is available in this browser.");
   return window.nostr;
 }
@@ -193,8 +222,69 @@ function addDownload(target: HTMLDivElement, blob: Blob, fileName: string, label
   target.append(anchor);
 }
 
+function externalSigningLabel(template: EventTemplate): string {
+  if (template.kind === 24242) return "Blossom upload authorisation";
+  if (template.kind === 1063) return "NIP-94 file event";
+  if (template.kind === 2003) return "NIP-35 torrent index";
+  return `Nostr kind ${template.kind} event`;
+}
+
+function clearExternalSigningPanel(): void {
+  externalSigningPanel.hidden = true;
+  externalSigningPurpose.textContent = "";
+  externalUnsignedEvent.value = "";
+  externalSignedEvent.value = "";
+  clearDownloads(externalSigningLinks);
+}
+
+function abandonExternalSigning(message = "External signing was superseded."): void {
+  const pending = externalSigningRequest;
+  externalSigningRequest = null;
+  clearExternalSigningPanel();
+  pending?.reject(new SupersededSigningError(message));
+}
+
+function requestExternalSignature(template: EventTemplate): Promise<SignedNostrEvent> {
+  if (externalSigningRequest) throw new Error("Finish or cancel the current external signing request first.");
+  const expectedPubkey = assertHex64(externalPubkeyInput.value.trim(), "External signer public key");
+  const label = externalSigningLabel(template);
+  const unsignedJson = `${JSON.stringify(template, null, 2)}\n`;
+  externalSigningPurpose.textContent = `${label}. Transfer only this public unsigned event to the signer, then return its complete signed-event JSON.`;
+  externalUnsignedEvent.value = unsignedJson;
+  externalSignedEvent.value = "";
+  acceptExternalSignatureButton.textContent = template.kind === 24242
+    ? "Accept signature and continue upload"
+    : "Accept exact signature";
+  externalSigningPanel.hidden = false;
+  clearDownloads(externalSigningLinks);
+  addDownload(
+    externalSigningLinks,
+    new Blob([unsignedJson], { type: "application/json" }),
+    `wildbloom-unsigned-${template.kind}.json`,
+    `Download unsigned ${template.kind} event`,
+  );
+  setStatus(
+    publishStatus,
+    `${label} is waiting for an external signature. Nothing was sent to the signer or the network by Wildbloom.`,
+  );
+  externalSignedEvent.focus();
+  return new Promise((resolve, reject) => {
+    externalSigningRequest = { template: structuredClone(template), expectedPubkey, resolve, reject };
+  });
+}
+
+const externalSigner: SignerPort = {
+  async getPublicKey() {
+    return assertHex64(externalPubkeyInput.value.trim(), "External signer public key");
+  },
+  async signEvent(template) {
+    return requestExternalSignature(template);
+  },
+};
+
 function resetPublicationAfterInspection(): void {
   publicationRevision += 1;
+  abandonExternalSigning();
   inspectionController?.abort();
   inspectionController = null;
   uploadController?.abort();
@@ -269,6 +359,26 @@ function updateRetrievalButtons(): void {
   cancelDownloadButton.disabled = !busy;
 }
 
+function updateSigningCopy(): void {
+  if (signingMethod() === "external") {
+    signEventCopy.textContent = profile() === "tor"
+      ? "External signing hands off one exact encrypted NIP-94 event without installing a Tor Browser add-on. The signer still learns the public event and identity."
+      : "External signing hands off the exact NIP-94 and NIP-35 event JSON without giving Wildbloom a private key.";
+    return;
+  }
+  signEventCopy.textContent = profile() === "tor"
+    ? "NIP-07 signing creates one encrypted NIP-94 file event locally. A Tor Browser add-on can alter its fingerprint."
+    : "NIP-07 signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.";
+}
+
+function applySigningMethod(): void {
+  const external = signingMethod() === "external";
+  externalSignerIdentity.hidden = !external;
+  externalPubkeyInput.disabled = !external;
+  connectSignerButton.textContent = external ? "Use external signer public key" : "Connect NIP-07 signer";
+  updateSigningCopy();
+}
+
 function applyProfile(): void {
   const tor = profile() === "tor";
   torBoundary.hidden = !tor;
@@ -283,20 +393,21 @@ function applyProfile(): void {
     seedButton.disabled = true;
     blossomInput.placeholder = "http://<56-character-v3-address>.onion";
     relayInput.placeholder = "ws://<56-character-v3-address>.onion";
-    signEventCopy.textContent = "Signing creates one encrypted NIP-94 file event locally. Torrent metadata is omitted in Tor-only mode.";
   } else {
     torConsent.checked = false;
     blossomInput.placeholder = "https://cdn.example.com";
     relayInput.placeholder = "wss://relay.example.com";
-    signEventCopy.textContent = "Signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.";
   }
+  updateSigningCopy();
   uploadConsentCopy.textContent = protectFile.checked
     ? "I understand this sends encrypted bytes and visible transfer metadata to the chosen Blossom server."
     : "I understand this sends the plaintext file, filename and MIME type to the chosen Blossom server.";
 }
 
 function guard(target: HTMLOutputElement, action: () => Promise<void>): void {
-  void action().catch((error) => setStatus(target, safeDiagnostic(error), true));
+  void action().catch((error) => {
+    if (!(error instanceof SupersededSigningError)) setStatus(target, safeDiagnostic(error), true);
+  });
 }
 
 toggleRecoveryKey.addEventListener("click", () => {
@@ -311,6 +422,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
     resetPublicationAfterInspection();
     resetResolution();
     pubkey = null;
+    externalPubkeyInput.value = "";
     signerStatus.textContent = "Signer not connected for this network profile";
     blossomInput.value = "";
     relayInput.value = "";
@@ -320,10 +432,30 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
   });
 }
 
+for (const input of document.querySelectorAll<HTMLInputElement>('input[name="signing-method"]')) {
+  input.addEventListener("change", () => {
+    resetPublicationAfterInspection();
+    pubkey = null;
+    externalPubkeyInput.value = "";
+    signerStatus.textContent = "Signer not connected";
+    applySigningMethod();
+    setStatus(publishStatus, "Signing method changed. Reconnect the signer and repeat every network consent.");
+  });
+}
+
+externalPubkeyInput.addEventListener("input", () => {
+  if (pubkey === null && !descriptor && !externalSigningRequest) return;
+  resetPublicationAfterInspection();
+  pubkey = null;
+  signerStatus.textContent = "External signer public key not confirmed";
+  setStatus(publishStatus, "External signer public key changed. Confirm it again before any upload authority is requested.");
+});
+
 torConsent.addEventListener("change", () => {
   if (torConsent.checked || profile() !== "tor") return;
   profileRevision += 1;
   pubkey = null;
+  externalPubkeyInput.value = "";
   signerStatus.textContent = "Signer not connected for this network profile";
   resetPublicationAfterInspection();
   resetResolution();
@@ -356,17 +488,53 @@ protectFile.addEventListener("change", () => {
   setStatus(publishStatus, "Protection choice changed. Inspect the file again before any network action.");
 });
 
-element<HTMLButtonElement>("connect-signer").addEventListener("click", () => guard(publishStatus, async () => {
+acceptExternalSignatureButton.addEventListener("click", () => guard(publishStatus, async () => {
+  const pending = externalSigningRequest;
+  if (!pending) throw new Error("There is no external signing request to complete.");
+  let signed: SignedNostrEvent;
+  try {
+    signed = parseSignedEventJson(pending.template, externalSignedEvent.value, pending.expectedPubkey);
+  } catch (error) {
+    externalSignedEvent.focus();
+    throw error;
+  }
+  externalSigningRequest = null;
+  clearExternalSigningPanel();
+  pending.resolve(signed);
+  if (pending.template.kind === 24242) cancelUploadButton.focus();
+  else signButton.focus();
+}));
+
+cancelExternalSignatureButton.addEventListener("click", () => {
+  if (!externalSigningRequest) return;
+  uploadController?.abort();
+  abandonExternalSigning("External signing was cancelled.");
+  setStatus(publishStatus, "External signing cancelled. Nothing was signed or sent by Wildbloom.");
+});
+
+connectSignerButton.addEventListener("click", () => guard(publishStatus, async () => {
   assertTorReady();
   const expectedProfileRevision = profileRevision;
-  const candidate = assertHex64(await signer().getPublicKey(), "Signer public key");
-  if (profileRevision !== expectedProfileRevision) return;
+  const expectedPublicationRevision = publicationRevision;
+  const selectedSigningMethod = signingMethod();
+  const selectedSigner = signer();
+  const candidate = assertHex64(await selectedSigner.getPublicKey(), "Signer public key");
+  if (profileRevision !== expectedProfileRevision
+    || publicationRevision !== expectedPublicationRevision
+    || signingMethod() !== selectedSigningMethod) return;
   pubkey = candidate;
   signerStatus.textContent = candidate;
   updateUploadButton();
-  setStatus(publishStatus, profile() === "tor"
-    ? "Signer connected. A Tor Browser add-on can still alter your fingerprint; nothing has been signed or published."
-    : "Signer connected. No event has been signed or published.");
+  if (signingMethod() === "external") {
+    setStatus(
+      publishStatus,
+      "External signer public key confirmed. Wildbloom will show unsigned JSON for manual transfer; it will not contact the signer.",
+    );
+  } else {
+    setStatus(publishStatus, profile() === "tor"
+      ? "Signer connected. A Tor Browser add-on can still alter your fingerprint; nothing has been signed or published."
+      : "Signer connected. No event has been signed or published.");
+  }
 }));
 
 element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard(publishStatus, async () => {
@@ -434,11 +602,17 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
 }));
 
 uploadConsent.addEventListener("change", () => {
-  if (!uploadConsent.checked) uploadController?.abort();
+  if (!uploadConsent.checked) {
+    uploadController?.abort();
+    abandonExternalSigning("Upload consent was withdrawn.");
+  }
   updateUploadButton();
 });
 keySavedConsent.addEventListener("change", () => {
-  if (!keySavedConsent.checked) uploadController?.abort();
+  if (!keySavedConsent.checked) {
+    uploadController?.abort();
+    abandonExternalSigning("Recovery-key acknowledgement was withdrawn.");
+  }
   updateUploadButton();
 });
 
@@ -451,6 +625,8 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
   const selectedInspected = inspected;
   const selectedPubkey = pubkey;
   const selectedProfile = profile();
+  const selectedSigningMethod = signingMethod();
+  const selectedSigner = signer();
   const server = normaliseBlossomServer(blossomInput.value, selectedProfile);
   const selectedTrackers = selectedProfile === "direct" ? trackers() : [];
   const controller = new AbortController();
@@ -459,10 +635,11 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
   cancelUploadButton.disabled = false;
   try {
     setStatus(publishStatus, "Requesting a short-lived, server-and-hash-scoped upload signature…");
-    const nextDescriptor = await uploadToBlossom(selectedInspected, server, signer(), selectedPubkey, {
+    const nextDescriptor = await uploadToBlossom(selectedInspected, server, selectedSigner, selectedPubkey, {
       fetchImpl: fetch,
       profile: selectedProfile,
       signal: controller.signal,
+      ...(selectedSigningMethod === "external" ? { authorisationLifetimeSeconds: 300 } : {}),
     });
     if (controller.signal.aborted || publicationRevision !== expectedRevision || inspected !== selectedInspected) return;
     let nextTorrentPlan: TorrentPlan | null = null;
@@ -505,6 +682,7 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
 cancelUploadButton.addEventListener("click", () => {
   if (!uploadController) return;
   uploadController.abort();
+  abandonExternalSigning("The Blossom upload was cancelled.");
   cancelUploadButton.disabled = true;
   setStatus(publishStatus, "Cancelling the Blossom upload…");
 });
@@ -569,19 +747,21 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
   const selectedTorrentPlan = torrentPlan;
   const selectedPubkey = pubkey;
   const selectedProfile = profile();
+  const selectedSigningMethod = signingMethod();
+  const selectedSigner = signer();
   const publication: HybridPublication = {
     inspected: selectedInspected,
     descriptor: selectedDescriptor,
     ...(selectedTorrentPlan ? { torrent: selectedTorrentPlan } : {}),
     ...(protectedEnvelope ? { encryption: protectedEnvelope.scheme } : {}),
   };
-  const fileEvent = await signEventExactly(buildFileEvent(publication), signer(), selectedPubkey);
+  const fileEvent = await signEventExactly(buildFileEvent(publication), selectedSigner, selectedPubkey);
   if (publicationRevision !== expectedRevision || profile() !== selectedProfile) return;
   const nextSignedEvents = [fileEvent];
   if (selectedTorrentPlan) {
     const torrentEvent = await signEventExactly(
       buildTorrentEvent(selectedInspected, selectedTorrentPlan),
-      signer(),
+      selectedSigner,
       selectedPubkey,
     );
     if (publicationRevision !== expectedRevision || profile() !== selectedProfile) return;
@@ -590,7 +770,10 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
   signedEvents = nextSignedEvents;
   publishButton.disabled = !publishConsent.checked;
   const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
-  setStatus(publishStatus, `Signed locally through NIP-07.\n${identifiers}\nNo relay publication yet.`);
+  setStatus(
+    publishStatus,
+    `${selectedSigningMethod === "external" ? "Exact external signatures accepted" : "Signed locally through NIP-07"}.\n${identifiers}\nNo relay publication yet.`,
+  );
 }));
 
 publishConsent.addEventListener("change", () => {
@@ -815,3 +998,4 @@ window.addEventListener("beforeunload", () => {
 });
 
 applyProfile();
+applySigningMethod();

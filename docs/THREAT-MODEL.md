@@ -2,9 +2,12 @@
 
 ## Protected properties
 
-- **Signing-key custody:** keys remain inside the user's NIP-07 signer.
+- **Signing-key custody:** keys remain inside the user's NIP-07 or external
+  signer. External mode transfers only an unsigned template out and a signed
+  event back.
 - **Upload authority scope:** a captured upload token is useful only for one
-  hash, one server and at most 90 seconds.
+  hash and one server. NIP-07 authority lasts 90 seconds; deliberate external
+  handoff is capped at five minutes.
 - **Content integrity:** Nostr signatures bind the advertised metadata;
   SHA-256 binds retrieved bytes; BitTorrent piece hashes protect transport.
 - **Source confidentiality:** default AES-GCM envelopes protect content,
@@ -39,8 +42,9 @@
 | Attack | Behaviour |
 | --- | --- |
 | NIP-07 signer mutates reviewed fields | Reject unless the returned valid signature covers the exact template |
+| External signer returns malformed, oversized, extra-field, wrong-author or changed event JSON | Parse within 128 KiB and reject unless the strict signed-event shape, author, signature and every template field are exact |
 | Validly signed event claims Wildbloom encryption around non-canonical public metadata | Reject unless `x` and `ox` identify the same unchanged envelope and its public filename, MIME type and accessibility label are canonical |
-| Upload token replayed elsewhere | Exact scalar `server` and `x` tags constrain it; duplicate scopes are rejected, the human-readable purpose is canonical, and Wildbloom issues a 90-second signed lifetime (the encoder rejects stale authority or anything beyond a five-minute hard cap) |
+| Upload token replayed elsewhere | Exact scalar `server` and `x` tags constrain it; duplicate scopes are rejected, the human-readable purpose is canonical, and Wildbloom issues a 90-second NIP-07 or five-minute external lifetime (the encoder rejects stale authority or anything beyond that hard cap) |
 | Encrypted event identifies known source bytes | Both NIP-94 `x` and pre-upload-server-transformation `ox` hash only the randomised encrypted envelope, never the plaintext source |
 | Blossom descriptor points at different bytes | Reject URL/hash/size mismatch |
 | Blossom response is truncated or enlarged | Reject signed byte-count mismatch |
@@ -62,7 +66,7 @@
 | Upload or retrieval stalls | Bound the operation by a deadline; explicit cancellation aborts fetches and destroys in-flight peer clients |
 | Encrypted header, record order, ciphertext or key is wrong | Reject before offering plaintext |
 | Verified remote bytes contain executable HTML, SVG or script content | Offer only an `application/octet-stream`, `noopener` object-URL download; never navigate to or render the remote MIME type inside Wildbloom's origin |
-| User changes file, endpoint or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority |
+| User changes file, endpoint, signer public key, signing method or transport profile after consent | Cancel active work and clear publication, retrieval and swarm authority; profile changes also clear the displayed external signing identity |
 | Local crypto, signer or relay result finishes after that state change | Abort local hashing/crypto where possible and discard every result whose monotonic state revision is stale |
 | Direct-mode signer approval finishes after a switch to Tor-only mode | Discard the signature, clear the signer identity and require a fresh Tor-profile connection |
 | User withdraws Tor, upload, relay-publication or swarm consent during active work | Abort the corresponding pending work and clear downstream authority; already uploaded bytes or sent relay events cannot be retracted |
@@ -75,8 +79,7 @@
 - Re-evaluate the documented WebTorrent Node-only `ip` advisory exception on
   every WebTorrent upgrade; CI fails if its browser exclusions, exact import,
   bundle contents or production module graph cross that boundary.
-- Repeat the automated real-onion transport gate, complete its branded Tor
-  Browser counterpart, and exercise direct mode with a controlled live
+- Repeat the automated real-onion and branded Tor Browser gates, and exercise direct mode with a controlled live
   WebTorrent tracker and two browser peers.
 - Select and disclose an operator-controlled ICE/STUN/TURN policy, or retain
   the documented host-candidate-only connectivity limit.

@@ -49,9 +49,11 @@ services for the app, Blossom and relay. It proves the application has no
 clearnet or WebRTC fallback in that controlled run. Because stock Chromium
 needs a test-only secure-origin override, an extended gate rotates identity and
 repeats signer-free retrieval in a signed branded Tor Browser binary. The
-browser runs with a disposable profile, no signer extension and loopback-only
-WebDriver BiDi. This is automated content-engine evidence, not a claim that
-headless automation has the same fingerprint as ordinary Tor Browser use.
+first disposable profile also completes exact external-signature publication
+without a signer extension; after `NEWNYM`, a second profile performs the
+retrieval ceremony. Both use loopback-only WebDriver BiDi. This is automated
+content-engine evidence, not a claim that headless automation has the same
+fingerprint as ordinary Tor Browser use.
 
 Primary guidance:
 
@@ -67,10 +69,13 @@ stable public key, contact its own remote service, alter the Tor Browser
 fingerprint or present misleading approval UI. Tor Browser users are strongly
 discouraged from installing extra add-ons.
 
-Until Wildbloom has an independently reviewed extension-free signing path,
-Tor-only publication is a network-transport control rather than a claim of
-anonymous publication. Tor-only retrieval does not need a signer and is covered
-by the extended branded-browser gate.
+External signer handoff avoids adding code to Tor Browser. Wildbloom shows one
+exact unsigned event, accepts only a strict valid signature over those fields,
+and never contacts the signer. The transfer medium and signer still see the
+intended public event, service and signing identity; a reused identity, online
+signer or synchronised clipboard can destroy unlinkability. This is a custody
+and fingerprint improvement, not proof of anonymous publication. See
+[`EXTERNAL-SIGNING.md`](EXTERNAL-SIGNING.md).
 
 Changing network profile or withdrawing Tor confirmation clears Wildbloom's
 connected signer identity and requires an explicit connection again. A signer

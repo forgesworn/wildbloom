@@ -32,6 +32,24 @@ describe("Blossom publication", () => {
     expect(init.redirect).toBe("error");
   });
 
+  it("allows a bounded five-minute authority for deliberate external signing", async () => {
+    const inspected = await inspectFile(new File(["hello"], "hello.txt", { type: "text/plain" }));
+    const signEvent = vi.fn(signer.signEvent);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      url: `https://cdn.example.com/${inspected.sha256}.txt`,
+      sha256: inspected.sha256,
+      size: inspected.size,
+      type: inspected.type,
+      uploaded: 123,
+    }), { status: 201 }));
+    await uploadToBlossom(inspected, "https://cdn.example.com", { ...signer, signEvent }, pubkey, {
+      fetchImpl: fetchMock,
+      authorisationLifetimeSeconds: 300,
+    });
+    const template = signEvent.mock.calls[0]?.[0];
+    expect(Number(template?.tags.find((tag) => tag[0] === "expiration")?.[1]) - Number(template?.created_at)).toBe(300);
+  });
+
   it("caps a streamed descriptor before parsing attacker-controlled JSON", async () => {
     const inspected = await inspectFile(new File(["hello"], "hello.txt", { type: "text/plain" }));
     const response = new Response(`{"padding":"${"x".repeat(70 * 1024)}"}`, { status: 201 });

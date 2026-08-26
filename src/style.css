@@ -81,6 +81,12 @@ textarea { resize: vertical; }
 .privacy-confirmation, .protection-choice { margin: 1rem 0; }
 .key-panel { margin: 1rem 0; padding: 1rem; border: 1px solid #66442f; border-radius: 12px; background: rgba(102, 68, 47, 0.12); }
 .key-panel input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.signer-identity { margin: 1rem 0; }
+.signer-identity input, .handoff-panel textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.handoff-panel { display: grid; gap: 1rem; }
+.handoff-panel h3, .handoff-panel p { margin: 0; }
+.handoff-panel h3 { font: 400 1.35rem Georgia, "Times New Roman", serif; }
+.handoff-panel .privacy-boundary { margin: 0; }
 
 .file-picker { margin-bottom: 1rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 1rem; }

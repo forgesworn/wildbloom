@@ -4,7 +4,9 @@ import {
   buildFileEvent,
   buildTorrentEvent,
   buildUploadAuthorisation,
+  assertSignedEventExactly,
   encodeNostrAuthorisation,
+  parseSignedEventJson,
   resolveHybridEvent,
   signEventExactly,
   validateBlobDescriptor,
@@ -87,6 +89,27 @@ describe("Blossom authorisation", () => {
     };
     await expect(signEventExactly(buildUploadAuthorisation(sha256, "https://cdn.example.com"), malicious, pubkey))
       .rejects.toThrow(/changed/u);
+  });
+
+  it("accepts a strict external signature over the exact reviewed template", () => {
+    const template = buildUploadAuthorisation(sha256, "https://cdn.example.com", 1_000, 300);
+    const signed = finalizeEvent(template, secret) as SignedNostrEvent;
+    expect(JSON.stringify(parseSignedEventJson(template, JSON.stringify(signed), pubkey))).toBe(JSON.stringify(signed));
+    expect(JSON.stringify(assertSignedEventExactly(template, signed))).toBe(JSON.stringify(signed));
+  });
+
+  it("rejects hostile external signing responses", () => {
+    const template = buildUploadAuthorisation(sha256, "https://cdn.example.com", 1_000, 300);
+    const signed = finalizeEvent(template, secret) as SignedNostrEvent;
+    expect(() => parseSignedEventJson(template, "not JSON", pubkey)).toThrow(/JSON is invalid/u);
+    expect(() => parseSignedEventJson(template, JSON.stringify({ ...signed, extra: "surprise" }), pubkey))
+      .toThrow(/unexpected Nostr event shape/u);
+    expect(() => parseSignedEventJson(template, JSON.stringify({ ...signed, content: "Upload anything" }), pubkey))
+      .toThrow(/changed the event/u);
+    expect(() => parseSignedEventJson(template, JSON.stringify(signed), "ef".repeat(32)))
+      .toThrow(/different public key/u);
+    expect(() => parseSignedEventJson(template, `"${"x".repeat(128 * 1024)}"`, pubkey))
+      .toThrow(/unexpectedly large/u);
   });
 
   it("refuses validly signed duplicate or long-lived upload scopes", () => {

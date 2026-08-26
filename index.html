@@ -19,7 +19,8 @@
         <p class="lede">Files that outlive their host.</p>
         <p class="boundary">
           Wildbloom encrypts file content locally by default and keeps signing
-          keys in your NIP-07 extension. Publishing metadata and joining a
+          keys in your chosen signer. Use NIP-07 or hand exact event JSON to an
+          external signer; never give Wildbloom a private key. Publishing metadata and joining a
           torrent swarm still reveal information. Nothing starts automatically.
         </p>
       </header>
@@ -78,6 +79,24 @@
           <span>I have configured this entire browser through Tor. I understand Wildbloom cannot verify that claim.</span>
         </label>
 
+        <fieldset class="profile-picker signer-picker">
+          <legend>Signing method</legend>
+          <label class="profile-option">
+            <input name="signing-method" type="radio" value="nip07" checked />
+            <span><strong>NIP-07 browser signer</strong><small>Convenient, but an added Tor Browser extension can alter your fingerprint.</small></span>
+          </label>
+          <label class="profile-option">
+            <input name="signing-method" type="radio" value="external" />
+            <span><strong>External signer handoff</strong><small>Copy exact unsigned event JSON to a separate signer and return only the signed event.</small></span>
+          </label>
+        </fieldset>
+        <div id="external-signer-identity" class="signer-identity" hidden>
+          <label>
+            External signer public key <small>64 lowercase hexadecimal characters. Public identity only, never a private key or nsec.</small>
+            <input id="external-signer-pubkey" type="text" inputmode="text" maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          </label>
+        </div>
+
         <div class="actions">
           <button id="connect-signer" type="button">Connect NIP-07 signer</button>
           <output id="signer-status" class="quiet">Signer not connected</output>
@@ -118,6 +137,27 @@
             <span>I have saved the recovery key. Wildbloom cannot recover it.</span>
           </label>
         </div>
+
+        <section id="external-signing-panel" class="key-panel handoff-panel" aria-labelledby="external-signing-heading" hidden>
+          <h3 id="external-signing-heading">External signing handoff</h3>
+          <p id="external-signing-purpose"></p>
+          <p class="privacy-boundary">
+            The handoff exposes the intended service and metadata, and the returned event adds the public signing identity. Transfer it deliberately. Never paste a private key or recovery key here.
+          </p>
+          <label>
+            Exact unsigned event JSON <small>Read-only. Review it on both devices before signing.</small>
+            <textarea id="external-unsigned-event" rows="10" readonly autocomplete="off" spellcheck="false"></textarea>
+          </label>
+          <div id="external-signing-links" class="downloads"></div>
+          <label>
+            Complete signed event JSON <small>Wildbloom rejects changed fields, the wrong author, malformed data and invalid signatures.</small>
+            <textarea id="external-signed-event" rows="10" maxlength="131072" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+          </label>
+          <div class="inline-actions">
+            <button id="accept-external-signature" type="button">Accept exact signature</button>
+            <button id="cancel-external-signature" class="secondary" type="button">Cancel external signing</button>
+          </div>
+        </section>
 
         <div class="gate">
           <label class="check">

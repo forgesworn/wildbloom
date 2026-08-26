@@ -5,7 +5,7 @@ import { createServer as createHttpServer } from "node:http";
 import { createConnection } from "node:net";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools/pure";
 import { chromium } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { WebDriverBiDi } from "./webdriver-bidi.mjs";
@@ -192,6 +192,7 @@ let hangingRetrievalClosed = 0;
 const blossomErrors = [];
 const blossomHosts = [];
 const blossomRequests = [];
+const blossomAuthorisations = [];
 const blossom = createHttpServer((request, response) => {
   void (async () => {
     const cors = {
@@ -219,9 +220,16 @@ const blossom = createHttpServer((request, response) => {
       const authorisation = request.headers.authorization;
       if (!authorisation?.startsWith("Nostr ")) throw new Error("Real-onion upload omitted Nostr authorisation.");
       const event = JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8"));
-      if (!event.tags.some((tag) => tag[0] === "server" && tag[1] === new URL(blossomOnionOrigin).hostname)) {
-        throw new Error("Real-onion upload authority was not scoped to the onion service.");
+      if (!verifyEvent(event) || event.pubkey !== PUBKEY) throw new Error("Real-onion upload authority had an invalid or unexpected signature.");
+      const requiredTags = ["t", "expiration", "server", "x"];
+      if (event.tags.length !== requiredTags.length
+        || !requiredTags.every((name) => event.tags.filter((tag) => tag[0] === name).length === 1)
+        || !event.tags.some((tag) => tag[0] === "t" && tag[1] === "upload")
+        || !event.tags.some((tag) => tag[0] === "server" && tag[1] === new URL(blossomOnionOrigin).hostname)
+        || !event.tags.some((tag) => tag[0] === "x" && tag[1] === hash)) {
+        throw new Error("Real-onion upload authority was not exactly scoped to the onion service and payload.");
       }
+      blossomAuthorisations.push(event);
       uploadedBytes = body;
       uploadedHash = hash;
       response.writeHead(201, { ...cors, "Content-Type": "application/json" });
@@ -285,6 +293,7 @@ relay.on("connection", (socket, request) => {
       const message = JSON.parse(raw.toString("utf8"));
       if (message[0] === "EVENT") {
         const event = message[1];
+        if (!verifyEvent(event) || event.pubkey !== PUBKEY) throw new Error("Real-onion relay received an invalid or unexpected signature.");
         relayEvents.set(event.id, event);
         socket.send(JSON.stringify(["OK", event.id, true, "stored by real-onion relay"]));
       }
@@ -582,9 +591,10 @@ async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
   }, ONION_ACTION_TIMEOUT_MS, "Branded Tor Browser did not reach the controlled Blossom and relay onions.", 1_000);
 }
 
-async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins) {
-  const profileDirectory = join(tempRoot, "branded-tor-browser-profile");
-  const browserDataDirectory = join(tempRoot, "branded-tor-browser-data");
+async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, ceremony) {
+  if (!/^[a-z-]+$/u.test(ceremony)) throw new Error("Branded Tor Browser ceremony name is invalid.");
+  const profileDirectory = join(tempRoot, `branded-tor-browser-${ceremony}-profile`);
+  const browserDataDirectory = join(tempRoot, `branded-tor-browser-${ceremony}-data`);
   mkdirSync(profileDirectory, { mode: 0o700 });
   mkdirSync(browserDataDirectory, { mode: 0o700 });
   const remotePort = await availablePort();
@@ -739,6 +749,101 @@ async function closeBrandedTorBrowser(record) {
   await stopChild(record.process);
 }
 
+async function brandedSetFile(record, selector, bytes, name, mimeType) {
+  const selectorLiteral = JSON.stringify(selector);
+  const bytesLiteral = JSON.stringify([...bytes]);
+  const nameLiteral = JSON.stringify(name);
+  const typeLiteral = JSON.stringify(mimeType);
+  await brandedEvaluate(record, `(() => {
+    const input = document.querySelector(${selectorLiteral});
+    if (!(input instanceof HTMLInputElement) || input.type !== "file") throw new Error("Missing file input.");
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([new Uint8Array(${bytesLiteral})], ${nameLiteral}, { type: ${typeLiteral}, lastModified: 0 }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    return input.files?.[0]?.size ?? -1;
+  })()`);
+}
+
+async function waitForBrandedUnsignedTemplate(record, expectedKind) {
+  let latest = null;
+  await waitFor(async () => {
+    try {
+      latest = await brandedEvaluate(record, `(() => {
+        const panel = document.querySelector("#external-signing-panel");
+        const field = document.querySelector("#external-unsigned-event");
+        if (!(panel instanceof HTMLElement) || panel.hidden || !(field instanceof HTMLTextAreaElement) || !field.value) return null;
+        return JSON.parse(field.value);
+      })()`);
+      return latest?.kind === expectedKind;
+    } catch {
+      return false;
+    }
+  }, ONION_ACTION_TIMEOUT_MS, () => `${record.label} did not expose unsigned kind ${expectedKind}: ${JSON.stringify(latest)}`, 200);
+  return latest;
+}
+
+async function completeBrandedExternalSignature(record, expectedKind) {
+  const template = await waitForBrandedUnsignedTemplate(record, expectedKind);
+  const signed = finalizeEvent(template, SECRET);
+  await brandedSetValue(record, "#external-signed-event", JSON.stringify(signed));
+  await brandedClick(record, "#accept-external-signature");
+  return signed;
+}
+
+async function exerciseBrandedExternalPublisher(record, blossomOrigin, relayUrl) {
+  await warmBrandedOnionTargets(record, blossomOrigin, relayUrl);
+  await brandedSetChecked(record, 'input[name="network-profile"][value="tor"]', true);
+  await brandedSetChecked(record, 'input[name="signing-method"][value="external"]', true);
+  await brandedSetValue(record, "#external-signer-pubkey", PUBKEY);
+  await brandedSetValue(record, "#blossom-server", blossomOrigin);
+  await brandedSetValue(record, "#relay-urls", relayUrl);
+  await brandedSetChecked(record, "#tor-consent", true);
+  await brandedClick(record, "#connect-signer");
+  await waitForBrandedText(record, "#publish-status", /External signer public key confirmed/iu);
+  await brandedSetFile(record, "#publish-file", SOURCE_BYTES, "onion-proof.txt", "text/plain");
+  await brandedClick(record, "#inspect-file");
+  await waitForBrandedText(record, "#publish-status", /Encrypted transfer payload prepared/iu);
+  const recoveryKey = await brandedEvaluate(record, `(() => {
+    const field = document.querySelector("#recovery-key-output");
+    if (!(field instanceof HTMLInputElement)) throw new Error("Recovery key output is missing.");
+    return field.value;
+  })()`);
+  if (!/^wbk1_[A-Za-z0-9_-]{43}$/u.test(recoveryKey)) throw new Error("Branded external publication did not produce a recovery key.");
+  await brandedSetChecked(record, "#upload-consent", true);
+  await brandedSetChecked(record, "#key-saved-consent", true);
+  const uploadsBeforeSignature = blossomRequests.filter((value) => value === "PUT /upload").length;
+  await brandedClick(record, "#upload-file");
+  await waitForBrandedUnsignedTemplate(record, 24242);
+  if (blossomRequests.filter((value) => value === "PUT /upload").length !== uploadsBeforeSignature) {
+    throw new Error("Branded external publication uploaded before receiving exact signed authority.");
+  }
+  await completeBrandedExternalSignature(record, 24242);
+  await waitForBrandedText(record, "#publish-status", /No clearnet fallback or torrent metadata/iu);
+  const authorisation = blossomAuthorisations.at(-1);
+  const expiration = Number(authorisation?.tags.find((tag) => tag[0] === "expiration")?.[1]);
+  if (!authorisation || expiration - authorisation.created_at !== 300) {
+    throw new Error("Branded external publication did not use the bounded five-minute upload authority.");
+  }
+
+  await brandedClick(record, "#sign-events");
+  const fileEvent = await completeBrandedExternalSignature(record, 1063);
+  await waitForBrandedText(record, "#publish-status", /Exact external signatures accepted/iu);
+  await brandedSetChecked(record, "#publish-consent", true);
+  await brandedClick(record, "#publish-events");
+  await waitForBrandedText(record, "#publish-status", /1\/1 acknowledgements/iu);
+  const finalState = await brandedEvaluate(record, `(() => ({
+    hasSigner: Boolean(window.nostr),
+    webRtcUsed: window.__wildbloomTorWebRtcUsed,
+    handoffHidden: document.querySelector("#external-signing-panel")?.hidden,
+    seedHidden: document.querySelector("#seed-gate")?.hidden,
+  }))()`);
+  if (finalState.hasSigner || finalState.webRtcUsed || !finalState.handoffHidden || !finalState.seedHidden) {
+    throw new Error(`Branded external publication crossed its signer, WebRTC or Tor boundary: ${JSON.stringify(finalState)}`);
+  }
+  return { eventId: fileEvent.id, recoveryKey };
+}
+
 async function exerciseBrandedRetriever(record, blossomOrigin, relayUrl, eventId, recoveryKey) {
   await warmBrandedOnionTargets(record, blossomOrigin, relayUrl);
   await brandedSetChecked(record, 'input[name="network-profile"][value="tor"]', true);
@@ -847,6 +952,7 @@ let browser;
 let publisherContext;
 let retrieverContext;
 let brandedRecord;
+let brandedRecoveryKey;
 let blossomClosed = false;
 let torLog = "";
 try {
@@ -990,11 +1096,27 @@ try {
 
   if (torBrowser) {
     await signalNewIdentity(controlPort, controlCookie);
-    process.stdout.write(`Tor acknowledged NEWNYM before the ${torBrowser.version} extension-free retrieval ceremony.\n`);
+    process.stdout.write(`Tor acknowledged NEWNYM before the ${torBrowser.version} extension-free publication ceremony.\n`);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
-    brandedRecord = await launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins);
-    await exerciseBrandedRetriever(brandedRecord, blossomOnionOrigin, relayUrl, eventId, recoveryKey);
-    process.stdout.write(`${torBrowser.version} recovered the exact encrypted source without a signer extension after bounded relay timeout and download-cancellation checks.\n`);
+    brandedRecord = await launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, "publisher");
+    const brandedPublication = await exerciseBrandedExternalPublisher(brandedRecord, blossomOnionOrigin, relayUrl);
+    brandedRecoveryKey = brandedPublication.recoveryKey;
+    await assertBrandedPageClean(brandedRecord, allowedOrigins);
+    await closeBrandedTorBrowser(brandedRecord);
+    brandedRecord = undefined;
+
+    await signalNewIdentity(controlPort, controlCookie);
+    process.stdout.write(`Tor acknowledged NEWNYM before the fresh ${torBrowser.version} signer-free retrieval ceremony.\n`);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    brandedRecord = await launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, "retriever");
+    await exerciseBrandedRetriever(
+      brandedRecord,
+      blossomOnionOrigin,
+      relayUrl,
+      brandedPublication.eventId,
+      brandedPublication.recoveryKey,
+    );
+    process.stdout.write(`${torBrowser.version} externally signed and published encrypted metadata without an add-on, then a fresh profile recovered the exact source after NEWNYM, bounded relay timeout and download-cancellation checks.\n`);
   }
 
   await closeServer(blossom);
@@ -1004,7 +1126,7 @@ try {
   await retriever.page.locator("#retrieve-status.error").waitFor({ timeout: ONION_ACTION_TIMEOUT_MS });
   if (await retriever.page.locator("#retrieve-links a").count() !== 0) throw new Error("Denied onion retrieval retained a stale verified download.");
   if (brandedRecord) {
-    await brandedSetValue(brandedRecord, "#recovery-key-input", recoveryKey);
+    await brandedSetValue(brandedRecord, "#recovery-key-input", brandedRecoveryKey ?? recoveryKey);
     await brandedClick(brandedRecord, "#fetch-blossom");
     await waitForBrandedText(brandedRecord, "#retrieve-status", /retrieval failed|network|fetch/iu);
     const deniedLinks = await brandedSnapshot(brandedRecord, "#retrieve-links");
@@ -1027,7 +1149,7 @@ try {
   if (relayErrors.length > 0) throw new Error(`Real-onion relay errors: ${relayErrors.join("; ")}`);
 
   const brandedResult = torBrowser
-    ? ` ${torBrowser.version} also completed signer-free exact recovery, relay timeout, cancellation and denied-service checks through a throwaway profile; headless WebDriver BiDi evidence is not a manual Tor Browser usability review.`
+    ? ` ${torBrowser.version} also completed exact external-signature publication without an add-on, then signer-free recovery, relay timeout, cancellation and denied-service checks through a fresh profile after NEWNYM; headless WebDriver BiDi evidence is not a manual Tor Browser usability review.`
     : " Branded Tor Browser interaction remains a separate release gate.";
   process.stdout.write(
     `Tor transport acceptance passed in ${browserName} with a harness-only secure-origin override through Tor ${/(?:Tor version |Tor )([0-9]+(?:\.[0-9]+)+)/u.exec(torLog)?.[1] ?? "unknown"}: disposable v3 onion app, Blossom and Nostr relay completed encrypted publication and exact recovery after NEWNYM, refused WebRTC and failed closed after the Blossom target was denied.${brandedResult}\n`,

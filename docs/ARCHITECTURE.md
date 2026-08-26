@@ -51,7 +51,7 @@ Platform references:
                          signed NIP-94 event
                     + encrypted URL + SHA-256 + optional magnet/infohash
                     |
-publisher --NIP-07--+------------------------------> Nostr relays
+publisher --NIP-07 or exact external signature----> Nostr relays
     |
     +--BUD-11 scoped auth--> Blossom server --SHA-256 URL--+
     |                                                       |
@@ -67,15 +67,18 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
    metadata in authenticated chunks, pads the envelope, and hashes only that
    public transfer payload.
 3. The NIP-07 signer signs a kind `24242` BUD-11 upload token scoped to the
-   exact server hostname, exact SHA-256 and a 90-second lifetime.
+   exact server hostname, exact SHA-256 and a 90-second lifetime. External
+   handoff presents the same exact template and allows five minutes for a
+   deliberate cross-device ceremony; the returned event must have the expected
+   author, exact fields and a valid signature.
 4. The browser uploads the unchanged bytes with BUD-02 and rejects a descriptor
    whose URL, hash or size differs.
 5. In direct mode it creates a one-file BitTorrent v1 descriptor containing
    the Blossom URL as a web seed and user-selected WebSocket trackers.
    WebTorrent receives an explicit empty ICE-server list; it must not inherit
    library-supplied public STUN/TURN infrastructure.
-6. The signer signs a NIP-94 file event and, in direct mode, a NIP-35 torrent
-   index. The encryption scheme is an explicit versioned extension tag.
+6. NIP-07 or the external handoff signs a NIP-94 file event and, in direct
+   mode, a NIP-35 torrent index. The encryption scheme is an explicit versioned extension tag.
    For protected events, `x` and NIP-94's pre-upload-server-transformation
    `ox` both hash the randomised encrypted envelope. Neither may contain the
    plaintext source hash, which would create a confirmation oracle. The URL,
@@ -97,10 +100,11 @@ browser contexts and requires exact encrypted recovery. Its Chromium
 secure-origin override is test scaffolding, not part of the production build
 and not branded Tor Browser evidence. An extended gate rotates identity again
 and drives an actual signed Tor Project Firefox build through loopback-only
-WebDriver BiDi and a disposable profile. That second browser performs
-signer-free exact retrieval, relay-timeout, download-cancellation and denied
-service checks without WebRTC; it does not prove extension-free publication or
-manual Tor Browser usability.
+WebDriver BiDi. A disposable profile performs exact external-signature upload
+and publication without an add-on or WebRTC. After `NEWNYM`, a second fresh
+profile performs signer-free exact retrieval, relay-timeout,
+download-cancellation and denied-service checks. This does not prove manual Tor
+Browser usability or fingerprint equivalence.
 
 ## Retrieval
 
@@ -133,13 +137,13 @@ manual Tor Browser usability.
 ## Asynchronous authority
 
 Publication and retrieval state use monotonic revisions. File, endpoint,
-event-ID, consent or profile changes abort the relevant controllers and clear
-downstream state. Hashing and envelope cryptography check cancellation between
-bounded chunks; signer results and other operations that cannot be interrupted
-are committed only if their captured revision still matches. Switching to or
-from Tor also clears the connected signer identity. This prevents an older
-direct-mode result from repopulating or becoming publishable in newer Tor-only
-state.
+signing method, external public key, event-ID, consent or profile changes abort
+the relevant controllers and clear downstream state. Hashing and envelope
+cryptography check cancellation between bounded chunks; signer results and
+other operations that cannot be interrupted are committed only if their
+captured revision still matches. Switching to or from Tor also clears the
+connected and displayed signer identity. This prevents an older direct-mode
+result from repopulating or becoming publishable in newer Tor-only state.
 
 Relay publication is irreversible once a relay has received an event.
 Cancellation closes pending sockets and discards stale acknowledgements; it is

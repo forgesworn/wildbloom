@@ -20,6 +20,7 @@ export interface BlossomRequestOptions {
   readonly profile?: NetworkProfile;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
+  readonly authorisationLifetimeSeconds?: number;
 }
 
 function requestDeadline(options: BlossomRequestOptions, operation: "upload" | "retrieval") {
@@ -109,7 +110,13 @@ export async function uploadToBlossom(
   const fetchImpl = options.fetchImpl ?? fetch;
   const profile = options.profile ?? "direct";
   const server = normaliseBlossomServer(serverInput, profile);
-  const template = buildUploadAuthorisation(inspected.sha256, server, undefined, undefined, profile);
+  const template = buildUploadAuthorisation(
+    inspected.sha256,
+    server,
+    undefined,
+    options.authorisationLifetimeSeconds,
+    profile,
+  );
   const deadline = requestDeadline(options, "upload");
   try {
     if (deadline.signal.aborted) throw deadline.signal.reason;

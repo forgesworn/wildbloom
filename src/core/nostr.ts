@@ -28,6 +28,8 @@ import {
 const AUTH_KIND = 24242;
 const FILE_KIND = 1063;
 const TORRENT_KIND = 2003;
+const MAX_SIGNED_EVENT_JSON_BYTES = 128 * 1024;
+const SIGNED_EVENT_KEYS = "content,created_at,id,kind,pubkey,sig,tags";
 
 function uniqueTag(tags: readonly string[][], name: string, maximumLength = 8192): string {
   const matches = tags.filter((tag) => tag[0] === name);
@@ -52,17 +54,58 @@ function eventsMatch(template: EventTemplate, signed: SignedNostrEvent): boolean
     && JSON.stringify(signed.tags) === JSON.stringify(template.tags);
 }
 
+export function assertSignedEventExactly(
+  template: EventTemplate,
+  value: unknown,
+  expectedPubkey?: string,
+): SignedNostrEvent {
+  let signed: unknown;
+  try {
+    signed = structuredClone(value);
+  } catch {
+    throw new Error("The signer returned an unreadable Nostr event.");
+  }
+  if (!signed || typeof signed !== "object" || Array.isArray(signed)) {
+    throw new Error("The signer returned an invalid Nostr event shape.");
+  }
+  if (Object.keys(signed).sort().join(",") !== SIGNED_EVENT_KEYS) {
+    throw new Error("The signer returned an unexpected Nostr event shape.");
+  }
+  const event = signed as SignedNostrEvent;
+  if (!eventsMatch(template, event)) {
+    throw new Error("The signer changed the event instead of signing the reviewed template.");
+  }
+  if (!validateEvent(event) || !verifyEvent(event)) throw new Error("The signer returned an invalid Nostr event.");
+  if (expectedPubkey !== undefined && event.pubkey !== assertHex64(expectedPubkey, "Signer public key")) {
+    throw new Error("The signer returned an event for a different public key.");
+  }
+  return event;
+}
+
+export function parseSignedEventJson(
+  template: EventTemplate,
+  json: string,
+  expectedPubkey?: string,
+): SignedNostrEvent {
+  if (new TextEncoder().encode(json).byteLength > MAX_SIGNED_EVENT_JSON_BYTES) {
+    throw new Error("The returned signed-event JSON is unexpectedly large.");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("The returned signed-event JSON is invalid.");
+  }
+  return assertSignedEventExactly(template, parsed, expectedPubkey);
+}
+
 export async function signEventExactly(
   template: EventTemplate,
   signer: SignerPort,
   expectedPubkey: string,
 ): Promise<SignedNostrEvent> {
-  const pubkey = assertHex64(expectedPubkey, "Signer public key");
   const signed = await signer.signEvent(structuredClone(template));
-  if (!eventsMatch(template, signed)) throw new Error("The signer changed the event instead of signing the reviewed template.");
-  if (signed.pubkey !== pubkey) throw new Error("The signer returned an event for a different public key.");
-  if (!validateEvent(signed) || !verifyEvent(signed)) throw new Error("The signer returned an invalid Nostr event.");
-  return signed;
+  return assertSignedEventExactly(template, signed, expectedPubkey);
 }
 
 export function buildUploadAuthorisation(

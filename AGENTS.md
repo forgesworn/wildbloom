@@ -22,7 +22,9 @@ delivery. It is interoperability work, not a new storage network.
 ## Security rules
 
 - Never accept, generate, log, persist or transmit an `nsec` or raw private key.
-  Browser signing goes through an injected NIP-07 signer after a user action.
+  Signing uses either an injected NIP-07 signer after a user action or an exact
+  unsigned-event JSON handoff to an external signer. The handoff accepts only
+  the returned signed event and must never contact the signer automatically.
 - No network action may happen on load. Uploading, relay publication, seeding,
   relay lookup and downloading each require a distinct user action.
 - Blossom authorisation events must be short-lived and scoped to the exact
@@ -48,6 +50,8 @@ delivery. It is interoperability work, not a new storage network.
 ## Protocol scope
 
 - NIP-07 for browser signer access.
+- Canonical Nostr event JSON for manual external signing; this is a custody
+  boundary, not a new signer protocol or an anonymity claim.
 - NIP-94 kind `1063` for the primary hybrid file event.
 - NIP-35 kind `2003` for torrent indexing.
 - BUD-01/02/10/11 for Blossom retrieval, upload, references and authorisation.
