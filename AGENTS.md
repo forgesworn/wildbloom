@@ -13,6 +13,8 @@ delivery. It is interoperability work, not a new storage network.
 
 - `npm run check`: typecheck, coverage-gated tests, production build, browser acceptance and repository secret scan
 - `npm run ci`: the full check plus a high-severity production dependency audit
+- `npm run smoke:browser:firefox`: the production journey in installed Playwright Firefox
+- `npm run smoke:browser:webkit`: the production journey in installed Playwright WebKit
 - `npm run dev`: local Vite development server
 - `npm run serve:production`: loopback static server with production response headers
 

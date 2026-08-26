@@ -7,9 +7,10 @@ envelope. It does not introduce a storage network.
 
 The canonical product is a static browser application. The same local-only
 TypeScript core and built assets target current browsers on Windows, Linux and
-macOS; the complete automated gate runs on all three operating systems. This
-is an application compatibility claim, not a claim that native installers or
-background services exist.
+macOS; the complete automated gate runs in system Chromium on all three, plus
+Playwright Firefox on Linux and Playwright WebKit on macOS. This is an
+application compatibility claim, not a claim that native installers,
+background services, branded Firefox or real Safari have been proven.
 
 Do not add a desktop shell merely for packaging. Reconsider one only if a
 validated requirement needs native streaming for very large files, reliable

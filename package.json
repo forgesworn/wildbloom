@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "serve:production": "node scripts/serve-production.mjs",
     "smoke:browser": "node scripts/browser-smoke.mjs",
+    "smoke:browser:firefox": "node scripts/browser-smoke.mjs --browser firefox",
+    "smoke:browser:webkit": "node scripts/browser-smoke.mjs --browser webkit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",

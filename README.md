@@ -74,8 +74,10 @@ npm run ci
 
 `check` runs strict TypeScript, coverage-gated unit and adversarial tests, a
 production build, a real headless-browser acceptance path and the local secret
-scanner. The browser path proves response security headers and zero ambient
-network activity, then exercises encrypted upload, exact Blossom authority,
+scanner. CI runs the browser path in system Chromium on Windows, Linux and
+macOS, Playwright Firefox on Linux and Playwright WebKit on macOS. It proves
+response security headers and zero ambient network activity, then exercises
+encrypted upload, exact Blossom authority,
 NIP-07 signing, controlled relay publication and retrieval, ciphertext
 download, local recovery, consent reset and Tor-only refusal of clearnet
 fallback. `ci` additionally audits dependencies. The audit script has one

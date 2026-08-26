@@ -5,7 +5,7 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { sha3_256 } from "@noble/hashes/sha3.js";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
-import { chromium } from "playwright-core";
+import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 
 const HOST = "127.0.0.1";
@@ -80,6 +80,40 @@ function findChrome() {
   throw new Error("Browser smoke requires an installed Chrome, Chromium, Brave or Edge executable.");
 }
 
+function requestedBrowser() {
+  const browserArgumentIndex = process.argv.indexOf("--browser");
+  const inlineArgument = process.argv.find((argument) => argument.startsWith("--browser="));
+  if (browserArgumentIndex >= 0 && !process.argv[browserArgumentIndex + 1]) throw new Error("--browser requires a value.");
+  const argumentValue = browserArgumentIndex >= 0 ? process.argv[browserArgumentIndex + 1] : inlineArgument?.slice("--browser=".length);
+  const value = argumentValue ?? process.env.WILDBLOOM_BROWSER ?? "system-chromium";
+  if (!["system-chromium", "chromium", "firefox", "webkit"].includes(value)) {
+    throw new Error(`Unsupported WILDBLOOM_BROWSER value: ${value}`);
+  }
+  return value;
+}
+
+async function launchBrowser(name) {
+  if (name === "system-chromium") {
+    return chromium.launch({ executablePath: findChrome(), headless: true });
+  }
+  const browserType = name === "chromium" ? chromium : name === "firefox" ? firefox : webkit;
+  return browserType.launch({ headless: true });
+}
+
+async function within(promise, milliseconds, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), milliseconds);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function waitForServer(server) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -145,8 +179,9 @@ try {
     throw new Error("Production server did not return a genuine 404.");
   }
 
-  browser = await chromium.launch({ executablePath: findChrome(), headless: true });
-  const page = await browser.newPage();
+  const browserName = requestedBrowser();
+  browser = await launchBrowser(browserName);
+  const page = await within(browser.newPage(), 30_000, `${browserName} did not create a page within 30 seconds.`);
   const pageErrors = [];
   const remoteRequests = [];
   const uploadAuthorisations = [];
@@ -335,7 +370,7 @@ try {
   if (!(await page.isHidden("#recovery-key-panel"))) throw new Error("Plaintext opt-out displayed a misleading recovery key.");
   if (pageErrors.length > 0) throw new Error(`Browser page errors: ${pageErrors.join("; ")}`);
 
-  process.stdout.write("Browser acceptance passed: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, consent reset and fail-closed Tor-only transport verified.\n");
+  process.stdout.write(`Browser acceptance passed in ${browserName}: secure headers, no ambient network, encrypted upload/recovery, controlled relay round-trip, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));
