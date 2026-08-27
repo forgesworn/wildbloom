@@ -1,0 +1,49 @@
+name: Verify production deployment
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-monitor
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN != '' && vars.WILDBLOOM_PRODUCTION_COMMIT != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ vars.WILDBLOOM_PRODUCTION_COMMIT }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Require the recorded production source and custom origin
+        env:
+          PRODUCTION_SOURCE_COMMIT: ${{ vars.WILDBLOOM_PRODUCTION_COMMIT }}
+          PRODUCTION_ORIGIN: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN }}
+        run: >-
+          node scripts/assert-production-context.mjs
+          --source-commit "$PRODUCTION_SOURCE_COMMIT"
+          --workflow-ref "$GITHUB_REF"
+          --origin "$PRODUCTION_ORIGIN"
+      - run: npm run install:policy
+      - run: npm run build
+      - name: Recreate exact release evidence
+        run: npm run release:evidence -- --require-clean --output "$RUNNER_TEMP/release-evidence.json"
+      - name: Verify live bytes and edge policy
+        env:
+          PRODUCTION_ORIGIN: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN }}
+        run: >-
+          npm run verify:deployment --
+          --origin "$PRODUCTION_ORIGIN"
+          --evidence "$RUNNER_TEMP/release-evidence.json"

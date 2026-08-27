@@ -1,15 +1,16 @@
 # Security policy
 
-Wildbloom is a private production candidate. Do not use it for sensitive or
-irreplaceable material until the external review and live gates in
+Wildbloom is a public, unreleased production candidate. Do not use it for
+sensitive or irreplaceable material until the external review and live gates in
 `docs/ACCEPTANCE.md` are complete.
 
 ## Report a problem
 
-Contact a ForgeSworn repository owner privately. GitHub private vulnerability
-reporting is not available for this private repository on the organisation's
-current plan. Do not put a working exploit, secret, private key, unpublished
-file or personal data in an issue or relay event.
+Use [GitHub private vulnerability
+reporting](https://github.com/forgesworn/wildbloom/security/advisories/new). Do
+not put a working exploit, secret, private key, unpublished file or personal
+data in a public issue or relay event.  Non-sensitive usage questions belong in
+[`SUPPORT.md`](SUPPORT.md).
 
 ## Non-negotiable boundaries
 
@@ -30,8 +31,9 @@ file or personal data in an issue or relay event.
   readiness, then performs no per-request release-file reads. A deployment
   change requires a new process and health-checked traffic switch.
 
-The repository being private does not make protocol activity private. Read the
-threat model before testing with live infrastructure.
+The repository is public, and protocol activity is public or observable at the
+boundaries described in the threat model.  Read it before testing with live
+infrastructure.
 
 ## Supply-chain boundary
 
@@ -39,4 +41,5 @@ Production and CI use Node 24.x. Dependabot groups routine minor and patch
 updates, while the Node runtime and `@types/node` major move together only after
 the complete Windows, Linux and macOS matrix has been deliberately retargeted.
 GitHub Actions is restricted at repository level to GitHub-owned actions pinned
-to full commit SHAs.
+to full commit SHAs.  Cloudflare deployment uses the exact locked Wrangler CLI
+rather than broadening that action policy.

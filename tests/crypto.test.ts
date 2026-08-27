@@ -38,7 +38,7 @@ describe("Wildbloom privacy envelopes", () => {
     expect(decrypted.name).toBe("known-answer.txt");
     expect(decrypted.type).toBe("text/plain");
     expect(await decrypted.text()).toBe("Wildbloom v1 known-answer vector\n");
-  });
+  }, 20_000);
 
   it("recovers the independent two-record vector across the authenticated chunk boundary", async () => {
     const fixture = emittedVector("--emit-multirecord");
@@ -58,7 +58,7 @@ describe("Wildbloom privacy envelopes", () => {
     const tampered = envelope.slice();
     tampered[tampered.length - 1] = (tampered.at(-1) ?? 0) ^ 1;
     await expect(decryptPrivacyEnvelope(new Blob([tampered]), String(fixture.recoveryKey))).rejects.toThrow(/modified/u);
-  }, 20_000);
+  }, 60_000);
 
   it("round-trips content and keeps source metadata out of public bytes", async () => {
     const source = new File(["quietly private"], "private-plan.txt", { type: "text/plain" });

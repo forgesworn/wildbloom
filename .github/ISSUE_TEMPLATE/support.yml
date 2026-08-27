@@ -1,0 +1,38 @@
+name: Support question
+description: Ask a non-sensitive question about installing, operating or using Wildbloom.
+title: "[Support] "
+body:
+  - type: markdown
+    attributes:
+      value: Public support is best effort.  Do not paste a private key, recovery key, unpublished event, private file, or live credential here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Browser publishing tool
+        - Wildbloom Node
+        - Nostr, Blossom or torrent interoperability
+        - Installation or deployment
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Explain the outcome you want and where you are stuck.  Use disposable examples only.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Operating system, browser and relevant versions, if applicable.
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Public-data check
+      options:
+        - label: I have removed keys, credentials, private file contents, private endpoints and personal data.
+          required: true
