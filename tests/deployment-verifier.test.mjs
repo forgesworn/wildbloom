@@ -214,6 +214,12 @@ describe("deployed security-header validation", () => {
     expect(metaPolicy).toBe(META_CONTENT_SECURITY_POLICY);
   });
 
+  it("publishes one exact canonical production origin", () => {
+    const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    expect(source.match(/<link rel="canonical" href="https:\/\/wildbloom\.forgesworn\.dev\/" \/>/gu)).toHaveLength(1);
+    expect(source.match(/<meta property="og:url" content="https:\/\/wildbloom\.forgesworn\.dev\/" \/>/gu)).toHaveLength(1);
+  });
+
   it("requires the exact production policy and at least one year of HSTS", () => {
     const headers = new Headers(SECURITY_HEADERS);
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

@@ -20,10 +20,11 @@ changing this browser protocol.
 
 ## Current status
 
-This is a hardened production candidate, not a deployed service. It currently
-supports source files up to 256 MiB. Independent cryptographic review, live
-human Tor Browser usability review, real Safari and cross-network packet
-evidence remain release gates. See
+The hardened production-candidate build is deployed at
+[wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
+declared a production service.  It currently supports source files up to 256
+MiB. Independent cryptographic review, live human Tor Browser usability review,
+real Safari and cross-network packet evidence remain release gates. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
