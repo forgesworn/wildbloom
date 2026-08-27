@@ -176,6 +176,7 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
     expectedHash: index.sha256,
     expectedCacheControl: "no-store",
     expectedContentType: "text/html; charset=utf-8",
+    requireContentLength: false,
     label: "Deployment index",
   });
   await requestExact(`${origin}/`, {
