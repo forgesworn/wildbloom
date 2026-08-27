@@ -320,7 +320,10 @@ async function assertKeyboardEntry(page, browserName) {
   // macOS WebKit follows Safari's default Option-Tab traversal unless the
   // host has enabled full keyboard access. Playwright maps Alt to Option.
   const traversalKey = browserName === "webkit" ? "Alt+Tab" : "Tab";
-  for (let index = 0; index < 16; index += 1) {
+  // The product page now has marketing and documentation links before the
+  // publishing tool.  Keep the test bounded while traversing the whole public
+  // page rather than assuming the signer is among the first few controls.
+  for (let index = 0; index < 64; index += 1) {
     await page.keyboard.press(traversalKey);
     if (await page.evaluate(() => document.activeElement?.id === "connect-signer")) {
       reachedSigner = true;

@@ -48,6 +48,7 @@ function enforceBrowserWebTorrentBoundary(): Plugin {
 }
 
 export default defineConfig({
+  base: "./",
   plugins: [enforceBrowserWebTorrentBoundary()],
   resolve: {
     // create-torrent and parse-torrent expose browser implementations for
