@@ -33,10 +33,18 @@ quota before reading the body, and independently checks its length and SHA-256.
 Each replica stores the complete blob today. This is closer to deliberate
 Blossom pinning than BitTorrent chunk swarming.
 
-The current macOS prototype has exercised two independent node processes: node
-B mirrored through node A's onion, A stopped, and B still served the exact
-bytes. That proves the tested copy survived that source loss. It does not prove
-future custody, automatic repair or Windows/Linux Tor runtime.
+Native macOS acceptance has exercised two independent node processes: node B
+mirrored through node A's onion, A stopped, and B still served the exact bytes.
+The separate installed-preview matrix has also installed and started the
+generated Linux `.deb` and Windows NSIS package on fresh hosted runners,
+reached Tor and Blossom readiness, enforced one app instance, stopped bundled
+children and uninstalled.  The exact evidence is in the node's
+[acceptance ledger](https://github.com/forgesworn/wildbloom-node/blob/main/docs/ACCEPTANCE.md).
+
+That proves the tested replica survived its source loss and the unsigned Linux
+and Windows previews ran in those hosted environments.  It does not prove
+future custody, automatic replica discovery, trusted installer signing,
+updating, reboot behaviour or physical retail-machine support.
 
 ## Why it still needs Nostr
 
@@ -47,4 +55,3 @@ HTTP/Tor without a relay.
 
 RelaySwarm may later provide a faster Noise-authenticated direct transport. It
 must remain optional, with standard Blossom over Tor as the compatible path.
-
