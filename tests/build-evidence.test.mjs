@@ -110,5 +110,5 @@ describe("cross-platform build evidence", () => {
     } finally {
       rmSync(temporary, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 });

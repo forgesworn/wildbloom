@@ -239,9 +239,14 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 - Operating-system memory-pressure and low-end-device tests. The exact maximum
   size and a constrained JS heap are automated, but Blob storage may live
   outside that heap. Operating-system loss is also not yet proven.
-- Production host selection, TLS/HSTS, onion address custody, monitoring,
-  rollback and log-retention policy.
-- Legal name clearance, privacy notice and operator support route.
+- Verified production host selection, TLS/HSTS, onion address custody, live
+  monitoring, rollback rehearsal and the edge's actual log-retention setting.
+  The deployment and scheduled exact-byte verifier are implemented, but are not
+  evidence of a configured provider or successful recovery exercise.
+- Legal name clearance and the deployed operator's privacy notice.  The public
+  support and private vulnerability-reporting routes are now defined, but the
+  technical privacy model cannot identify the legal controller or choose its
+  lawful basis.
 
 Until those gates are evidenced, describe Wildbloom as an unreleased production
 candidate, not a production service and not an anonymity system.

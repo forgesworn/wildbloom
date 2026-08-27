@@ -12,7 +12,8 @@ const EXPECTED_NPM_ENGINE = ">=11 <12";
 const EXPECTED_NPM_MAJOR = 11;
 const EXPECTED_NODE_VERSION = "24.19.0";
 const EXPECTED_INSTALL_COMMAND = "npm ci --ignore-scripts";
-const EXPECTED_WORKFLOW_INSTALLS = 8;
+const EXPECTED_WORKFLOW_INSTALLS = 10;
+const EXPECTED_WRANGLER_VERSION = "4.127.0";
 const REVIEWED_WORKFLOW_ACTIONS = Object.freeze({
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
@@ -50,6 +51,9 @@ for (const [key, value] of Object.entries(EXPECTED_NPM_CONFIG)) {
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 if (packageJson.engines?.npm !== EXPECTED_NPM_ENGINE) {
   fail(`package.json must require npm ${EXPECTED_NPM_ENGINE}.`);
+}
+if (packageJson.devDependencies?.wrangler !== EXPECTED_WRANGLER_VERSION) {
+  fail(`package.json must pin wrangler ${EXPECTED_WRANGLER_VERSION}.`);
 }
 if (readFileSync(".nvmrc", "utf8") !== `${EXPECTED_NODE_VERSION}\n`) {
   fail(`.nvmrc must pin the canonical build to Node ${EXPECTED_NODE_VERSION}.`);
@@ -104,6 +108,9 @@ for (const action of Object.keys(REVIEWED_WORKFLOW_ACTIONS)) {
 }
 
 const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+if (lock.packages?.["node_modules/wrangler"]?.version !== EXPECTED_WRANGLER_VERSION) {
+  fail(`package-lock.json must pin wrangler ${EXPECTED_WRANGLER_VERSION}.`);
+}
 const scriptedPackages = Object.entries(lock.packages ?? {})
   .filter(([, entry]) => entry?.hasInstallScript)
   .map(([path, entry]) => `${path.replace(/^node_modules\//u, "")}@${entry.version ?? "unknown"}`)

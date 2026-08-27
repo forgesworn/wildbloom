@@ -175,8 +175,8 @@ through two disposable profiles and loopback-only WebDriver BiDi. That separate
 gate proves a trustworthy production origin, no ambient application network or
 signer, external-signature encrypted upload and relay publication, exact
 recovery through both Blossom and a second real Firefox WebRTC peer, host-only
-ICE, peer cleanup after failed decryption and consent withdrawal, an
-a published independently generated known-answer fixture, timeout, cancellation
+ICE, peer cleanup after failed decryption and consent withdrawal, a published
+independently generated known-answer fixture, timeout, cancellation
 and denied-service failure. The active peer is also required to leave the
 tracker when the page session ends.
 
@@ -231,6 +231,11 @@ changes cannot silently mutate a running release.
 Production TLS, HSTS, host allowlisting, reverse-proxy logging and onion-service
 configuration are deployment responsibilities. See
 [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+The production deployment, monitoring, rollback and evidence-retention process
+is in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).  Non-sensitive questions use
+[`SUPPORT.md`](SUPPORT.md); security-sensitive reports use GitHub's private
+vulnerability reporting and never a public issue.
 
 `npm run release:evidence -- --require-clean` emits the full source commit,
 package-lock hash, aggregate build hash and the SHA-256 and length of every

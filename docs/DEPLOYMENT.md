@@ -42,6 +42,16 @@ The GitHub Pages workflow is a public hosted preview and fallback.  GitHub Pages
 does not apply Cloudflare `_headers`, so it is not the verified production edge
 and must not replace the Cloudflare deployment record.
 
+The manual Cloudflare production workflow uses the exact locked Wrangler
+version, accepts only a full commit checked out from the `main` workflow ref,
+and refuses a preview host as the production origin.  It runs the complete
+release gate, deploys the fixed `wildbloom` project and retains the release and
+live verification records for 90 days.  The scheduled monitor rebuilds the
+commit in `WILDBLOOM_PRODUCTION_COMMIT` every six hours and checks its exact
+bytes and edge policy at `WILDBLOOM_PRODUCTION_ORIGIN`.  See
+[`OPERATIONS.md`](OPERATIONS.md) for required secrets, variables, rollout and
+rollback.
+
 The production server exposes `/healthz`, serves only `index.html` and
 eight-character content-hashed JavaScript and CSS assets, rejects source maps
 and symbolic links, accepts only `GET` and `HEAD`, applies no-store to HTML,
@@ -182,6 +192,5 @@ A real deployment is complete only when the exact source commit, built asset
 hashes, public or onion address, health response, response headers, process
 identity, bind address, rollback target and logged-out reachability have been
 recorded. `verify:deployment` records the byte and edge-header portion; process
-  identity, bind address, snapshot start, rollback and log policy remain
-  operator evidence. A
-GitHub Actions build is not live deployment proof.
+identity, bind address, snapshot start, rollback and log policy remain operator
+evidence. A GitHub Actions build is not live deployment proof.
