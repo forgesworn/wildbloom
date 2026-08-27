@@ -13,7 +13,10 @@ through three existing protocols:
 The primary object is a standard NIP-94 kind `1063` event containing a Blossom
 URL, SHA-256, magnet URI and torrent info hash. Wildbloom also creates a NIP-35
 kind `2003` torrent index event. It does not put file bytes on Nostr and does
-not claim to create a new storage network.
+not turn the browser itself into a storage node. The companion
+[Wildbloom Node](https://github.com/forgesworn/wildbloom-node) project adds
+operator-owned, persistent Blossom storage and authorised replication without
+changing this browser protocol.
 
 ## Current status
 
@@ -47,6 +50,11 @@ the file.
   deliberately best-effort and may be limited to compatible local networks.
 - **Tor-only encrypted delivery:** exact checksum-valid v3 onion services for
   Nostr and Blossom. Clearnet endpoints, trackers and WebRTC are refused.
+
+A Wildbloom Node onion can be used as the Tor-only Blossom endpoint. It runs on
+the user's own disk, needs no inbound router rule and uses neither WebRTC, STUN
+nor TURN. A second node can mirror the exact encrypted blob through standard
+BUD-04. See [`docs/NODE.md`](docs/NODE.md) for what that does and does not prove.
 
 Use Tor Browser for Tor-only mode, not an ordinary browser pointed at a SOCKS
 proxy. Wildbloom cannot prove that the browser is actually using Tor, and a
