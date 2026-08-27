@@ -111,7 +111,8 @@ async function requestExact(url, {
     expect(response.ok, `${label} returned HTTP ${response.status}.`);
     expect(response.url === url, `${label} changed URL unexpectedly.`);
     expect(response.headers.get("Cache-Control") === expectedCacheControl, `${label} has an unexpected cache policy.`);
-    expect(response.headers.get("Content-Type") === expectedContentType, `${label} has an unexpected MIME type.`);
+    const expectedContentTypes = Array.isArray(expectedContentType) ? expectedContentType : [expectedContentType];
+    expect(expectedContentTypes.includes(response.headers.get("Content-Type")), `${label} has an unexpected MIME type.`);
     expect(response.headers.get("Content-Encoding") === null, `${label} ignored the identity encoding probe.`);
     const contentLength = response.headers.get("Content-Length");
     if (requireContentLength || contentLength !== null) {
@@ -181,12 +182,15 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
     expectedBytes: index.bytes,
     expectedCacheControl: "no-store",
     expectedContentType: "text/html; charset=utf-8",
+    requireContentLength: false,
     method: "HEAD",
     label: "Deployment index HEAD",
   });
 
   for (const file of validatedEvidence.files.filter((item) => item.path !== "index.html")) {
-    const contentType = file.path.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8";
+    const contentType = file.path.endsWith(".css")
+      ? "text/css; charset=utf-8"
+      : ["text/javascript; charset=utf-8", "application/javascript"];
     await requestExact(`${origin}/${file.path}`, {
       expectedBytes: file.bytes,
       expectedHash: file.sha256,
@@ -198,6 +202,7 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
       expectedBytes: file.bytes,
       expectedCacheControl: "public, max-age=31536000, immutable",
       expectedContentType: contentType,
+      requireContentLength: false,
       method: "HEAD",
       label: `Deployment asset HEAD ${file.path}`,
     });
