@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sha3_256 } from "@noble/hashes/sha3.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
@@ -68,6 +68,44 @@ function releaseEvidence() {
     files,
   };
 }
+
+function stubExactEdge({ headContentLength, javascriptContentType = "application/javascript" } = {}) {
+  vi.stubGlobal("fetch", async (input, init = {}) => {
+    const url = String(input);
+    const method = init.method ?? "GET";
+    let body;
+    let cacheControl;
+    let contentType;
+    if (url.endsWith("/healthz")) {
+      body = '{"status":"ok"}\n';
+      cacheControl = "no-store";
+      contentType = "application/json; charset=utf-8";
+    } else if (url.endsWith("/assets/app-abcdefgh.js")) {
+      body = "app";
+      cacheControl = "public, max-age=31536000, immutable";
+      contentType = javascriptContentType;
+    } else {
+      body = "index";
+      cacheControl = "no-store";
+      contentType = "text/html; charset=utf-8";
+    }
+    const headers = new Headers(SECURITY_HEADERS);
+    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    headers.set("Cache-Control", cacheControl);
+    headers.set("Content-Type", contentType);
+    if (method !== "HEAD") headers.set("Content-Length", String(Buffer.byteLength(body)));
+    if (method === "HEAD" && headContentLength !== undefined) {
+      headers.set("Content-Length", String(headContentLength));
+    }
+    const response = new Response(method === "HEAD" ? null : body, { status: 200, headers });
+    Object.defineProperty(response, "url", { value: url });
+    return response;
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("deployment origin validation", () => {
   it("accepts HTTPS and checksum-valid HTTP v3 onion origins", () => {
@@ -177,5 +215,23 @@ describe("deployed security-header validation", () => {
     headers.set("Content-Security-Policy", SECURITY_HEADERS["Content-Security-Policy"]);
     headers.set("Strict-Transport-Security", "max-age=300");
     expect(() => assertHsts(headers)).toThrow(/one year/u);
+  });
+
+  it("accepts standards-valid HEAD responses without Content-Length", async () => {
+    stubExactEdge();
+    await expect(verifyDeployment("https://wildbloom.example", releaseEvidence())).resolves.toMatchObject({
+      origin: "https://wildbloom.example",
+      sourceCommit: "ab".repeat(20),
+    });
+  });
+
+  it("still rejects a false HEAD Content-Length when one is supplied", async () => {
+    stubExactEdge({ headContentLength: 999 });
+    await expect(verifyDeployment("https://wildbloom.example", releaseEvidence())).rejects.toThrow(/Content-Length/u);
+  });
+
+  it("rejects an unsafe JavaScript MIME type", async () => {
+    stubExactEdge({ javascriptContentType: "text/plain; charset=utf-8" });
+    await expect(verifyDeployment("https://wildbloom.example", releaseEvidence())).rejects.toThrow(/MIME type/u);
   });
 });
