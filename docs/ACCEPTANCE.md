@@ -244,5 +244,5 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 - Legal name clearance, licence decision, privacy notice and operator support
   route.
 
-Until those gates are evidenced, describe Wildbloom as a private production
+Until those gates are evidenced, describe Wildbloom as an unreleased production
 candidate, not a production service and not an anonymity system.

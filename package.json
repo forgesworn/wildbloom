@@ -2,6 +2,7 @@
   "name": "wildbloom",
   "version": "0.0.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "A local-first Nostr, Blossom and BitTorrent interoperability prototype.",
   "engines": {

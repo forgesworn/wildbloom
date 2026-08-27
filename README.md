@@ -249,5 +249,7 @@ Wildbloom is a working name and has not received legal trade mark clearance.
 
 ## Licence
 
-Private and unlicensed while the production candidate is being evaluated. No permission
-is granted to copy, distribute or create derivative works.
+Wildbloom is free and open-source software under the [MIT Licence](LICENSE).
+
+If this work is useful, you can support its continued development through the
+[ForgeSworn sponsorship links](https://github.com/sponsors/TheCryptoDonkey).

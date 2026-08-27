@@ -1,0 +1,8 @@
+title = "Wildbloom Gitleaks configuration"
+
+[[allowlists]]
+description = "Published deterministic encryption known-answer vectors"
+paths = [
+  '''^test-vectors/encryption-v1\.json$''',
+  '''^test-vectors/encryption-v1-two-records\.json$''',
+]
