@@ -241,8 +241,7 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
   outside that heap. Operating-system loss is also not yet proven.
 - Production host selection, TLS/HSTS, onion address custody, monitoring,
   rollback and log-retention policy.
-- Legal name clearance, licence decision, privacy notice and operator support
-  route.
+- Legal name clearance, privacy notice and operator support route.
 
 Until those gates are evidenced, describe Wildbloom as an unreleased production
 candidate, not a production service and not an anonymity system.
