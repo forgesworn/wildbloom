@@ -1,7 +1,10 @@
 # Architecture
 
 Wildbloom composes existing protocols and adds a versioned local encryption
-envelope. It does not introduce a storage network.
+envelope. The browser application does not allocate storage or introduce a
+storage network. [Wildbloom Node](https://github.com/forgesworn/wildbloom-node)
+is the separate native project which turns an operator's disk into a standard
+Blossom server and replicates complete blobs between nodes.
 
 ## Platform boundary
 
@@ -36,7 +39,9 @@ but source and encrypted `Blob` storage is browser-managed and may live outside
 the JavaScript heap. This is not a claim that low-memory operating systems or
 devices have been proven.
 
-Do not add a desktop shell merely for packaging. Reconsider one only if a
+Do not add a desktop shell to the browser application merely for packaging.
+Wildbloom Node already owns the native background-service boundary. Reconsider
+a browser-app shell only if a
 validated requirement needs native streaming for very large files, reliable
 background seeding, OS key storage or a separately designed bundled-Tor
 process. A Tauri spike must prove the exact crypto, WebSocket, WebRTC, download
@@ -62,7 +67,7 @@ Platform references:
                     |
 publisher --NIP-07 or exact external signature----> Nostr relays
     |
-    +--BUD-11 scoped auth--> Blossom server --SHA-256 URL--+
+    +--BUD-11 scoped auth--> Blossom / Wildbloom Node --SHA-256 URL--+
     |                                                       |
     +--WebTorrent seed----------> tracker/peers <------------+
                                                             web seed
