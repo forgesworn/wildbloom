@@ -12,12 +12,15 @@ const EXPECTED_NPM_ENGINE = ">=11 <12";
 const EXPECTED_NPM_MAJOR = 11;
 const EXPECTED_NODE_VERSION = "24.19.0";
 const EXPECTED_INSTALL_COMMAND = "npm ci --ignore-scripts";
-const EXPECTED_WORKFLOW_INSTALLS = 7;
+const EXPECTED_WORKFLOW_INSTALLS = 8;
 const REVIEWED_WORKFLOW_ACTIONS = Object.freeze({
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+  "actions/configure-pages": "983d7736d9b0ae728b81ab479565c72886d7745b",
+  "actions/deploy-pages": "d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e",
   "actions/setup-node": "820762786026740c76f36085b0efc47a31fe5020",
   "actions/upload-artifact": "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+  "actions/upload-pages-artifact": "7b1f4a764d45c48632c6b24a0339c27f5614fb0b",
 });
 
 function fail(message) {

@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:cloudflare": "npm run build && node scripts/prepare-cloudflare-pages.mjs",
     "preview": "vite preview",
     "serve:production": "node scripts/serve-production.mjs",
     "release:evidence": "node scripts/release-evidence.mjs",

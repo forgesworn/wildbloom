@@ -20,6 +20,28 @@ Use the exact Node patch in `.nvmrc` for a canonical release build. The
 repository also forces LF text checkouts so Windows cannot publish different
 HTML or package-lock bytes merely because of line-ending conversion.
 
+## Hosted marketing site
+
+The marketing material and browser tool are one static build.  For Cloudflare
+Pages, prepare the exact Vite output plus the platform's `_headers` rules and a
+bounded health response:
+
+```sh
+npm run build:cloudflare
+wrangler pages deploy dist --project-name wildbloom --branch main
+```
+
+`build:cloudflare` first validates the ordinary production build, then adds only
+`_headers` and `healthz`.  The header policy is generated from the same
+`http-security.mjs` constants as the loopback production server.  Those two
+hosting files are deliberately not part of the application release evidence;
+the verifier hashes the actual browser assets and checks the live edge headers
+and health response separately.
+
+The GitHub Pages workflow is a public hosted preview and fallback.  GitHub Pages
+does not apply Cloudflare `_headers`, so it is not the verified production edge
+and must not replace the Cloudflare deployment record.
+
 The production server exposes `/healthz`, serves only `index.html` and
 eight-character content-hashed JavaScript and CSS assets, rejects source maps
 and symbolic links, accepts only `GET` and `HEAD`, applies no-store to HTML,

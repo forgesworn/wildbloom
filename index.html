@@ -8,20 +8,177 @@
       content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; font-src 'none'; frame-src 'none'; manifest-src 'none'; media-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion; worker-src 'self' blob:; trusted-types 'none'; require-trusted-types-for 'script'"
     />
     <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="Wildbloom is an MIT-licensed toolkit for encrypted publishing and self-hosted Blossom storage over Nostr and Tor."
+    />
+    <meta name="theme-color" content="#0a0d0b" />
+    <meta property="og:title" content="Wildbloom · Files that outlive their host" />
+    <meta
+      property="og:description"
+      content="Publish encrypted files, run your own storage node and keep control of the replicas."
+    />
+    <meta property="og:type" content="website" />
     <link rel="icon" href="data:," />
-    <title>Wildbloom</title>
+    <title>Wildbloom · Encrypted publishing and storage you control</title>
   </head>
   <body>
     <main class="shell">
-      <header class="masthead">
-        <p class="eyebrow">ForgeSworn experiment · local-first</p>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a class="wordmark" href="#top" aria-label="Wildbloom home">Wildbloom</a>
+        <div>
+          <a href="#what">What it is</a>
+          <a href="#install">Install</a>
+          <a href="#protocol">Protocol</a>
+          <a href="#use-wildbloom">Use it</a>
+          <a href="https://github.com/forgesworn/wildbloom" rel="noreferrer">GitHub</a>
+        </div>
+      </nav>
+
+      <header id="top" class="masthead hero">
+        <p class="eyebrow">ForgeSworn · open source · MIT</p>
         <h1>Wildbloom</h1>
         <p class="lede">Files that outlive their host.</p>
+        <p class="hero-copy">
+          Publish encrypted files without handing one company the keys, the
+          address book and the only copy.  Wildbloom joins Nostr discovery,
+          Blossom storage and a home node reached through Tor.
+        </p>
+        <div class="hero-actions">
+          <a class="button-link" href="#use-wildbloom">Use Wildbloom</a>
+          <a class="button-link secondary" href="#install">Run a node</a>
+        </div>
+        <ul class="hero-facts" aria-label="Wildbloom principles">
+          <li>No account</li>
+          <li>No private keys</li>
+          <li>No port forwarding</li>
+          <li>No STUN or TURN for the node path</li>
+        </ul>
+      </header>
+
+      <section id="what" class="story-section" aria-labelledby="what-heading">
+        <p class="section-kicker">What it is</p>
+        <h2 id="what-heading">A publishing tool and a storage node.  Not another promise-shaped cloud.</h2>
+        <p class="story-intro">
+          The browser prepares and encrypts a file, asks your Nostr signer to
+          approve exact actions, and publishes a signed pointer.  Wildbloom
+          Node stores the bytes on a machine you control and exposes a standard
+          Blossom service through a stable Tor onion address.
+        </p>
+        <div class="story-grid two">
+          <article>
+            <span class="card-number">01</span>
+            <h3>Wildbloom</h3>
+            <p>Encrypt, upload, publish, retrieve and verify in the browser.  Nothing contacts the network until you press the relevant button.</p>
+          </article>
+          <article>
+            <span class="card-number">02</span>
+            <h3>Wildbloom Node</h3>
+            <p>A desktop tray app for Windows, Linux and macOS.  It bundles Tor, keeps its service identity across restarts and permits writes only from your chosen Nostr public key.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="why" class="story-section contrast" aria-labelledby="why-heading">
+        <p class="section-kicker">Why it exists</p>
+        <h2 id="why-heading">A URL is not custody.</h2>
+        <div class="story-grid three-cards">
+          <article>
+            <h3>Servers disappear</h3>
+            <p>A Blossom URL proves where bytes were once available.  It does not promise that somebody else will keep paying for the disk.</p>
+          </article>
+          <article>
+            <h3>Home hosting is awkward</h3>
+            <p>Router rules, changing IP addresses and carrier NAT make a simple home server needlessly hostile.  Tor onion services remove that inbound networking chore.</p>
+          </article>
+          <article>
+            <h3>Redundancy must be visible</h3>
+            <p>Wildbloom uses content hashes and standard Blossom mirroring.  A second node is a real second copy, not a green tick backed by the same provider.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="uses" class="story-section" aria-labelledby="uses-heading">
+        <p class="section-kicker">Use cases</p>
+        <h2 id="uses-heading">Useful anywhere the file matters more than the host.</h2>
+        <ul class="use-list">
+          <li><strong>Creators</strong><span>Keep media referenced by Nostr posts available without betting everything on a free upload host.</span></li>
+          <li><strong>Communities</strong><span>Share the storage burden across independently run nodes and verify every replica by hash.</span></li>
+          <li><strong>Families and small teams</strong><span>Run a quiet home node without exposing a home IP address or opening a router port.</span></li>
+          <li><strong>Developers</strong><span>Dogfood standard Blossom storage in an existing Nostr application rather than adopting a proprietary API.</span></li>
+        </ul>
+      </section>
+
+      <section id="install" class="story-section install-section" aria-labelledby="install-heading">
+        <p class="section-kicker">Install</p>
+        <h2 id="install-heading">Start with source while signed installers finish their trust checks.</h2>
+        <p class="story-intro">
+          The node targets the three desktop families, but public
+          downloads stay unpublished until macOS notarisation, Windows code
+          signing and clean-machine installation have all been proved.  We
+          won't disguise an unsigned preview as a release.
+        </p>
+        <div class="install-grid">
+          <article>
+            <p class="platform">Windows · Linux · macOS</p>
+            <h3>Wildbloom Node</h3>
+            <p>Follow the locked source build while installer signing is being completed.</p>
+            <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Build the desktop app from source</a>
+          </article>
+          <article>
+            <p class="platform">Any modern browser</p>
+            <h3>Wildbloom</h3>
+            <p>The publishing tool runs here.  For onion endpoints, use Tor Browser and read the privacy boundary before connecting.</p>
+            <a href="#use-wildbloom">Open the publishing tool</a>
+          </article>
+        </div>
+      </section>
+
+      <section id="protocol" class="story-section" aria-labelledby="protocol-heading">
+        <p class="section-kicker">Protocol</p>
+        <h2 id="protocol-heading">Boring standards at the joins.  Explicit limits at the edges.</h2>
+        <ol class="protocol-flow">
+          <li><span>1</span><div><strong>Prepare</strong><p>The browser encrypts content, filename and MIME type locally, then calculates the payload's SHA-256.</p></div></li>
+          <li><span>2</span><div><strong>Authorise</strong><p>Your signer approves a short-lived BUD-11 action for one hash and one Blossom host.  Wildbloom never asks for an nsec.</p></div></li>
+          <li><span>3</span><div><strong>Store and replicate</strong><p>BUD-02 uploads the exact bytes.  BUD-04 lets another authorised node mirror them, and each node verifies the content hash.</p></div></li>
+          <li><span>4</span><div><strong>Discover</strong><p>A signed NIP-94 event tells readers where to fetch the payload and what hash and size to expect.</p></div></li>
+          <li><span>5</span><div><strong>Verify</strong><p>Retrieval is not complete until the byte count and SHA-256 match the signed event.  Decryption happens locally.</p></div></li>
+        </ol>
+        <div class="boundary protocol-boundary">
+          <strong>The blunt bit.</strong>  Wildbloom is interoperable storage and
+          client-driven replication, not a new autonomous storage network.
+          Nodes do not discover strangers, promise permanent custody or create
+          replicas without somebody explicitly asking them to.  Two nodes mean
+          two copies only after mirroring succeeds and both hashes verify.
+        </div>
+        <div class="text-links">
+          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/PROTOCOL.md" rel="noreferrer">Read the protocol</a>
+          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/THREAT-MODEL.md" rel="noreferrer">Read the threat model</a>
+          <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/ENCRYPTION.md" rel="noreferrer">Read the encryption format</a>
+        </div>
+      </section>
+
+      <section class="story-section small-print" aria-labelledby="reality-heading">
+        <p class="section-kicker">What it does not do</p>
+        <h2 id="reality-heading">No magic words.</h2>
+        <p>
+          Encryption protects file content, not timing, byte counts or a reused
+          public identity.  Nostr relays provide discovery, not the file bytes.
+          Tor hides the node's home address, not every behavioural clue.  The
+          experimental direct browser swarm remains an optional compatibility
+          path and can expose IP addresses; the Wildbloom Node path does not use
+          WebRTC, STUN or TURN.
+        </p>
+      </section>
+
+      <header id="use-wildbloom" class="tool-intro">
+        <p class="section-kicker">Browser tool</p>
+        <h2>Publish or retrieve a file</h2>
         <p class="boundary">
           Wildbloom encrypts file content locally by default and keeps signing
-          keys in your chosen signer. Use NIP-07 or hand exact event JSON to an
-          external signer; never give Wildbloom a private key. Publishing metadata and joining a
-          torrent swarm still reveal information. Nothing starts automatically.
+          keys in your chosen signer.  Use NIP-07 or hand exact event JSON to an
+          external signer; never give Wildbloom a private key.  Publishing metadata and joining a
+          torrent swarm still reveal information.  Nothing starts automatically.
         </p>
       </header>
 
@@ -234,8 +391,8 @@
       </section>
 
       <footer>
-        Privacy is a set of bounded controls, not a badge. Verify the threat model before using sensitive material.
-        <a href="https://github.com/forgesworn/wildbloom-node" rel="noreferrer">Run your own Blossom server with Wildbloom Node.</a>
+        <p>Privacy is a set of bounded controls, not a badge.  Verify the threat model before using sensitive material.</p>
+        <p><a href="https://github.com/forgesworn/wildbloom" rel="noreferrer">Source</a> · <a href="https://github.com/forgesworn/wildbloom/blob/main/LICENSE" rel="noreferrer">MIT licence</a> · <a href="https://github.com/sponsors/TheCryptoDonkey" rel="noreferrer">Sponsor ForgeSworn</a> · <a href="https://github.com/forgesworn/wildbloom/security" rel="noreferrer">Security</a></p>
       </footer>
     </main>
     <script type="module" src="/src/main.ts"></script>
