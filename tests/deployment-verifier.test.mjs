@@ -69,7 +69,12 @@ function releaseEvidence() {
   };
 }
 
-function stubExactEdge({ headContentLength, javascriptContentType = "application/javascript" } = {}) {
+function stubExactEdge({
+  headContentLength,
+  indexGetContentLength,
+  javascriptContentType = "application/javascript",
+  omitIndexGetContentLength = false,
+} = {}) {
   vi.stubGlobal("fetch", async (input, init = {}) => {
     const url = String(input);
     const method = init.method ?? "GET";
@@ -93,7 +98,12 @@ function stubExactEdge({ headContentLength, javascriptContentType = "application
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     headers.set("Cache-Control", cacheControl);
     headers.set("Content-Type", contentType);
-    if (method !== "HEAD") headers.set("Content-Length", String(Buffer.byteLength(body)));
+    if (method !== "HEAD" && !(omitIndexGetContentLength && url.endsWith("/"))) {
+      const contentLength = url.endsWith("/") && indexGetContentLength !== undefined
+        ? indexGetContentLength
+        : Buffer.byteLength(body);
+      headers.set("Content-Length", String(contentLength));
+    }
     if (method === "HEAD" && headContentLength !== undefined) {
       headers.set("Content-Length", String(headContentLength));
     }
@@ -223,6 +233,18 @@ describe("deployed security-header validation", () => {
       origin: "https://wildbloom.example",
       sourceCommit: "ab".repeat(20),
     });
+  });
+
+  it("accepts an exact GET body when the edge omits Content-Length", async () => {
+    stubExactEdge({ omitIndexGetContentLength: true });
+    await expect(verifyDeployment("https://wildbloom.example", releaseEvidence())).resolves.toMatchObject({
+      origin: "https://wildbloom.example",
+    });
+  });
+
+  it("still rejects a false GET Content-Length when one is supplied", async () => {
+    stubExactEdge({ indexGetContentLength: 999 });
+    await expect(verifyDeployment("https://wildbloom.example", releaseEvidence())).rejects.toThrow(/Content-Length/u);
   });
 
   it("still rejects a false HEAD Content-Length when one is supplied", async () => {
