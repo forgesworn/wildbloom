@@ -129,7 +129,7 @@ const blossom = createServer((request, response) => {
       if (body.includes(BYTES)) throw new Error("Browser upload exposed plaintext source bytes.");
       const hash = createHash("sha256").update(body).digest("hex");
       if (request.headers["x-sha-256"] !== hash) throw new Error("Browser upload sent the wrong X-SHA-256.");
-      if (request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") throw new Error("Browser upload exposed the source MIME type.");
+      if (request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") throw new Error("Browser upload exposed the source MIME type.");
       const authorisation = request.headers.authorization;
       if (!authorisation?.startsWith("Nostr ")) throw new Error("Browser upload omitted Blossom authorisation.");
       uploadAuthorisations.push(JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8")));
@@ -141,7 +141,7 @@ const blossom = createServer((request, response) => {
         url: `${descriptorOrigin}/${hash}.wbenc`,
         sha256: hash,
         size: body.length,
-        type: "application/vnd.wildbloom.encrypted",
+        type: "application/vnd.forgesworn.encrypted",
         uploaded: 1_700_000_000,
       }));
       return;
@@ -150,7 +150,7 @@ const blossom = createServer((request, response) => {
       if (hangDownload) {
         response.writeHead(200, {
           ...cors,
-          "Content-Type": "application/vnd.wildbloom.encrypted",
+          "Content-Type": "application/vnd.forgesworn.encrypted",
           "Content-Length": String(uploadedBytes.length),
         });
         response.write(uploadedBytes.subarray(0, Math.min(1024, uploadedBytes.length)));
@@ -160,7 +160,7 @@ const blossom = createServer((request, response) => {
       }
       response.writeHead(200, {
         ...cors,
-        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Type": "application/vnd.forgesworn.encrypted",
         "Content-Length": String(uploadedBytes.length),
       });
       response.end(uploadedBytes);
@@ -172,7 +172,7 @@ const blossom = createServer((request, response) => {
     if (request.method === "GET" && knownAnswerFixture) {
       response.writeHead(200, {
         ...cors,
-        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Type": "application/vnd.forgesworn.encrypted",
         "Content-Length": String(knownAnswerFixture.envelope.length),
       });
       response.end(knownAnswerFixture.envelope);
@@ -459,7 +459,7 @@ function makeKnownAnswerEvent(fixture, origin, createdAt) {
     created_at: createdAt,
     tags: [
       ["url", `${origin}/${fixture.envelopeSha256}.wbenc`],
-      ["m", "application/vnd.wildbloom.encrypted"],
+      ["m", "application/vnd.forgesworn.encrypted"],
       ["x", fixture.envelopeSha256],
       ["ox", fixture.envelopeSha256],
       ["size", String(fixture.envelope.length)],

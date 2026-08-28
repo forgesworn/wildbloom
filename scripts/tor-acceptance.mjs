@@ -216,7 +216,7 @@ const blossom = createHttpServer((request, response) => {
       if (body.length === 0 || body.includes(SOURCE_BYTES)) throw new Error("Real-onion upload omitted ciphertext or exposed source bytes.");
       const hash = createHash("sha256").update(body).digest("hex");
       if (request.headers["x-sha-256"] !== hash) throw new Error("Real-onion upload sent the wrong SHA-256 header.");
-      if (request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") throw new Error("Real-onion upload exposed the source MIME type.");
+      if (request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") throw new Error("Real-onion upload exposed the source MIME type.");
       const authorisation = request.headers.authorization;
       if (!authorisation?.startsWith("Nostr ")) throw new Error("Real-onion upload omitted Nostr authorisation.");
       const event = JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8"));
@@ -237,7 +237,7 @@ const blossom = createHttpServer((request, response) => {
         url: `${blossomOnionOrigin}/${hash}.wbenc`,
         sha256: hash,
         size: body.length,
-        type: "application/vnd.wildbloom.encrypted",
+        type: "application/vnd.forgesworn.encrypted",
         uploaded: 1_700_000_000,
       }));
       return;
@@ -257,7 +257,7 @@ const blossom = createHttpServer((request, response) => {
         });
         response.writeHead(200, {
           ...cors,
-          "Content-Type": "application/vnd.wildbloom.encrypted",
+          "Content-Type": "application/vnd.forgesworn.encrypted",
           "Content-Length": String(uploadedBytes.length),
         });
         response.write(uploadedBytes.subarray(0, Math.min(1024, uploadedBytes.length - 1)));
@@ -265,7 +265,7 @@ const blossom = createHttpServer((request, response) => {
       }
       response.writeHead(200, {
         ...cors,
-        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Type": "application/vnd.forgesworn.encrypted",
         "Content-Length": String(uploadedBytes.length),
       });
       response.end(uploadedBytes);
