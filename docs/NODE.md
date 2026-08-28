@@ -3,7 +3,7 @@
 [Wildbloom Node](https://github.com/forgesworn/wildbloom-node) is the native,
 self-hosted half of the Wildbloom idea. The browser encrypts and signs. The node
 stores the resulting Blossom blob on the operator's disk and serves it through
-a stable Tor v3 onion.
+operator-managed HTTPS or, when selected, a stable Tor v3 onion.
 
 The separation is deliberate:
 
@@ -15,20 +15,25 @@ The separation is deliberate:
 
 ## Home networking
 
-The node binds to loopback and starts Tor itself. Tor supplies the inbound onion
-route and an internal outbound path for replication, so the operator does not
-open a firewall port or configure NAT. There is no WebRTC, STUN or TURN in the
-node.
+The node binds to loopback by default.  Tor is optional.  In Tor mode it
+supplies the inbound onion route and an internal outbound path for replication,
+so the operator does not open a firewall port or configure NAT.  In direct mode
+the node does not start Tor; local use works immediately, while remote
+reachability requires an operator-owned HTTPS reverse proxy.  There is no
+WebRTC, STUN or TURN in either node path.
 
-For the browser's Tor-only profile, open Wildbloom through Tor Browser and enter
-the node's `.onion` URL as the Blossom server. Wildbloom signs a short-lived
+For the browser's ordinary direct profile, enter the node's HTTPS URL as the
+Blossom server.  Direct clients and infrastructure see normal network metadata.
+For the Tor-only profile, open Wildbloom through Tor Browser and enter the
+node's `.onion` URL. Wildbloom signs a short-lived
 BUD-11 event for that exact hostname and hash, uploads only the prepared
 ciphertext, and verifies the returned descriptor.
 
 ## Replication
 
 `PUT /mirror` uses standard BUD-04. A destination node receives a signed upload
-authority and a hash-addressed source URL, fetches it through Tor, reserves
+authority and a hash-addressed source URL, fetches it through the selected Tor
+or public-HTTPS transport, reserves
 quota before reading the body, and independently checks its length and SHA-256.
 Each replica stores the complete blob today. This is closer to deliberate
 Blossom pinning than BitTorrent chunk swarming.
@@ -51,7 +56,8 @@ updating, reboot behaviour or physical retail-machine support.
 Nostr is useful for signed discovery, server lists and private storage offers.
 It does not carry the file and a relay acknowledgement does not prove custody.
 Once a Blossom endpoint is known, upload, mirroring and retrieval continue over
-HTTP/Tor without a relay.
+Blossom HTTP via HTTPS or Tor without a relay.
 
-RelaySwarm may later provide a faster Noise-authenticated direct transport. It
-must remain optional, with standard Blossom over Tor as the compatible path.
+RelaySwarm may later provide a faster Noise-authenticated native transport. It
+must remain optional, with standard Blossom over direct HTTPS or Tor as the
+compatible paths.

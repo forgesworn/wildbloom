@@ -10,7 +10,7 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       name="description"
-      content="Wildbloom is an MIT-licensed toolkit for encrypted publishing and self-hosted Blossom storage over Nostr and Tor."
+      content="Wildbloom is an MIT-licensed toolkit for encrypted publishing and self-hosted Blossom storage over Nostr, HTTPS and optional Tor."
     />
     <meta name="theme-color" content="#0a0d0b" />
     <meta property="og:title" content="Wildbloom · Files that outlive their host" />
@@ -44,7 +44,8 @@
         <p class="hero-copy">
           Publish encrypted files without handing one company the keys, the
           address book and the only copy.  Wildbloom joins Nostr discovery,
-          Blossom storage and a home node reached through Tor.
+          Blossom storage and a home node reached through direct HTTPS or
+          optional Tor.
         </p>
         <div class="hero-actions">
           <a class="button-link" href="#use-wildbloom">Use Wildbloom</a>
@@ -53,7 +54,7 @@
         <ul class="hero-facts" aria-label="Wildbloom principles">
           <li>No account</li>
           <li>No private keys</li>
-          <li>No port forwarding</li>
+          <li>Tor is optional</li>
           <li>No STUN or TURN for the node path</li>
         </ul>
       </header>
@@ -65,7 +66,8 @@
           The browser prepares and encrypts a file, asks your Nostr signer to
           approve exact actions, and publishes a signed pointer.  Wildbloom
           Node stores the bytes on a machine you control and exposes a standard
-          Blossom service through a stable Tor onion address.
+          Blossom service through your HTTPS setup or a stable Tor onion
+          address.
         </p>
         <div class="story-grid two">
           <article>
@@ -76,7 +78,7 @@
           <article>
             <span class="card-number">02</span>
             <h3>Wildbloom Node</h3>
-            <p>A desktop tray app for Windows, Linux and macOS.  It bundles Tor, keeps its service identity across restarts and permits writes only from your chosen Nostr public key.</p>
+            <p>A desktop tray app for Windows, Linux and macOS.  Choose direct mode or optional bundled Tor; either way, writes remain limited to your chosen Nostr public key and invited friends.</p>
           </article>
         </div>
       </section>
@@ -91,7 +93,7 @@
           </article>
           <article>
             <h3>Home hosting is awkward</h3>
-            <p>Router rules, changing IP addresses and carrier NAT make a simple home server needlessly hostile.  Tor onion services remove that inbound networking chore.</p>
+            <p>Router rules, changing IP addresses and carrier NAT make a simple home server needlessly hostile.  Optional Tor removes that inbound networking chore; people with HTTPS infrastructure can use it directly.</p>
           </article>
           <article>
             <h3>Redundancy must be visible</h3>
@@ -106,7 +108,7 @@
         <ul class="use-list">
           <li><strong>Creators</strong><span>Keep media referenced by Nostr posts available without betting everything on a free upload host.</span></li>
           <li><strong>Communities</strong><span>Share the storage burden across independently run nodes and verify every replica by hash.</span></li>
-          <li><strong>Families and small teams</strong><span>Run a quiet home node without exposing a home IP address or opening a router port.</span></li>
+          <li><strong>Families and small teams</strong><span>Use optional Tor when the home address should stay hidden, or connect the same node to infrastructure you already operate.</span></li>
           <li><strong>Developers</strong><span>Dogfood standard Blossom storage in an existing Nostr application rather than adopting a proprietary API.</span></li>
         </ul>
       </section>
@@ -166,7 +168,7 @@
         <p>
           Encryption protects file content, not timing, byte counts or a reused
           public identity.  Nostr relays provide discovery, not the file bytes.
-          Tor hides the node's home address, not every behavioural clue.  The
+          Tor is optional and hides the node's home address, not every behavioural clue.  Direct mode exposes ordinary network metadata.  The
           experimental direct browser swarm remains an optional compatibility
           path and can expose IP addresses; the Wildbloom Node path does not use
           WebRTC, STUN or TURN.

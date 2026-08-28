@@ -52,10 +52,12 @@ the file.
 - **Tor-only encrypted delivery:** exact checksum-valid v3 onion services for
   Nostr and Blossom. Clearnet endpoints, trackers and WebRTC are refused.
 
-A Wildbloom Node onion can be used as the Tor-only Blossom endpoint. It runs on
-the user's own disk, needs no inbound router rule and uses neither WebRTC, STUN
-nor TURN. A second node can mirror the exact encrypted blob through standard
-BUD-04. See [`docs/NODE.md`](docs/NODE.md) for what that does and does not prove.
+A Wildbloom Node can be used as an ordinary HTTPS Blossom endpoint or, when
+chosen, as the Tor-only onion endpoint.  Tor mode needs no inbound router rule;
+direct mode uses operator-managed HTTPS and exposes ordinary network metadata.
+Neither node path uses WebRTC, STUN nor TURN.  A second node can mirror the
+exact encrypted blob through standard BUD-04. See
+[`docs/NODE.md`](docs/NODE.md) for what that does and does not prove.
 
 Use Tor Browser for Tor-only mode, not an ordinary browser pointed at a SOCKS
 proxy. Wildbloom cannot prove that the browser is actually using Tor, and a
