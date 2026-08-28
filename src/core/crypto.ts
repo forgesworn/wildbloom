@@ -8,7 +8,11 @@ import {
 } from "./types.js";
 
 const HEX = "0123456789abcdef";
-const ENVELOPE_MAGIC = new TextEncoder().encode("WBLMENC1");
+// New frames are written under the product-neutral magic. Legacy WBLMENC1
+// frames stay readable: every record authenticates the actual header bytes as
+// AAD, so a blob decrypts under whichever magic it was sealed with.
+const ENVELOPE_MAGIC = new TextEncoder().encode("FSWNENC1");
+const ENVELOPE_MAGIC_LEGACY = new TextEncoder().encode("WBLMENC1");
 const ENVELOPE_HEADER_BYTES = 24;
 const ENVELOPE_CHUNK_BYTES = 1024 * 1024;
 const ENVELOPE_TAG_BYTES = 16;
@@ -257,7 +261,8 @@ async function parseEnvelopeHeader(file: Blob, signal?: AbortSignal): Promise<{
   assertActive(signal, "Local decryption");
   const header = new Uint8Array(await file.slice(0, ENVELOPE_HEADER_BYTES).arrayBuffer());
   assertActive(signal, "Local decryption");
-  if (header.length !== ENVELOPE_HEADER_BYTES || ENVELOPE_MAGIC.some((byte, index) => header[index] !== byte)) {
+  const magicMatches = (magic: Uint8Array): boolean => magic.every((byte, index) => header[index] === byte);
+  if (header.length !== ENVELOPE_HEADER_BYTES || (!magicMatches(ENVELOPE_MAGIC) && !magicMatches(ENVELOPE_MAGIC_LEGACY))) {
     throw new Error("This is not a Wildbloom encrypted envelope.");
   }
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
