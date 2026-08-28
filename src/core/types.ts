@@ -20,7 +20,10 @@ export type NetworkProfile = "direct" | "tor";
 
 export const WILDBLOOM_ENCRYPTION = "wildbloom-aes-256-gcm-chunked-v1" as const;
 export const WILDBLOOM_ENCRYPTED_FILE_NAME = "wildbloom.wbenc" as const;
-export const WILDBLOOM_ENCRYPTED_MIME_TYPE = "application/vnd.wildbloom.encrypted" as const;
+export const WILDBLOOM_ENCRYPTED_MIME_TYPE = "application/vnd.forgesworn.encrypted" as const;
+// Legacy MIME. Blobs published before the rename still declare this, so the
+// verification paths must keep accepting it alongside the new type.
+export const WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY = "application/vnd.wildbloom.encrypted" as const;
 export type EncryptionScheme = typeof WILDBLOOM_ENCRYPTION;
 
 export interface BlobDescriptor {

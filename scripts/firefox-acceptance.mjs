@@ -52,7 +52,7 @@ async function makeIndependentFixture(blossomOrigin) {
     created_at: 1_700_000_000,
     tags: [
       ["url", url],
-      ["m", "application/vnd.wildbloom.encrypted"],
+      ["m", "application/vnd.forgesworn.encrypted"],
       ["x", hash],
       ["ox", hash],
       ["size", String(encrypted.length)],
@@ -448,7 +448,7 @@ const blossom = createServer((request, response) => {
       if (body.length === 0 || body.includes(PREPARED_BYTES)) throw new Error("Mozilla Firefox upload omitted ciphertext or exposed source bytes.");
       const hash = createHash("sha256").update(body).digest("hex");
       if (request.headers["x-sha-256"] !== hash
-        || request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") {
+        || request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") {
         throw new Error("Mozilla Firefox upload changed its encrypted payload facts.");
       }
       const authorisation = request.headers.authorization;
@@ -471,7 +471,7 @@ const blossom = createServer((request, response) => {
         url: `${origin}/${hash}.wbenc`,
         sha256: hash,
         size: body.length,
-        type: "application/vnd.wildbloom.encrypted",
+        type: "application/vnd.forgesworn.encrypted",
         uploaded: 1_700_000_000,
       }));
       return;
@@ -503,7 +503,7 @@ const blossom = createServer((request, response) => {
         response.writeHead(200, {
           ...cors,
           "Content-Length": String(selectedBytes.length),
-          "Content-Type": "application/vnd.wildbloom.encrypted",
+          "Content-Type": "application/vnd.forgesworn.encrypted",
         });
         response.write(selectedBytes.subarray(0, 1024));
         return;
@@ -511,7 +511,7 @@ const blossom = createServer((request, response) => {
       response.writeHead(200, {
         ...cors,
         "Content-Length": String(selectedBytes.length),
-        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Type": "application/vnd.forgesworn.encrypted",
       });
       response.end(selectedBytes);
       return;

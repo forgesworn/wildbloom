@@ -13,6 +13,7 @@ import type {
 import {
   WILDBLOOM_ENCRYPTED_FILE_NAME,
   WILDBLOOM_ENCRYPTED_MIME_TYPE,
+  WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY,
   WILDBLOOM_ENCRYPTION,
 } from "./types.js";
 import {
@@ -179,7 +180,8 @@ export function buildFileEvent(publication: HybridPublication, nowSeconds = Math
   const { inspected, descriptor, torrent } = publication;
   if (publication.encryption && (
     inspected.name !== WILDBLOOM_ENCRYPTED_FILE_NAME
-    || inspected.type !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+    || (inspected.type !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+      && inspected.type !== WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY)
   )) {
     throw new Error("Encrypted Wildbloom events must describe the canonical public envelope.");
   }
@@ -322,7 +324,8 @@ export function resolveHybridEvent(
   if (encryptionValue !== undefined) {
     if (encryptionValue !== WILDBLOOM_ENCRYPTION) throw new Error("The event uses an unsupported encryption scheme.");
     if (event.content !== WILDBLOOM_ENCRYPTED_FILE_NAME
-      || mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+      || (mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE
+        && mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY)
       || alt !== "Encrypted Wildbloom file") {
       throw new Error("The encrypted event does not use Wildbloom's canonical public envelope metadata.");
     }

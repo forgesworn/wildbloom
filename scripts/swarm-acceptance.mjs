@@ -181,7 +181,7 @@ const blossom = createHttpServer((request, response) => {
       if (body.includes(SOURCE_BYTES)) throw new Error("Browser upload exposed plaintext source bytes.");
       const hash = createHash("sha256").update(body).digest("hex");
       if (request.headers["x-sha-256"] !== hash) throw new Error("Browser upload sent the wrong X-SHA-256.");
-      if (request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") throw new Error("Browser upload exposed the source MIME type.");
+      if (request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") throw new Error("Browser upload exposed the source MIME type.");
       if (!request.headers.authorization?.startsWith("Nostr ")) throw new Error("Browser upload omitted Blossom authorisation.");
       uploadedBytes = body;
       uploadedHash = hash;
@@ -190,7 +190,7 @@ const blossom = createHttpServer((request, response) => {
         url: `${blossomOrigin}/${hash}.wbenc`,
         sha256: hash,
         size: body.length,
-        type: "application/vnd.wildbloom.encrypted",
+        type: "application/vnd.forgesworn.encrypted",
         uploaded: 1_700_000_000,
       }));
       return;

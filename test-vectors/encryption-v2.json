@@ -1,0 +1,31 @@
+{
+  "format": "wildbloom-encryption-known-answer-v1",
+  "scheme": "wildbloom-aes-256-gcm-chunked-v1",
+  "source": {
+    "name": "known-answer.txt",
+    "type": "text/plain",
+    "utf8": "Wildbloom v1 known-answer vector\n",
+    "bytes": 33,
+    "sha256": "3d0bc87cabbbb4ac20060b8b4443e9831466d3c82337980134d561f5f1dc8fac"
+  },
+  "testOnlyKey": {
+    "rawHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "recoveryKey": "wbk1_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+  },
+  "noncePrefixHex": "a0a1a2a3a4a5a6a7",
+  "padding": {
+    "plaintextBytes": 65536,
+    "formula": "byte[i] = (i * 73 + 41) mod 256 before metadata and source overwrite"
+  },
+  "metadata": {
+    "canonicalUtf8": "{\"name\":\"known-answer.txt\",\"size\":33,\"type\":\"text/plain\"}",
+    "bytes": 57
+  },
+  "headerHex": "4653574e454e43310010000000000001a0a1a2a3a4a5a6a7",
+  "additionalAuthenticatedDataHex": "4653574e454e43310010000000000001a0a1a2a3a4a5a6a700000000",
+  "plaintextSha256": "e0c63f98d6e7dc4768eac21cb3aea8f35d8bc67120923c7f84810c5068cad485",
+  "ciphertextSha256": "1da63a90038c1fbe75e153d3ea8c3040361d25a0c8493fdea39ebefb6eba6796",
+  "authenticationTagHex": "e19911d800ec456e3d0cc69e025f1369",
+  "envelopeBytes": 65576,
+  "envelopeSha256": "692f616773a25c68f78382a3a24d62a34a81d0f29c38bd7fc138f369b6adbf30"
+}

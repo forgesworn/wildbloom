@@ -1,20 +1,25 @@
 import { strict as assert } from "node:assert";
-import { createCipheriv, createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const CHUNK_BYTES = 1024 * 1024;
+// New frames carry the product-neutral magic; legacy frames carry WBLMENC1.
+// The generator reads whichever magic a vector's header declares.
+const ENVELOPE_MAGIC = "FSWNENC1";
+const ENVELOPE_MAGIC_LEGACY = "WBLMENC1";
 const primaryVectorFile = "test-vectors/encryption-v1.json";
 const multiRecordVectorFile = "test-vectors/encryption-v1-two-records.json";
-const primaryVector = JSON.parse(readFileSync(
-  fileURLToPath(new URL(`../${primaryVectorFile}`, import.meta.url)),
-  "utf8",
-));
-const multiRecordVector = JSON.parse(readFileSync(
-  fileURLToPath(new URL(`../${multiRecordVectorFile}`, import.meta.url)),
-  "utf8",
-));
+const v2VectorFile = "test-vectors/encryption-v2.json";
+const v2MultiRecordVectorFile = "test-vectors/encryption-v2-two-records.json";
+function loadVector(file) {
+  return JSON.parse(readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), "utf8"));
+}
+const primaryVector = loadVector(primaryVectorFile);
+const multiRecordVector = loadVector(multiRecordVectorFile);
+const v2Vector = loadVector(v2VectorFile);
+const v2MultiRecordVector = loadVector(v2MultiRecordVectorFile);
 const EXPECTED_FORMAT = "wildbloom-encryption-known-answer-v1";
 const EXPECTED_SCHEME = "wildbloom-aes-256-gcm-chunked-v1";
 const EXPECTED_PADDING_FORMULA = "byte[i] = (i * 73 + 41) mod 256 before metadata and source overwrite";
@@ -79,8 +84,13 @@ function generateVector(vector, vectorFile) {
   equal(noncePrefix.length, 8, "Nonce prefix length", vectorFile);
 
   const recordCount = Math.ceil(plaintext.length / CHUNK_BYTES);
+  const magic = Buffer.from(vector.headerHex.slice(0, 16), "hex");
+  const magicText = magic.toString("latin1");
+  if (magicText !== ENVELOPE_MAGIC && magicText !== ENVELOPE_MAGIC_LEGACY) {
+    throw new Error(`${vectorFile} declares an unrecognised envelope magic ${JSON.stringify(magicText)}`);
+  }
   const header = Buffer.alloc(24);
-  header.write("WBLMENC1", 0, "ascii");
+  magic.copy(header, 0);
   header.writeUInt32BE(CHUNK_BYTES, 8);
   header.writeUInt32BE(recordCount, 12);
   noncePrefix.copy(header, 16);
@@ -166,6 +176,68 @@ export function generateKnownAnswerEnvelope() {
 
 export function generateMultiRecordKnownAnswerEnvelope() {
   return generateVector(multiRecordVector, multiRecordVectorFile);
+}
+
+export function generateV2KnownAnswerEnvelope() {
+  return generateVector(v2Vector, v2VectorFile);
+}
+
+export function generateV2MultiRecordKnownAnswerEnvelope() {
+  return generateVector(v2MultiRecordVector, v2MultiRecordVectorFile);
+}
+
+// Independent decrypt path. It reads the magic, chunk size, record count and
+// nonce prefix straight from the envelope header, then authenticates every
+// record with AAD built from those actual header bytes. A legacy WBLMENC1
+// envelope and a new FSWNENC1 envelope are therefore each read under their own
+// magic, which is the backward-compatibility claim this proves.
+function decryptEnvelope(envelope, rawKey) {
+  const magicText = envelope.subarray(0, 8).toString("latin1");
+  if (magicText !== ENVELOPE_MAGIC && magicText !== ENVELOPE_MAGIC_LEGACY) {
+    throw new Error(`Envelope magic ${JSON.stringify(magicText)} is not readable.`);
+  }
+  const chunkSize = envelope.readUInt32BE(8);
+  const recordCount = envelope.readUInt32BE(12);
+  const noncePrefix = envelope.subarray(16, 24);
+  const header = envelope.subarray(0, 24);
+  const plaintextParts = [];
+  let offset = 24;
+  for (let counter = 0; counter < recordCount; counter += 1) {
+    const isLast = counter === recordCount - 1;
+    const bodyLength = isLast ? envelope.length - offset - 16 : chunkSize;
+    const ciphertext = envelope.subarray(offset, offset + bodyLength);
+    const authenticationTag = envelope.subarray(offset + bodyLength, offset + bodyLength + 16);
+    offset += bodyLength + 16;
+    const nonce = Buffer.alloc(12);
+    noncePrefix.copy(nonce);
+    nonce.writeUInt32BE(counter, 8);
+    const additionalData = Buffer.alloc(28);
+    header.copy(additionalData);
+    additionalData.writeUInt32BE(counter, 24);
+    const decipher = createDecipheriv("aes-256-gcm", rawKey, nonce, { authTagLength: 16 });
+    decipher.setAAD(additionalData, { plaintextLength: ciphertext.length });
+    decipher.setAuthTag(authenticationTag);
+    plaintextParts.push(Buffer.concat([decipher.update(ciphertext), decipher.final()]));
+  }
+  const plaintext = Buffer.concat(plaintextParts);
+  const metadataLength = plaintext.readUInt32BE(0);
+  const metadata = JSON.parse(plaintext.subarray(4, 4 + metadataLength).toString("utf8"));
+  const source = Buffer.from(plaintext.subarray(4 + metadataLength, 4 + metadataLength + metadata.size));
+  return { metadata, source };
+}
+
+function roundTripDecrypt(fixture, vector, vectorFile) {
+  const rawKey = Buffer.from(vector.testOnlyKey.rawHex, "hex");
+  try {
+    const recovered = decryptEnvelope(fixture.envelope, rawKey);
+    equal(recovered.metadata.name, vector.source.name, "Round-trip name", vectorFile);
+    equal(recovered.metadata.type, vector.source.type, "Round-trip type", vectorFile);
+    equal(recovered.metadata.size, vector.source.bytes, "Round-trip size", vectorFile);
+    equal(sha256(recovered.source), vector.source.sha256, "Round-trip source SHA-256", vectorFile);
+    return recovered;
+  } finally {
+    rawKey.fill(0);
+  }
 }
 
 function emittedFixture(fixture) {

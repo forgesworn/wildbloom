@@ -66,7 +66,7 @@ describe("Wildbloom privacy envelopes", () => {
     const publicBytes = new Uint8Array(await protectedFile.file.arrayBuffer());
     const publicText = new TextDecoder().decode(publicBytes);
     expect(protectedFile.file.name).toBe("wildbloom.wbenc");
-    expect(protectedFile.file.type).toBe("application/vnd.wildbloom.encrypted");
+    expect(protectedFile.file.type).toBe("application/vnd.forgesworn.encrypted");
     expect(protectedFile.recoveryKey).toMatch(/^wbk1_[A-Za-z0-9_-]{43}$/u);
     expect(publicText).not.toContain("private-plan.txt");
     expect(publicText).not.toContain("quietly private");

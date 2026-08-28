@@ -181,7 +181,7 @@ const blossom = createServer((request, response) => {
       }
       const digest = hash.digest("hex");
       if (size !== expectedEnvelopeBytes()) throw new Error("Maximum upload was not the exact encrypted envelope size.");
-      if (request.headers["content-type"] !== "application/vnd.wildbloom.encrypted") {
+      if (request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") {
         throw new Error("Maximum upload exposed the source MIME type.");
       }
       if (request.headers["x-sha-256"] !== digest) throw new Error("Maximum upload sent the wrong SHA-256 header.");
@@ -203,7 +203,7 @@ const blossom = createServer((request, response) => {
         url: `${blossomOrigin}/${digest}.wbenc`,
         sha256: digest,
         size,
-        type: "application/vnd.wildbloom.encrypted",
+        type: "application/vnd.forgesworn.encrypted",
         uploaded: 1_700_000_000,
       }));
       return;
@@ -211,7 +211,7 @@ const blossom = createServer((request, response) => {
     if (request.method === "GET" && uploadedHash && url.pathname === `/${uploadedHash}.wbenc`) {
       response.writeHead(200, {
         ...cors,
-        "Content-Type": "application/vnd.wildbloom.encrypted",
+        "Content-Type": "application/vnd.forgesworn.encrypted",
         "Content-Length": String(uploadedSize),
       });
       for (const part of uploadedParts) {
