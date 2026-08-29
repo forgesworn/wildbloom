@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, sha256Hex } from "../src/core/crypto.js";
@@ -38,6 +39,18 @@ describe("Wildbloom privacy envelopes", () => {
     expect(decrypted.name).toBe("known-answer.txt");
     expect(decrypted.type).toBe("text/plain");
     expect(await decrypted.text()).toBe("Wildbloom v1 known-answer vector\n");
+  }, 20_000);
+
+  it("reads a FSWNENC2 envelope, deriving the key per envelope (decrypt-only)", async () => {
+    const vector = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../test-vectors/fswnenc2-per-file.json", import.meta.url)), "utf8"),
+    ) as { testOnlyInputKeyHex: string; envelopeBase64: string };
+    const recoveryKey = `wbk1_${Buffer.from(vector.testOnlyInputKeyHex, "hex").toString("base64url")}`;
+    const envelope = new Blob([Uint8Array.from(Buffer.from(vector.envelopeBase64, "base64"))]);
+    const decrypted = await decryptPrivacyEnvelope(envelope, recoveryKey);
+    expect(decrypted.name).toBe("known-answer.txt");
+    expect(decrypted.type).toBe("text/plain");
+    expect(await decrypted.text()).toBe("ForgeSworn envelope v2 known-answer vector\n");
   }, 20_000);
 
   it("recovers the independent two-record vector across the authenticated chunk boundary", async () => {
