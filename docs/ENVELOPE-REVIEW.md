@@ -135,9 +135,11 @@ Done:
 
 Outstanding, in priority order:
 
-1. `FSWNENC2`: pin the exact header grammar with the salt offset, the HKDF
-   parameters, and both a per-file and a vault known-answer vector; then
-   implement across both codebases (coordinated with the Stash implementation).
+1. `FSWNENC2`: **spec and vectors done** — the 56-byte header grammar (32-byte
+   salt at offset 24), the HKDF-SHA256 derivation, and per-file and vault
+   known-answer vectors are pinned in [`FSWNENC2.md`](./FSWNENC2.md) with a
+   reference encoder/decoder. **Outstanding:** the coordinated production flip
+   (`FSWNENC2` dual-reading `FSWNENC1`) across both codebases.
 2. Add the two constructed negative cases (non-canonical metadata, wrong padding
    bucket), which require an envelope built from scratch under the test key.
 3. Correct the record-count residual-risk figure (state the derived maximum, not

@@ -117,8 +117,10 @@ clear header and derives the AES key per envelope with
 per-file and vault-key sealing. This closes the shared-key nonce-reuse exposure
 described in the independent review; it does not affect Wildbloom, which always
 uses a fresh per-file key. `FSWNENC2` will dual-read `FSWNENC1` and carry the
-scheme name `forgesworn-aes-256-gcm-chunked-v2`. It is specified, with its own
-known-answer vectors, in the review below before any implementation ships.
+scheme name `forgesworn-aes-256-gcm-chunked-v2`. It is fully specified, with its
+own known-answer vectors, in [`FSWNENC2.md`](./FSWNENC2.md); that document and
+its vectors are the shared contract both implementations build against before
+any production flip ships.
 
 ## Published known-answer vectors
 

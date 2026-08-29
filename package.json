@@ -32,6 +32,7 @@
     "test:watch": "vitest",
     "encryption:vector": "node scripts/encryption-vector.mjs",
     "encryption:negative-vector": "node scripts/encryption-negative-vector.mjs",
+    "fswnenc2:vector": "node scripts/fswnenc2-vector.mjs",
     "install:policy": "node scripts/install-policy.mjs",
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
