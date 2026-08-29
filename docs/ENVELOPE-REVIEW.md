@@ -85,7 +85,12 @@ real gap a standard must close; **minor** is a tightening.
   file: bad magic, bad chunk size, record count 0 / over-max, flipped tag byte,
   reordered records, truncated final record, appended byte, altered header
   field, non-canonical metadata, wrong padding bucket, non-canonical `wbk1_`
-  key. **Outstanding.**
+  key. **Mostly done:** `test-vectors/encryption-negative.json` (12 cases)
+  now covers the magic, header, authentication (tag, ciphertext, altered
+  header, wrong key, record-tag integrity), length and recovery-key classes,
+  each asserted against the reference decoder. The two constructed cases
+  (non-canonical metadata, wrong padding bucket) remain, since they need an
+  envelope built from scratch under the test key rather than a byte mutation.
 
 ## `FSWNENC2`: the agreed shared-key fix
 
@@ -111,27 +116,31 @@ A coordinated change with the Stash implementation, agreed by both owners.
 
 ## Remediation status
 
-Done in this change:
+Done:
 
-- Spec/code drift fixed (`FSWNENC1`, `application/vnd.forgesworn.encrypted`,
-  correct known-answer tables, documented dual-read).
-- `npm run encryption:vector` now pins the `FSWNENC1` pair as primary and the
-  legacy pair as compatibility.
+- Spec/code drift fixed: `FSWNENC1`, `application/vnd.forgesworn.encrypted`,
+  correct known-answer tables, documented dual-read.
+- `npm run encryption:vector` pins the `FSWNENC1` pair as primary and the legacy
+  pair as compatibility.
 - Versioning, the legacy-read rule, and the `FSWNENC2` plan recorded normatively
   in `ENCRYPTION.md`.
+- Canonical metadata (key order, no whitespace, base-10 integer size, the
+  name / type normalisation as fixed points, and a pinned JSON string-escaping
+  profile) and the padding-bucket formula pinned in `ENCRYPTION.md`.
+- The validation rules rewritten as an enumerated RFC 2119 MUST list, with
+  no-partial-acceptance stated.
+- Language-neutral negative-vector file
+  (`test-vectors/encryption-negative.json`, 12 cases) published and asserted
+  against the reference decoder.
 
 Outstanding, in priority order:
 
 1. `FSWNENC2`: pin the exact header grammar with the salt offset, the HKDF
    parameters, and both a per-file and a vault known-answer vector; then
-   implement across both codebases.
-2. Pin "canonical JSON" (key order, whitespace, integer format, string-escaping
-   profile) and the filename / MIME normalisation as normative pre-encode steps.
-3. Specify the padding-bucket function as a formula over the exact logical
-   length, with boundary cases, and add it to the vector JSON.
-4. Add RFC 2119 language to the validation rules.
-5. Publish a language-neutral negative-vector file covering every rejection
-   path.
-6. Correct the record-count bound and its rationale.
-7. Commission a third-party cryptographic audit before treating the format as a
+   implement across both codebases (coordinated with the Stash implementation).
+2. Add the two constructed negative cases (non-canonical metadata, wrong padding
+   bucket), which require an envelope built from scratch under the test key.
+3. Correct the record-count residual-risk figure (state the derived maximum, not
+   258, and that it is a decode-work bound).
+4. Commission a third-party cryptographic audit before treating the format as a
    settled public standard.
