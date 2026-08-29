@@ -13,7 +13,13 @@ const HEX = "0123456789abcdef";
 // AAD, so a blob decrypts under whichever magic it was sealed with.
 const ENVELOPE_MAGIC = new TextEncoder().encode("FSWNENC1");
 const ENVELOPE_MAGIC_LEGACY = new TextEncoder().encode("WBLMENC1");
+// FSWNENC2 is read-only for now: a 56-byte header carrying a 32-byte salt, with
+// the AES key derived per envelope. Wildbloom still writes FSWNENC1.
+const ENVELOPE_MAGIC_V2 = new TextEncoder().encode("FSWNENC2");
 const ENVELOPE_HEADER_BYTES = 24;
+const ENVELOPE_HEADER_BYTES_V2 = 56;
+const ENVELOPE_SALT_BYTES = 32;
+const HKDF_INFO_V2 = new TextEncoder().encode("forgesworn-aes-256-gcm-chunked/v2");
 const ENVELOPE_CHUNK_BYTES = 1024 * 1024;
 const ENVELOPE_TAG_BYTES = 16;
 const MAX_ENVELOPE_METADATA_BYTES = 4096;
@@ -254,29 +260,38 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
 
 async function parseEnvelopeHeader(file: Blob, signal?: AbortSignal): Promise<{
   header: Uint8Array;
+  headerBytes: number;
   chunkSize: number;
   recordCount: number;
   noncePrefix: Uint8Array;
+  salt: Uint8Array<ArrayBuffer> | null;
 }> {
   assertActive(signal, "Local decryption");
-  const header = new Uint8Array(await file.slice(0, ENVELOPE_HEADER_BYTES).arrayBuffer());
-  assertActive(signal, "Local decryption");
-  const magicMatches = (magic: Uint8Array): boolean => magic.every((byte, index) => header[index] === byte);
-  if (header.length !== ENVELOPE_HEADER_BYTES || (!magicMatches(ENVELOPE_MAGIC) && !magicMatches(ENVELOPE_MAGIC_LEGACY))) {
+  // The magic is the version field. FSWNENC2 carries a 32-byte salt, so its
+  // header is 56 bytes; FSWNENC1 and legacy WBLMENC1 use the 24-byte header.
+  const magic = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  const magicMatches = (candidate: Uint8Array): boolean => candidate.every((byte, index) => magic[index] === byte);
+  const isV2 = magicMatches(ENVELOPE_MAGIC_V2);
+  if (magic.length !== 8 || (!isV2 && !magicMatches(ENVELOPE_MAGIC) && !magicMatches(ENVELOPE_MAGIC_LEGACY))) {
     throw new Error("This is not a Wildbloom encrypted envelope.");
   }
+  const headerBytes = isV2 ? ENVELOPE_HEADER_BYTES_V2 : ENVELOPE_HEADER_BYTES;
+  const header = new Uint8Array(await file.slice(0, headerBytes).arrayBuffer());
+  assertActive(signal, "Local decryption");
+  if (header.length !== headerBytes) throw new Error("This is not a Wildbloom encrypted envelope.");
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   const chunkSize = view.getUint32(8, false);
   const recordCount = view.getUint32(12, false);
   if (chunkSize !== ENVELOPE_CHUNK_BYTES || recordCount < 1 || recordCount > 258) {
     throw new Error("The Wildbloom envelope header is invalid.");
   }
-  const minimumSize = ENVELOPE_HEADER_BYTES
+  const minimumSize = headerBytes
     + (recordCount - 1) * (chunkSize + ENVELOPE_TAG_BYTES)
     + 1 + ENVELOPE_TAG_BYTES;
-  const maximumSize = ENVELOPE_HEADER_BYTES + recordCount * (chunkSize + ENVELOPE_TAG_BYTES);
+  const maximumSize = headerBytes + recordCount * (chunkSize + ENVELOPE_TAG_BYTES);
   if (file.size < minimumSize || file.size > maximumSize) throw new Error("The Wildbloom envelope length is invalid.");
-  return { header, chunkSize, recordCount, noncePrefix: header.slice(16, 24) };
+  const salt = isV2 ? Uint8Array.from(header.subarray(24, 24 + ENVELOPE_SALT_BYTES)) : null;
+  return { header, headerBytes, chunkSize, recordCount, noncePrefix: header.slice(16, 24), salt };
 }
 
 function parseEnvelopeMetadata(plaintext: Uint8Array): { metadata: EnvelopeMetadata; prefixLength: number } {
@@ -317,15 +332,31 @@ export async function decryptPrivacyEnvelope(
   assertPrototypeTransferSize(file.size);
   if (!recoveryKey.startsWith(RECOVERY_KEY_PREFIX)) throw new Error("The recovery key is not a Wildbloom v1 key.");
   const rawKey = base64UrlDecode(recoveryKey.slice(RECOVERY_KEY_PREFIX.length));
+  assertActive(signal, "Local decryption");
+  const { header, headerBytes, chunkSize, recordCount, noncePrefix, salt } = await parseEnvelopeHeader(file, signal);
   let key: CryptoKey;
   try {
-    key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+    if (salt) {
+      // FSWNENC2: derive the AES key per envelope from the recovery key and the
+      // header salt with HKDF-SHA256 and a fixed info label.
+      const baseKey = await crypto.subtle.importKey("raw", rawKey, "HKDF", false, ["deriveBits"]);
+      const derived = new Uint8Array(await crypto.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt, info: HKDF_INFO_V2 },
+        baseKey,
+        256,
+      ));
+      try {
+        key = await crypto.subtle.importKey("raw", derived, "AES-GCM", false, ["decrypt"]);
+      } finally {
+        derived.fill(0);
+      }
+    } else {
+      key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+    }
   } finally {
     rawKey.fill(0);
   }
-  assertActive(signal, "Local decryption");
-  const { header, chunkSize, recordCount, noncePrefix } = await parseEnvelopeHeader(file, signal);
-  const plaintextLength = file.size - ENVELOPE_HEADER_BYTES - recordCount * ENVELOPE_TAG_BYTES;
+  const plaintextLength = file.size - headerBytes - recordCount * ENVELOPE_TAG_BYTES;
 
   let metadata: EnvelopeMetadata | null = null;
   let prefixLength = 0;
@@ -334,7 +365,7 @@ export async function decryptPrivacyEnvelope(
   try {
     for (let counter = 0; counter < recordCount; counter += 1) {
       assertActive(signal, "Local decryption");
-      const ciphertextStart = ENVELOPE_HEADER_BYTES + counter * (chunkSize + ENVELOPE_TAG_BYTES);
+      const ciphertextStart = headerBytes + counter * (chunkSize + ENVELOPE_TAG_BYTES);
       const ciphertextEnd = counter === recordCount - 1 ? file.size : ciphertextStart + chunkSize + ENVELOPE_TAG_BYTES;
       const ciphertext = await file.slice(ciphertextStart, ciphertextEnd).arrayBuffer();
       assertActive(signal, "Local decryption");
