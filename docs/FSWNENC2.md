@@ -77,6 +77,18 @@ reads the salt and derives the key, a `FSWNENC1`/`WBLMENC1` decoder uses the
 supplied key directly against the 24-byte header. The three are not
 interchangeable under a single tag, because the magic is inside the AAD.
 
+The media type is unchanged from `FSWNENC1`: an implementation MUST write and
+accept `application/vnd.forgesworn.encrypted`, and MUST still accept the legacy
+`application/vnd.wildbloom.encrypted` on read. `FSWNENC2` changes the envelope
+bytes, not the media type.
+
+The writer flip does not migrate existing envelopes. At the flip, new envelopes
+are written `FSWNENC2` while existing `FSWNENC1` and `WBLMENC1` envelopes are
+read in place and never re-sealed. The shared-key exposure is therefore frozen
+at the flip, since no further envelope is written under the reused-key
+construction; re-sealing existing frames under `FSWNENC2` is an opt-in step
+later, not a forced migration.
+
 ## Known-answer vectors
 
 Test-only, public material. Both vectors share a fixed salt
