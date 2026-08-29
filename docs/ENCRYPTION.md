@@ -231,7 +231,9 @@ record. Plaintext is offered for saving only after every record succeeds.
 - No password KDF is involved. The recovery key has full cryptographic entropy
   and must not be replaced with a human password.
 - Padding reveals a size bucket, and traffic volume can reveal more.
-- This format has published one- and two-record known-answer vectors, in-code
-  tamper tests, and an independent standards review
-  ([`ENVELOPE-REVIEW.md`](./ENVELOPE-REVIEW.md)). Language-neutral negative
-  vectors and a third-party cryptographic audit are still outstanding.
+- This format has published one- and two-record known-answer vectors,
+  language-neutral negative vectors
+  ([`test-vectors/encryption-negative.json`](../test-vectors/encryption-negative.json)),
+  in-code tamper tests, and an independent standards review
+  ([`ENVELOPE-REVIEW.md`](./ENVELOPE-REVIEW.md)). A third-party cryptographic
+  audit is still outstanding.

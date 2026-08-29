@@ -31,6 +31,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "encryption:vector": "node scripts/encryption-vector.mjs",
+    "encryption:negative-vector": "node scripts/encryption-negative-vector.mjs",
     "install:policy": "node scripts/install-policy.mjs",
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
