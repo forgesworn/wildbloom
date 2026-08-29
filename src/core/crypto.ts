@@ -3,7 +3,7 @@ import { assertPrototypeFileSize, assertPrototypeTransferSize, sanitiseFileName 
 import {
   WILDBLOOM_ENCRYPTED_FILE_NAME,
   WILDBLOOM_ENCRYPTED_MIME_TYPE,
-  WILDBLOOM_ENCRYPTION,
+  WILDBLOOM_ENCRYPTION_V2,
   type EncryptionScheme,
 } from "./types.js";
 
@@ -199,19 +199,37 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
     const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
     const noncePrefix = new Uint8Array(8);
     fillRandom(noncePrefix);
-    const header = new Uint8Array(ENVELOPE_HEADER_BYTES);
-    header.set(ENVELOPE_MAGIC);
+    // FSWNENC2: a fresh random 32-byte salt per envelope, carried in a 56-byte
+    // header, from which the AES key is derived, so no two envelopes share a key
+    // even under a reused recovery key.
+    const salt = new Uint8Array(ENVELOPE_SALT_BYTES);
+    fillRandom(salt);
+    const header = new Uint8Array(ENVELOPE_HEADER_BYTES_V2);
+    header.set(ENVELOPE_MAGIC_V2);
     const headerView = new DataView(header.buffer);
     headerView.setUint32(8, ENVELOPE_CHUNK_BYTES, false);
     headerView.setUint32(12, recordCount, false);
     header.set(noncePrefix, 16);
+    header.set(salt, 24);
 
     const rawKey = new Uint8Array(32);
     fillRandom(rawKey);
     let key: CryptoKey;
     let recoveryKey: string;
     try {
-      key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt"]);
+      // The recovery key stays the raw per-file key; the AES key is derived from
+      // it and the header salt with HKDF-SHA256.
+      const baseKey = await crypto.subtle.importKey("raw", rawKey, "HKDF", false, ["deriveBits"]);
+      const derived = new Uint8Array(await crypto.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt, info: HKDF_INFO_V2 },
+        baseKey,
+        256,
+      ));
+      try {
+        key = await crypto.subtle.importKey("raw", derived, "AES-GCM", false, ["encrypt"]);
+      } finally {
+        derived.fill(0);
+      }
       recoveryKey = `${RECOVERY_KEY_PREFIX}${base64UrlEncode(rawKey)}`;
     } finally {
       rawKey.fill(0);
@@ -247,7 +265,7 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
     return {
       file: encrypted,
       recoveryKey,
-      scheme: WILDBLOOM_ENCRYPTION,
+      scheme: WILDBLOOM_ENCRYPTION_V2,
       sourceName: metadata.name,
       sourceSize: metadata.size,
       sourceType: metadata.type,

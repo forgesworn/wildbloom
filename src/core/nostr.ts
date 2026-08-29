@@ -15,6 +15,7 @@ import {
   WILDBLOOM_ENCRYPTED_MIME_TYPE,
   WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY,
   WILDBLOOM_ENCRYPTION,
+  WILDBLOOM_ENCRYPTION_V2,
 } from "./types.js";
 import {
   assertHex40,
@@ -324,7 +325,9 @@ export function resolveHybridEvent(
   const encryptionValue = optionalUniqueTag(event.tags, "encryption", 80);
   let encryption: EncryptionScheme | undefined;
   if (encryptionValue !== undefined) {
-    if (encryptionValue !== WILDBLOOM_ENCRYPTION) throw new Error("The event uses an unsupported encryption scheme.");
+    if (encryptionValue !== WILDBLOOM_ENCRYPTION && encryptionValue !== WILDBLOOM_ENCRYPTION_V2) {
+      throw new Error("The event uses an unsupported encryption scheme.");
+    }
     if (event.content !== WILDBLOOM_ENCRYPTED_FILE_NAME
       || (mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE
         && mimeTypeTag !== WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY)
