@@ -76,8 +76,11 @@ describe("Blossom authorisation", () => {
     ]);
     const signed = await signEventExactly(template, signer, pubkey);
     const encoded = encodeNostrAuthorisation(signed, 1_000);
-    expect(encoded).toMatch(/^Nostr [A-Za-z0-9_-]+$/u);
-    expect(encoded).not.toContain("=");
+    // BUD-01: standard base64 (with + / and = padding), not url-safe.
+    expect(encoded).toMatch(/^Nostr [A-Za-z0-9+\/]+=*$/u);
+    expect(encoded).not.toMatch(/[-_]/u);
+    const body = encoded.slice("Nostr ".length);
+    expect(JSON.parse(atob(body))).toMatchObject({ kind: 24242 });
   });
 
   it("rejects a signer that changes reviewed fields", async () => {

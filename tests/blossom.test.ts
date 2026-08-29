@@ -28,7 +28,14 @@ describe("Blossom publication", () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("PUT");
     expect(new Headers(init.headers).get("X-SHA-256")).toBe(inspected.sha256);
-    expect(new Headers(init.headers).get("Authorization")).toMatch(/^Nostr /u);
+    const authorization = new Headers(init.headers).get("Authorization") ?? "";
+    expect(authorization).toMatch(/^Nostr /u);
+    const encoded = authorization.slice("Nostr ".length);
+    // BUD-01: standard base64, not url-safe. No -/_ alphabet, padded to a multiple of four,
+    // and it round-trips to the kind 24242 event.
+    expect(encoded).not.toMatch(/[-_]/u);
+    expect(encoded.length % 4).toBe(0);
+    expect(JSON.parse(atob(encoded))).toMatchObject({ kind: 24242 });
     expect(init.redirect).toBe("error");
   });
 
