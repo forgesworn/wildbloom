@@ -264,11 +264,17 @@ function run() {
     return;
   }
   if (process.argv[2] !== undefined) throw new Error(`Unknown encryption-vector option: ${process.argv[2]}`);
-  const primaryFixture = generateKnownAnswerEnvelope();
-  const multiRecordFixture = generateMultiRecordKnownAnswerEnvelope();
+  // FSWNENC1 (magic the code emits) is the primary known-answer pair. The
+  // legacy WBLMENC1 pair is validated too so the read-only compatibility path
+  // stays pinned. Both build under the magic their own vector declares.
+  const primaryFixture = generateV2KnownAnswerEnvelope();
+  const multiRecordFixture = generateV2MultiRecordKnownAnswerEnvelope();
+  const legacyFixture = generateKnownAnswerEnvelope();
+  const legacyMultiRecordFixture = generateMultiRecordKnownAnswerEnvelope();
   process.stdout.write(
-    `Encryption vectors passed: one record ${primaryFixture.envelope.length} bytes, SHA-256 ${primaryFixture.envelopeSha256}; `
-    + `two records ${multiRecordFixture.envelope.length} bytes, SHA-256 ${multiRecordFixture.envelopeSha256}.\n`,
+    `Encryption vectors passed (FSWNENC1): one record ${primaryFixture.envelope.length} bytes, SHA-256 ${primaryFixture.envelopeSha256}; `
+    + `two records ${multiRecordFixture.envelope.length} bytes, SHA-256 ${multiRecordFixture.envelopeSha256}. `
+    + `Legacy WBLMENC1 also passed: one record SHA-256 ${legacyFixture.envelopeSha256}, two records SHA-256 ${legacyMultiRecordFixture.envelopeSha256}.\n`,
   );
 }
 

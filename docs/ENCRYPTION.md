@@ -4,8 +4,9 @@ Wildbloom's current private payload format is
 `wildbloom-aes-256-gcm-chunked-v1`.
 
 It is a versioned application envelope built from standard Web Crypto
-AES-256-GCM. The format itself is new and must receive independent review
-before a public production release.
+AES-256-GCM. The format has had an independent standards review, recorded in
+[`ENVELOPE-REVIEW.md`](./ENVELOPE-REVIEW.md); a third-party cryptographic audit
+is still outstanding before it should be treated as a settled public standard.
 
 ## Key and metadata
 
@@ -16,7 +17,8 @@ before a public production release.
 - The source filename, MIME type and exact byte count live inside the encrypted
   first record.
 - The public payload always uses `wildbloom.wbenc` and
-  `application/vnd.wildbloom.encrypted`.
+  `application/vnd.forgesworn.encrypted`. A decoder MUST also accept the legacy
+  media type `application/vnd.wildbloom.encrypted` on read.
 - The key is never written to Nostr, Blossom, torrent metadata, cookies, local
   or session storage, IndexedDB or Cache Storage, and no service worker is
   registered.
@@ -30,7 +32,7 @@ The 24-byte clear header is:
 
 | Offset | Bytes | Meaning |
 | --- | ---: | --- |
-| 0 | 8 | ASCII `WBLMENC1` |
+| 0 | 8 | ASCII `FSWNENC1`. A decoder MUST also read the legacy magic `WBLMENC1` |
 | 8 | 4 | Big-endian chunk size, currently 1 MiB |
 | 12 | 4 | Big-endian authenticated-record count |
 | 16 | 8 | Random nonce prefix |
@@ -52,12 +54,35 @@ Payloads up to 64 KiB are padded to 64 KiB. Payloads below 1 MiB use the next
 power-of-two bucket. Larger payloads use the next 1 MiB boundary. Padding
 reduces exact-size leakage but does not conceal the approximate size class.
 
+## Versioning and legacy read
+
+The magic is the version field. A conformant encoder MUST write `FSWNENC1`. A
+conformant decoder MUST read both `FSWNENC1` and the legacy `WBLMENC1`, and MUST
+accept both the current media type `application/vnd.forgesworn.encrypted` and
+the legacy `application/vnd.wildbloom.encrypted`. `FSWNENC1` and `WBLMENC1` name
+byte-identical cryptography; only the eight magic bytes differ, and because the
+magic is inside the AAD an existing envelope's magic cannot be altered without
+breaking its tag. The legacy read is retained for envelopes written before the
+rename and carries a deprecation horizon rather than a permanent guarantee.
+
+The next version, `FSWNENC2`, is a coordinated change with the Stash
+implementation that shares this format. It adds a 32-byte random salt to the
+clear header and derives the AES key per envelope with
+`HKDF-SHA256(ikm = the envelope key, salt = the header salt, info =
+"forgesworn-aes-256-gcm-chunked/v2")`, under the same header layout for both
+per-file and vault-key sealing. This closes the shared-key nonce-reuse exposure
+described in the independent review; it does not affect Wildbloom, which always
+uses a fresh per-file key. `FSWNENC2` will dual-read `FSWNENC1` and carry the
+scheme name `forgesworn-aes-256-gcm-chunked-v2`. It is specified, with its own
+known-answer vectors, in the review below before any implementation ships.
+
 ## Published known-answer vectors
 
-[`test-vectors/encryption-v1.json`](../test-vectors/encryption-v1.json) is the
-language-neutral one-record interoperability vector for this format. It uses
-the public, test-only key `000102...1f`, nonce prefix `a0a1a2a3a4a5a6a7` and
-source text `Wildbloom v1 known-answer vector` followed by LF. Its padding is
+[`test-vectors/encryption-v2.json`](../test-vectors/encryption-v2.json) is the
+language-neutral one-record interoperability vector for this format, carrying
+the current magic `FSWNENC1`. It uses the public, test-only key `000102...1f`,
+nonce prefix `a0a1a2a3a4a5a6a7` and source text
+`Wildbloom v1 known-answer vector` followed by LF. Its padding is
 deliberately deterministic: byte `i` is `(i * 73 + 41) mod 256` before the
 metadata and source overwrite. Production encryption continues to use fresh random padding,
 keys and nonce prefixes.
@@ -67,13 +92,23 @@ The one-record vector has these fixed results:
 | Value | Expected result |
 | --- | --- |
 | Recovery key | `wbk1_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8` |
-| Header | `57424c4d454e43310010000000000001a0a1a2a3a4a5a6a7` |
-| Authentication tag | `5329a95ec40f523cad9dcaf35f3fb572` |
+| Header | `4653574e454e43310010000000000001a0a1a2a3a4a5a6a7` |
+| Authentication tag | `e19911d800ec456e3d0cc69e025f1369` |
 | Envelope bytes | `65576` |
-| Envelope SHA-256 | `fca9348751d30b2e2461f03612ce7b8a85c702513faf1b3ae4b38ca882a45d23` |
+| Envelope SHA-256 | `692f616773a25c68f78382a3a24d62a34a81d0f29c38bd7fc138f369b6adbf30` |
 
-[`test-vectors/encryption-v1-two-records.json`](../test-vectors/encryption-v1-two-records.json)
-crosses the one-MiB authenticated-record boundary. It generates a
+The legacy `WBLMENC1` one-record envelope
+([`test-vectors/encryption-v1.json`](../test-vectors/encryption-v1.json)) is
+retained as the read-only compatibility vector. Its header is
+`57424c4d454e43310010000000000001a0a1a2a3a4a5a6a7`, tag
+`5329a95ec40f523cad9dcaf35f3fb572`, envelope SHA-256
+`fca9348751d30b2e2461f03612ce7b8a85c702513faf1b3ae4b38ca882a45d23`. The bytes
+differ from the `FSWNENC1` vector only in the eight magic bytes, which the AAD
+authenticates, so the two are not interchangeable under a single tag.
+
+[`test-vectors/encryption-v2-two-records.json`](../test-vectors/encryption-v2-two-records.json)
+carries the current magic `FSWNENC1` and crosses the one-MiB
+authenticated-record boundary. It generates a
 1,048,613-byte source where byte `i` is `(i * 29 + 7) mod 256`, uses the public
 test-only key `202122...3f`, and pads the logical plaintext to exactly two MiB.
 The JSON records each record's nonce, additional authenticated data, plaintext
@@ -82,17 +117,18 @@ and ciphertext hashes and authentication tag.
 | Value | Expected result |
 | --- | --- |
 | Recovery key | `wbk1_ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8` |
-| Header | `57424c4d454e43310010000000000002b0b1b2b3b4b5b6b7` |
+| Header | `4653574e454e43310010000000000002b0b1b2b3b4b5b6b7` |
 | Record 0 nonce | `b0b1b2b3b4b5b6b700000000` |
-| Record 0 tag | `0d4e6becaa2de23ce4433752eb90f9c4` |
+| Record 0 tag | `0ad51ff3f61dc22cfc0922477d351b91` |
 | Record 1 nonce | `b0b1b2b3b4b5b6b700000001` |
-| Record 1 tag | `1a32e922ba64e410e93c7317c207a0fb` |
+| Record 1 tag | `1da99d3de654c400f176660254a242ae` |
 | Envelope bytes | `2097208` |
-| Envelope SHA-256 | `7d302aa7b1ed91560a528992472bf64430776373860ac0d7d9a43d514e3586f1` |
+| Envelope SHA-256 | `7065ed8c463bf377f94411db47bb10f76f012dc0bbef5ee6151b2f70113e8b09` |
 
-Run `npm run encryption:vector` to regenerate both envelopes with Node's
-independent AES-256-GCM implementation and compare every intermediate value
-with the JSON contracts. The unit suite then feeds those independently
+Run `npm run encryption:vector` to regenerate both the current `FSWNENC1`
+envelopes and the legacy `WBLMENC1` envelopes with Node's independent
+AES-256-GCM implementation and compare every intermediate value with the JSON
+contracts. The unit suite then feeds those independently
 generated bytes into Wildbloom's production Web Crypto decryption. The hosted
 production-browser journey rejects a wrong key without exposing a save link,
 then recovers the one- and two-record vectors in system Chromium on Windows,
@@ -131,5 +167,7 @@ record. Plaintext is offered for saving only after every record succeeds.
 - No password KDF is involved. The recovery key has full cryptographic entropy
   and must not be replaced with a human password.
 - Padding reveals a size bucket, and traffic volume can reveal more.
-- This format has published one- and two-record known-answer vectors and tamper
-  tests but no independent audit yet.
+- This format has published one- and two-record known-answer vectors, in-code
+  tamper tests, and an independent standards review
+  ([`ENVELOPE-REVIEW.md`](./ENVELOPE-REVIEW.md)). Language-neutral negative
+  vectors and a third-party cryptographic audit are still outstanding.
