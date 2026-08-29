@@ -173,7 +173,9 @@ export function encodeNostrAuthorisation(
   const bytes = new TextEncoder().encode(JSON.stringify(event));
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return `Nostr ${btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/gu, "")}`;
+  // BUD-01 mandates standard base64 with padding. Emitting url-safe broke auth
+  // against strict third-party Blossom servers; our own server decodes leniently.
+  return `Nostr ${btoa(binary)}`;
 }
 
 export function buildFileEvent(publication: HybridPublication, nowSeconds = Math.floor(Date.now() / 1000)): EventTemplate {
