@@ -19,12 +19,15 @@ export interface SignerPort {
 export type NetworkProfile = "direct" | "tor";
 
 export const WILDBLOOM_ENCRYPTION = "wildbloom-aes-256-gcm-chunked-v1" as const;
+// The FSWNENC2 scheme: the writer default from the coordinated flip. Readers
+// accept both; the legacy v1 scheme stays valid for envelopes written before it.
+export const WILDBLOOM_ENCRYPTION_V2 = "forgesworn-aes-256-gcm-chunked-v2" as const;
 export const WILDBLOOM_ENCRYPTED_FILE_NAME = "wildbloom.wbenc" as const;
 export const WILDBLOOM_ENCRYPTED_MIME_TYPE = "application/vnd.forgesworn.encrypted" as const;
 // Legacy MIME. Blobs published before the rename still declare this, so the
 // verification paths must keep accepting it alongside the new type.
 export const WILDBLOOM_ENCRYPTED_MIME_TYPE_LEGACY = "application/vnd.wildbloom.encrypted" as const;
-export type EncryptionScheme = typeof WILDBLOOM_ENCRYPTION;
+export type EncryptionScheme = typeof WILDBLOOM_ENCRYPTION | typeof WILDBLOOM_ENCRYPTION_V2;
 
 export interface BlobDescriptor {
   readonly url: string;

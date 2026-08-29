@@ -53,6 +53,17 @@ describe("Wildbloom privacy envelopes", () => {
     expect(await decrypted.text()).toBe("ForgeSworn envelope v2 known-answer vector\n");
   }, 20_000);
 
+  it("writes FSWNENC2 by default and round-trips it", async () => {
+    const source = new File(["flip to v2"], "note.txt", { type: "text/plain" });
+    const protectedFile = await encryptPrivacyEnvelope(source);
+    expect(protectedFile.scheme).toBe("forgesworn-aes-256-gcm-chunked-v2");
+    expect(protectedFile.file.type).toBe("application/vnd.forgesworn.encrypted");
+    const magic = new Uint8Array(await protectedFile.file.slice(0, 8).arrayBuffer());
+    expect(new TextDecoder().decode(magic)).toBe("FSWNENC2");
+    const decrypted = await decryptPrivacyEnvelope(protectedFile.file, protectedFile.recoveryKey);
+    expect(await decrypted.text()).toBe("flip to v2");
+  }, 20_000);
+
   it("recovers the independent two-record vector across the authenticated chunk boundary", async () => {
     const fixture = emittedVector("--emit-multirecord");
     expect(fixture.envelopeBytes).toBe(2_097_208);
