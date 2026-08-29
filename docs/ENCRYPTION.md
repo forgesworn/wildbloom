@@ -54,6 +54,50 @@ Payloads up to 64 KiB are padded to 64 KiB. Payloads below 1 MiB use the next
 power-of-two bucket. Larger payloads use the next 1 MiB boundary. Padding
 reduces exact-size leakage but does not conceal the approximate size class.
 
+## Canonical metadata
+
+The metadata is the exact UTF-8 bytes of a JSON object with these three keys, in
+this order, and no insignificant whitespace:
+
+```
+{"name":<name>,"size":<size>,"type":<type>}
+```
+
+An encoder MUST produce, and a decoder MUST reject anything other than, this
+canonical form. Specifically:
+
+- `size` MUST be the source byte count as a base-10 JSON integer: no sign, no
+  exponent, no leading zeros.
+- `name` MUST be the source filename after, in order: Unicode NFC
+  normalisation; removal of code points `U+0000`–`U+001F` and `U+007F`; mapping
+  each of `< > : " | ? *` to `_`; removal of leading `.`; trimming of leading
+  and trailing whitespace; replacement by `blob.bin` if the result is empty; and
+  truncation to at most 180 UTF-16 code units. The stored `name` MUST be a fixed
+  point of this function; a decoder recomputes it and rejects a mismatch.
+- `type` MUST be the source media type lower-cased, with `U+0000`–`U+001F` and
+  `U+007F` removed, truncated to at most 255 characters, and replaced by
+  `application/octet-stream` if empty.
+- String values MUST use the minimal JSON escaping profile: only `"`, `\`, and
+  the control code points `U+0000`–`U+001F` are escaped, using the two-character
+  short escapes where they exist and `\u00XX` otherwise; `/` is NOT escaped; all
+  other code points are emitted as literal UTF-8. This is the profile a
+  second implementation must match byte-for-byte, so a library that escapes
+  non-ASCII as `\uXXXX` or escapes `/` is non-conformant.
+
+## Padding bucket
+
+Let `L = 4 + len(metadata) + size` be the logical plaintext length before
+padding, where `len(metadata)` is the canonical metadata byte length and `size`
+is the source byte count. The padded plaintext length `P(L)` is exactly:
+
+- `L ≤ 65536` → `65536`;
+- `65536 < L ≤ 1048576` → `2 ** ceil(log2(L))`;
+- `L > 1048576` → `ceil(L / 1048576) * 1048576`.
+
+`L = 1048576` falls in the middle branch and pads to `2**20 = 1048576`. A
+decoder MUST recompute `P` from the recovered logical length and reject an
+envelope whose decrypted plaintext length differs.
+
 ## Versioning and legacy read
 
 The magic is the version field. A conformant encoder MUST write `FSWNENC1`. A
@@ -138,11 +182,31 @@ and must never protect real content.
 
 ## Validation
 
-Decryption rejects unknown magic, versions represented by other magic,
-unexpected chunk sizes, impossible record counts or lengths, malformed or
-non-canonical keys, non-canonical metadata, excessive source sizes, altered
-headers, reordered records, modified ciphertext, wrong keys and invalid padding
-buckets.
+A conformant decoder MUST reject an envelope, before offering any plaintext, in
+each of these cases. Each maps to a published negative vector.
+
+1. The magic is neither `FSWNENC1` nor the legacy `WBLMENC1`.
+2. The clear chunk size is not the expected 1 MiB.
+3. The record count is zero, or exceeds the maximum reachable count derived from
+   the file-size and chunk-size limits.
+4. The envelope length is not consistent with the header's record count and
+   chunk size (a short or over-long body).
+5. Any record's GCM authentication tag fails under the AAD built from the actual
+   header bytes and that record's counter (this MUST subsume altered headers,
+   reordered or duplicated records, modified ciphertext and a wrong key, because
+   all of them are authenticated).
+6. The recovered metadata is not the canonical form defined above (wrong keys,
+   key order, whitespace, escaping, or a `name`/`type` that is not a fixed point
+   of its normalisation).
+7. The decrypted plaintext length is not the padding bucket `P(L)` for the
+   recovered logical length `L`.
+8. The recovered `size` exceeds the maximum source size.
+9. The recovery key is not canonical unpadded base64url for exactly 32 bytes
+   (the decoder re-encodes and compares).
+
+There is no partial acceptance: a decoder MUST NOT surface any plaintext, or a
+save link, until every record has authenticated and every check above has
+passed.
 
 Hashing, encryption and decryption accept an abort signal and check it between
 bounded chunks. File, endpoint and profile changes cancel the active local
