@@ -937,7 +937,7 @@ try {
   await waitForText(record, "#publish-status", new RegExp(`Seeding ${infoHash}`, "u"), PEER_TIMEOUT_MS);
 
   publishedRetrievalDenied = true;
-  downloaderRecord = await launchFirefox(firefox, appOrigin, allowedOrigins, "downloader");
+  downloaderRecord = await launchFirefox(browser, appOrigin, allowedOrigins, "downloader");
   const downloaderInitialExternalRequests = downloaderRecord.requests.filter((request) => {
     const url = new URL(request);
     return ["http:", "https:", "ws:", "wss:"].includes(url.protocol) && url.origin !== appOrigin;
