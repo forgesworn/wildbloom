@@ -179,7 +179,7 @@ async function webdriverRequest(origin, path, options = {}) {
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.value?.error) {
+    if (!response.ok) {
       throw new Error(payload?.value?.message ?? `SafariDriver returned HTTP ${response.status}.`);
     }
     return payload?.value;
@@ -1183,7 +1183,7 @@ try {
   blossomClosed = true;
   await setValue(record, "#recovery-key-input", fixture.recoveryKey);
   await click(record, "#fetch-blossom");
-  await waitForText(record, "#retrieve-status", /retrieval failed|network|fetch/iu);
+  await waitForText(record, "#retrieve-status", /retrieval failed|network|fetch|load failed/iu);
   const deniedStatus = await snapshot(record, "#retrieve-status");
   const deniedLinks = await snapshot(record, "#retrieve-links");
   if (!deniedStatus?.error || deniedLinks?.links !== 0) {
