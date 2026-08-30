@@ -162,3 +162,10 @@ result from repopulating or becoming publishable in newer Tor-only state.
 Relay publication is irreversible once a relay has received an event.
 Cancellation closes pending sockets and discards stale acknowledgements; it is
 not a retraction mechanism.
+
+Relay discovery does not use `nostr-tools` pools or long-running subscriptions.
+Each deliberate exact-ID lookup opens its own WebSocket, sends one bounded
+`REQ`, and has a ten-second deadline. Success, `EOSE`, failure, cancellation or
+timeout sends `CLOSE` when possible and closes the socket. Wildbloom imports
+only the `nostr-tools/pure` event-validation primitives; relay lifecycle remains
+inside the injected, directly tested boundary above.

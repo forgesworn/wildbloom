@@ -1,4 +1,4 @@
-import { validateEvent, verifyEvent } from "nostr-tools";
+import { validateEvent, verifyEvent } from "nostr-tools/pure";
 import { resolveHybridEvent } from "./nostr.js";
 import {
   assertHex64,

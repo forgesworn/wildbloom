@@ -68,7 +68,10 @@ class PublishSocket extends FetchSocket {
   }
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("relay protocol boundaries", () => {
   it("ignores EOSE for another subscription and verifies the exact event", async () => {
@@ -93,7 +96,8 @@ describe("relay protocol boundaries", () => {
   });
 
   it("rejects invalid events before opening a socket", () => {
-    const invalid = { ...fileEvent(), sig: "00".repeat(64) };
+    const serialised = JSON.parse(JSON.stringify(fileEvent())) as SignedNostrEvent;
+    const invalid = { ...serialised, sig: "00".repeat(64) };
     expect(() => publishToRelay(
       "wss://relay.example.com",
       invalid,
@@ -129,6 +133,46 @@ describe("relay protocol boundaries", () => {
     expect(resolved.event.id).toBe(event.id);
     expect(MultiSocket.instances).toHaveLength(2);
     expect(MultiSocket.instances.every((socket) => socket.readyState === MultiSocket.CLOSED)).toBe(true);
+  });
+
+  it("bounds one-shot relay subscriptions and sends CLOSE on timeout", async () => {
+    vi.useFakeTimers();
+    class SilentLookupSocket extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 3;
+      static instances: SilentLookupSocket[] = [];
+      readonly sent: unknown[][] = [];
+      readyState = SilentLookupSocket.CONNECTING;
+
+      constructor(_url: string | URL) {
+        super();
+        SilentLookupSocket.instances.push(this);
+        queueMicrotask(() => {
+          this.readyState = SilentLookupSocket.OPEN;
+          this.dispatchEvent(new Event("open"));
+        });
+      }
+
+      send(data: string): void {
+        this.sent.push(JSON.parse(data) as unknown[]);
+      }
+
+      close(): void {
+        this.readyState = SilentLookupSocket.CLOSED;
+      }
+    }
+    vi.stubGlobal("WebSocket", SilentLookupSocket);
+
+    const lookup = resolveFromRelays(["wss://silent.example.com"], fileEvent().id);
+    const rejection = expect(lookup).rejects.toThrow(/lookup timed out/u);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+
+    expect(SilentLookupSocket.instances).toHaveLength(1);
+    const socket = SilentLookupSocket.instances[0] as SilentLookupSocket;
+    expect(socket.sent.map((entry) => entry[0])).toEqual(["REQ", "CLOSE"]);
+    expect(socket.readyState).toBe(SilentLookupSocket.CLOSED);
   });
 
   it("continues past a relay's validly signed split view until the exact event wins", async () => {
