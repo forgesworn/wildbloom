@@ -179,7 +179,7 @@ async function webdriverRequest(origin, path, options = {}) {
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.value?.error) {
+    if (!response.ok) {
       throw new Error(payload?.value?.message ?? `SafariDriver returned HTTP ${response.status}.`);
     }
     return payload?.value;
