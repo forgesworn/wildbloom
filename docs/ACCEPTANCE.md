@@ -26,6 +26,8 @@ the finish line.
   timeout, partial-body cancellation and denied-service failure.
 - Two isolated Chromium contexts publishing and retrieving the encrypted file
   through a real, ephemeral TLS WebSocket tracker.
+- A self-test of the cross-device service-evidence and packet-classification
+  contract. The separate physical-device ceremony remains a manual gate.
 - Exact source recovery while the controlled Blossom web seed refuses every
   retrieval, proving the bytes came from the other browser peer.
 - Runtime observation that both peers receive an empty ICE-server list, gather
@@ -110,6 +112,7 @@ Run the complete gate with:
 npm ci
 npm run ci
 npm run smoke:swarm
+npm run acceptance:cross-device:self-test
 ```
 
 The local Chromium and branded-Firefox peer gates require `openssl` to create a
@@ -256,17 +259,21 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 - Two-device WebTorrent seeding and retrieval across the intended production
   network boundary, with host-candidate and any future operator ICE traffic
   checked against packet capture. The automated two-context loopback gate does
-  not prove NAT traversal or absence of lower-level browser traffic.
+  not prove NAT traversal or absence of lower-level browser traffic. The
+  schema-validated LAN coordinator, redacted evidence finaliser and exact
+  operator ceremony are documented in
+  [`CROSS-DEVICE-ACCEPTANCE.md`](CROSS-DEVICE-ACCEPTANCE.md), but the gate stays
+  open until two physical devices produce a passing record.
 - Manual screen-reader, real browser zoom, forced-colours appearance and human
   keyboard-usability review. Automated WCAG scanning, 320px reflow,
   forced-colours semantics and keyboard mechanics are covered.
 - Operating-system memory-pressure and low-end-device tests. The exact maximum
   size and a constrained JS heap are automated, but Blob storage may live
   outside that heap. Operating-system loss is also not yet proven.
-- Verified production host selection, TLS/HSTS, onion address custody, live
-  monitoring, rollback rehearsal and the edge's actual log-retention setting.
-  The deployment and scheduled exact-byte verifier are implemented, but are not
-  evidence of a configured provider or successful recovery exercise.
+- Onion address custody and the production edge's actual log-retention setting.
+  The public host, TLS/HSTS, scheduled exact-byte monitoring and rollback path
+  now have deployment evidence; those records do not establish the remaining
+  onion-key and provider-retention decisions.
 - Legal name clearance and the deployed operator's privacy notice.  The public
   support and private vulnerability-reporting routes are now defined, but the
   technical privacy model cannot identify the legal controller or choose its

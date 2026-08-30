@@ -26,6 +26,15 @@ STUN/TURN request, but host candidates still expose network addresses to a peer
 and cross-network connectivity may fail. Any future public ICE service must be
 operator-selected, disclosed beside the action and covered by packet evidence.
 
+The manual cross-device ceremony intentionally captures LAN packet headers to
+test that boundary. Its raw capture contains IP addresses, ports, timing and
+traffic volume and must remain restricted. The coordinator hashes client
+addresses with an unpersisted per-run salt; the final schema-validated JSON
+retains endpoint aliases, capture hashes and aggregate counts rather than raw
+addresses. This limits evidence retention, not what the LAN, peer browsers or
+capture operator observed. See
+[`CROSS-DEVICE-ACCEPTANCE.md`](CROSS-DEVICE-ACCEPTANCE.md).
+
 ## Tor-only encrypted delivery
 
 Tor-only mode accepts only exact checksum-valid v3 `.onion` hostnames for

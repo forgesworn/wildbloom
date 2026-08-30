@@ -24,7 +24,7 @@ The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
 declared a production service.  It currently supports source files up to 256
 MiB. Independent cryptographic review, live human Tor Browser usability review,
-and cross-network packet evidence remain release gates. Functional installed-
+and a completed physical-device packet-evidence run remain release gates. Functional installed-
 Safari coverage now runs as a separate on-demand native WebDriver gate. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
@@ -108,6 +108,7 @@ npm run acceptance:deployment
 npm run verify:deployment -- --origin https://wildbloom.example --evidence ../wildbloom-release-evidence.json
 npm run acceptance:firefox
 npm run smoke:swarm
+npm run acceptance:cross-device:self-test
 npm run acceptance:tor
 npm run acceptance:tor-browser
 npm run acceptance:maximum
@@ -193,6 +194,15 @@ and proves bounded relay timeout, partial-response cancellation, denied-service
 failure and page lifecycle clearing. SafariDriver permits one Safari automation
 session at a time, so the separate two-browser swarm gate remains the
 peer-delivery proof.
+
+The separate [cross-device acceptance ceremony](docs/CROSS-DEVICE-ACCEPTANCE.md)
+serves the exact production build and controlled Blossom, relay and WebSocket
+tracker through an operator-trusted LAN TLS origin. Two physical devices must
+recover the public fixture through direct WebRTC while Blossom refuses the
+object. A fail-closed `tcpdump` verifier correlates the service record with the
+packet capture and emits a redacted, schema-versioned result. The tooling does
+not automate signing or weaken HTTPS/WSS, and its presence is not evidence that
+the physical-device run has passed.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
