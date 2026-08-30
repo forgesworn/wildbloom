@@ -25,6 +25,9 @@
     "acceptance:safari": "node scripts/safari-acceptance.mjs",
     "smoke:browser:webkit": "node scripts/browser-smoke.mjs --browser webkit",
     "smoke:swarm": "node scripts/swarm-acceptance.mjs",
+    "acceptance:cross-device:serve": "node scripts/cross-device-coordinator.mjs",
+    "acceptance:cross-device:verify": "node scripts/cross-device-evidence.mjs",
+    "acceptance:cross-device:self-test": "node scripts/cross-device-evidence.mjs --self-test",
     "acceptance:tor": "node scripts/tor-acceptance.mjs",
     "acceptance:tor-browser": "node scripts/tor-acceptance.mjs --browser system-chromium --branded-tor-browser",
     "acceptance:maximum": "node scripts/maximum-file-acceptance.mjs",
@@ -38,7 +41,7 @@
     "typecheck": "tsc --noEmit",
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
-    "check": "npm run install:policy && npm run encryption:vector && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
+    "check": "npm run install:policy && npm run encryption:vector && npm run acceptance:cross-device:self-test && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {
