@@ -11,9 +11,10 @@ Blossom server and replicates complete blobs between nodes.
 The canonical product is a static browser application. The same local-only
 TypeScript core and built assets target current browsers on Windows, Linux and
 macOS; the complete automated gate runs in system Chromium on all three, plus
-Playwright Firefox on Linux and Playwright WebKit on macOS. This is an
-application compatibility claim, not a claim that native installers,
-background services or real Safari have been proven.
+Playwright Firefox on Linux and Playwright WebKit on macOS. A separate
+on-demand macOS 26 gate drives the installed Safari product through its native
+SafariDriver. This is an application compatibility claim, not a claim that
+native installers or background services have been proven.
 
 A separate Linux Chromium gate runs two isolated production contexts against
 an ephemeral TLS WebSocket tracker. Blossom retrieval is deliberately refused,
@@ -30,6 +31,14 @@ same empty ICE-server configuration and host-only candidates, and requires both
 peer sessions to leave the tracker after consent withdrawal and source change.
 The tracker certificate is disposable harness material accepted only by those
 automated browser sessions.
+
+Installed Safari runs one isolated native WebDriver session because
+SafariDriver supports only one Safari automation session at a time. That
+session completes external-signature encrypted publication, relay resolution,
+verified self-recovery and independent-vector recovery after wrong-key
+rejection, then exercises timeout, cancellation, denied-service and
+page-lifecycle cleanup. It does not replace
+the separate two-browser WebRTC gate or claim cross-device network evidence.
 
 An on-demand system-Chrome gate completes encryption, Blossom upload, signed
 publication, exact relay resolution, verified download and decryption at the

@@ -22,6 +22,7 @@
     "smoke:browser": "node scripts/browser-smoke.mjs",
     "smoke:browser:firefox": "node scripts/browser-smoke.mjs --browser firefox",
     "acceptance:firefox": "node scripts/firefox-acceptance.mjs",
+    "acceptance:safari": "node scripts/safari-acceptance.mjs",
     "smoke:browser:webkit": "node scripts/browser-smoke.mjs --browser webkit",
     "smoke:swarm": "node scripts/swarm-acceptance.mjs",
     "acceptance:tor": "node scripts/tor-acceptance.mjs",
