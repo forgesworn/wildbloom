@@ -14,7 +14,19 @@ import { WebDriverBiDi } from "./webdriver-bidi.mjs";
 const HOST = "127.0.0.1";
 const ACTION_TIMEOUT_MS = 30_000;
 const PEER_TIMEOUT_MS = 60_000;
-const PREPARED_BYTES = Buffer.from("prepared in genuine Firefox", "utf8");
+const requestedBrowser = (() => {
+  const index = process.argv.indexOf("--browser");
+  const inline = process.argv.find((argument) => argument.startsWith("--browser="));
+  if (index >= 0 && !process.argv[index + 1]) throw new Error("--browser requires a value.");
+  const value = index >= 0 ? process.argv[index + 1] : inline?.slice("--browser=".length) ?? "firefox";
+  if (!["firefox", "safari"].includes(value)) throw new Error(`Unsupported browser: ${value}.`);
+  return value;
+})();
+const IS_SAFARI = requestedBrowser === "safari";
+const BROWSER_LABEL = IS_SAFARI ? "installed Safari" : "Mozilla Firefox";
+const PREPARED_TEXT = IS_SAFARI ? "prepared in genuine Safari" : "prepared in genuine Firefox";
+const PREPARED_FILENAME = IS_SAFARI ? "safari-prepared.txt" : "firefox-prepared.txt";
+const PREPARED_BYTES = Buffer.from(PREPARED_TEXT, "utf8");
 const SECRET = new Uint8Array(32).fill(23);
 const PUBKEY = getPublicKey(SECRET);
 const WRONG_RECOVERY_KEY = `wbk1_${Buffer.alloc(32, 99).toString("base64url")}`;
@@ -98,6 +110,18 @@ function findFirefox() {
   return { binary, version: output };
 }
 
+function findSafari() {
+  if (platform() !== "darwin") throw new Error("Installed Safari acceptance requires macOS.");
+  const binary = executable([process.env.WILDBLOOM_SAFARIDRIVER_PATH, "/usr/bin/safaridriver"], "SafariDriver");
+  const version = spawnSync(binary, ["--version"], { encoding: "utf8", timeout: 10_000 });
+  const output = `${version.stdout ?? ""}${version.stderr ?? ""}`.trim();
+  const browserVersion = /Included with Safari ([0-9.]+)/u.exec(output)?.[1];
+  if (version.status !== 0 || !browserVersion) {
+    throw new Error(`The selected driver did not identify as SafariDriver: ${output || "no version output"}`);
+  }
+  return { binary, browserVersion, version: `Safari ${browserVersion}` };
+}
+
 async function listen(server) {
   if (server.listening) return;
   await new Promise((resolve, reject) => {
@@ -144,6 +168,56 @@ async function stopChild(child) {
   }
 }
 
+async function webdriverRequest(origin, path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? ACTION_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${origin}${path}`, {
+      method: options.method ?? "GET",
+      headers: options.body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.value?.error) {
+      throw new Error(payload?.value?.message ?? `SafariDriver returned HTTP ${response.status}.`);
+    }
+    return payload?.value;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error(`SafariDriver ${path} timed out.`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+class SafariWebDriver {
+  constructor(origin, sessionId) {
+    this.origin = origin;
+    this.sessionId = sessionId;
+  }
+
+  command(path, body, timeoutMs) {
+    return webdriverRequest(this.origin, `/session/${this.sessionId}/${path}`, {
+      method: "POST",
+      body,
+      timeoutMs,
+    });
+  }
+
+  evaluateJson(expression, timeoutMs) {
+    return this.command("execute/sync", { script: `return (${expression});`, args: [] }, timeoutMs);
+  }
+
+  navigate(url, timeoutMs) {
+    return this.command("url", { url }, timeoutMs);
+  }
+
+  close() {
+    return webdriverRequest(this.origin, `/session/${this.sessionId}`, { method: "DELETE" });
+  }
+}
+
 function requestAllowed(request, allowedOrigins) {
   const actual = new URL(request);
   return [...allowedOrigins].some((origin) => {
@@ -156,7 +230,9 @@ function requestAllowed(request, allowedOrigins) {
 }
 
 async function evaluate(record, expression, timeoutMs) {
-  return record.bidi.evaluateJson(record.context, expression, timeoutMs);
+  return record.webdriver
+    ? record.webdriver.evaluateJson(expression, timeoutMs)
+    : record.bidi.evaluateJson(record.context, expression, timeoutMs);
 }
 
 async function click(record, selector) {
@@ -380,6 +456,146 @@ async function closeFirefox(record) {
   await stopChild(record.process);
 }
 
+async function launchSafari(safari, appOrigin, ceremony) {
+  const remotePort = await availablePort();
+  const driverOrigin = `http://${HOST}:${remotePort}`;
+  let output = "";
+  const processHandle = spawn(safari.binary, ["--port", String(remotePort)], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const recordOutput = (chunk) => { output = `${output}${chunk.toString("utf8")}`.slice(-128 * 1024); };
+  processHandle.stdout.on("data", recordOutput);
+  processHandle.stderr.on("data", recordOutput);
+
+  await waitFor(async () => {
+    if (processHandle.exitCode !== null) throw new Error(`SafariDriver exited before opening its loopback endpoint: ${output}`);
+    try {
+      return Boolean((await webdriverRequest(driverOrigin, "/status", { timeoutMs: 1_000 }))?.ready);
+    } catch {
+      return false;
+    }
+  }, ACTION_TIMEOUT_MS, () => `SafariDriver did not expose its loopback endpoint: ${output}`, 250);
+
+  let created;
+  try {
+    created = await webdriverRequest(driverOrigin, "/session", {
+      method: "POST",
+      body: {
+        capabilities: {
+          alwaysMatch: {
+            acceptInsecureCerts: true,
+            browserName: "Safari",
+            platformName: "macOS",
+          },
+        },
+      },
+    });
+  } catch (error) {
+    const suffix = /Allow remote automation/iu.test(error.message)
+      ? " Run `sudo safaridriver --enable` once before this gate."
+      : "";
+    await stopChild(processHandle);
+    throw new Error(`SafariDriver could not create an isolated automation session: ${error.message}${suffix}`);
+  }
+  const sessionId = created?.sessionId;
+  const capabilities = created?.capabilities ?? created;
+  if (!sessionId) {
+    await stopChild(processHandle);
+    throw new Error(`SafariDriver omitted its session identifier: ${JSON.stringify(created)}.`);
+  }
+  if (capabilities?.browserName !== "Safari" || capabilities?.browserVersion !== safari.browserVersion) {
+    await webdriverRequest(driverOrigin, `/session/${sessionId}`, { method: "DELETE" }).catch(() => undefined);
+    await stopChild(processHandle);
+    throw new Error(
+      `Safari capability ${capabilities?.browserName ?? "missing"} ${capabilities?.browserVersion ?? "missing"} `
+      + `did not match ${safari.version}.`,
+    );
+  }
+
+  const webdriver = new SafariWebDriver(driverOrigin, sessionId);
+  const record = {
+    label: `${safari.version} ${ceremony}`,
+    output: () => output,
+    process: processHandle,
+    requests: [],
+    webdriver,
+  };
+  await webdriver.navigate(appOrigin, ACTION_TIMEOUT_MS);
+  await evaluate(record, `(() => {
+    window.__wildbloomFirefoxWebRtcUsed = false;
+    window.__wildbloomPageErrors = [];
+    window.__wildbloomSafariRequests = [];
+    window.addEventListener("error", (event) => {
+      window.__wildbloomPageErrors.push(event.error?.message ?? event.message ?? "unknown page error");
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.__wildbloomPageErrors.push(event.reason?.message ?? String(event.reason ?? "unknown rejected promise"));
+    });
+    const objectUrls = new Map();
+    Object.defineProperty(window, "__wildbloomObservedObjectUrls", { configurable: false, value: objectUrls });
+    const createObjectUrl = URL.createObjectURL.bind(URL);
+    const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (object) => {
+      const url = createObjectUrl(object);
+      objectUrls.set(url, object);
+      return url;
+    };
+    URL.revokeObjectURL = (url) => {
+      objectUrls.delete(url);
+      revokeObjectUrl(url);
+    };
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      window.__wildbloomSafariRequests.push(new URL(input instanceof Request ? input.url : input, location.href).href);
+      return nativeFetch(input, init);
+    };
+    const NativeWebSocket = window.WebSocket;
+    window.WebSocket = class ObservedWebSocket extends NativeWebSocket {
+      constructor(url, protocols) {
+        window.__wildbloomSafariRequests.push(new URL(url, location.href).href);
+        if (protocols === undefined) super(url);
+        else super(url, protocols);
+      }
+    };
+    const NativePeerConnection = window.RTCPeerConnection;
+    if (typeof NativePeerConnection === "function") {
+      window.RTCPeerConnection = class ObservedPeerConnection extends NativePeerConnection {
+        constructor(configuration, constraints) {
+          window.__wildbloomFirefoxWebRtcUsed = true;
+          super(configuration, constraints);
+        }
+      };
+    }
+    return true;
+  })()`);
+  const ready = await evaluate(record, `(() => ({
+    marker: Boolean(document.querySelector("#inspect-file")),
+    origin: location.origin,
+    secureContext: window.isSecureContext,
+    subtleCrypto: Boolean(window.crypto?.subtle),
+    userAgent: navigator.userAgent,
+  }))()`);
+  if (!ready.marker || ready.origin !== appOrigin || !ready.secureContext || !ready.subtleCrypto
+    || !/Version\/[0-9.]+ Safari\//u.test(ready.userAgent)) {
+    await webdriver.close().catch(() => undefined);
+    await stopChild(processHandle);
+    throw new Error(`Installed Safari did not load the exact trustworthy app origin: ${JSON.stringify(ready)}.`);
+  }
+  return record;
+}
+
+async function closeSafari(record) {
+  if (!record) return;
+  await record.webdriver.close().catch(() => undefined);
+  await stopChild(record.process);
+}
+
+async function observedRequests(record) {
+  return record.webdriver
+    ? evaluate(record, "[...window.__wildbloomSafariRequests]")
+    : record.requests;
+}
+
 function peerCount(tracker, infoHash) {
   return tracker.torrents[infoHash]?.peers.keys.length ?? 0;
 }
@@ -406,8 +622,8 @@ async function assertPeerEvidence(record) {
   }
 }
 
-function assertAllowedRequests(record, allowedOrigins) {
-  for (const request of record.requests) {
+async function assertAllowedRequests(record, allowedOrigins) {
+  for (const request of await observedRequests(record)) {
     const url = new URL(request);
     if (["http:", "https:", "ws:", "wss:"].includes(url.protocol) && !requestAllowed(request, allowedOrigins)) {
       throw new Error(`${record.label} made an undeclared application request to ${request}.`);
@@ -445,14 +661,14 @@ const blossom = createServer((request, response) => {
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks);
-      if (body.length === 0 || body.includes(PREPARED_BYTES)) throw new Error("Mozilla Firefox upload omitted ciphertext or exposed source bytes.");
+      if (body.length === 0 || body.includes(PREPARED_BYTES)) throw new Error(`${BROWSER_LABEL} upload omitted ciphertext or exposed source bytes.`);
       const hash = createHash("sha256").update(body).digest("hex");
       if (request.headers["x-sha-256"] !== hash
         || request.headers["content-type"] !== "application/vnd.forgesworn.encrypted") {
-        throw new Error("Mozilla Firefox upload changed its encrypted payload facts.");
+        throw new Error(`${BROWSER_LABEL} upload changed its encrypted payload facts.`);
       }
       const authorisation = request.headers.authorization;
-      if (!authorisation?.startsWith("Nostr ")) throw new Error("Mozilla Firefox upload omitted Nostr authority.");
+      if (!authorisation?.startsWith("Nostr ")) throw new Error(`${BROWSER_LABEL} upload omitted Nostr authority.`);
       const event = JSON.parse(Buffer.from(authorisation.slice(6), "base64url").toString("utf8"));
       const expiration = Number(event.tags?.find((tag) => tag[0] === "expiration")?.[1]);
       if (!verifyEvent(event)
@@ -460,7 +676,7 @@ const blossom = createServer((request, response) => {
         || expiration - event.created_at !== 300
         || !event.tags.some((tag) => tag[0] === "server" && tag[1] === HOST)
         || !event.tags.some((tag) => tag[0] === "x" && tag[1] === hash)) {
-        throw new Error("Mozilla Firefox upload authority was not an exact five-minute external signature.");
+        throw new Error(`${BROWSER_LABEL} upload authority was not an exact five-minute external signature.`);
       }
       uploadAuthorisations.push(event);
       publishedBytes = body;
@@ -527,16 +743,18 @@ const blossom = createServer((request, response) => {
 
 let relaySilent = false;
 let fixtureEvent;
+let relayConnections = 0;
 const relayEvents = new Map();
 const relayErrors = [];
 const relay = new WebSocketServer({ host: HOST, port: 0, maxPayload: 1024 * 1024 });
 relay.on("connection", (socket) => {
+  relayConnections += 1;
   socket.on("message", (raw) => {
     try {
       const message = JSON.parse(raw.toString("utf8"));
       if (message[0] === "EVENT") {
         const event = message[1];
-        if (!verifyEvent(event) || event.pubkey !== PUBKEY) throw new Error("Mozilla Firefox relay received an invalid or unexpected signature.");
+        if (!verifyEvent(event) || event.pubkey !== PUBKEY) throw new Error(`${BROWSER_LABEL} relay received an invalid or unexpected signature.`);
         relayEvents.set(event.id, event);
         socket.send(JSON.stringify(["OK", event.id, true, "stored by controlled Firefox relay"]));
       }
@@ -576,7 +794,7 @@ let record;
 let downloaderRecord;
 let blossomClosed = false;
 try {
-  const firefox = findFirefox();
+  const browser = IS_SAFARI ? findSafari() : findFirefox();
   await Promise.all([listen(blossom), new Promise((resolve, reject) => {
     relay.once("listening", resolve);
     relay.once("error", reject);
@@ -609,16 +827,18 @@ try {
     } catch {
       return false;
     }
-  }, ACTION_TIMEOUT_MS, "Production server did not start for Mozilla Firefox acceptance.");
+  }, ACTION_TIMEOUT_MS, `Production server did not start for ${BROWSER_LABEL} acceptance.`);
 
   const allowedOrigins = new Set([appOrigin, blossomOrigin, new URL(relayUrl).origin, new URL(trackerUrl).origin]);
-  record = await launchFirefox(firefox, appOrigin, allowedOrigins, "publisher");
-  const initialExternalRequests = record.requests.filter((request) => {
+  record = IS_SAFARI
+    ? await launchSafari(browser, appOrigin, "publisher")
+    : await launchFirefox(browser, appOrigin, allowedOrigins, "publisher");
+  const initialExternalRequests = (await observedRequests(record)).filter((request) => {
     const url = new URL(request);
     return ["http:", "https:", "ws:", "wss:"].includes(url.protocol) && url.origin !== appOrigin;
   });
-  if (initialExternalRequests.length !== 0 || blossomRequests.length !== 0) {
-    throw new Error(`Opening Wildbloom in Mozilla Firefox made ambient requests: ${initialExternalRequests.join("; ")}.`);
+  if (initialExternalRequests.length !== 0 || blossomRequests.length !== 0 || relayConnections !== 0) {
+    throw new Error(`Opening Wildbloom in ${BROWSER_LABEL} made ambient requests: ${initialExternalRequests.join("; ")}.`);
   }
   const initial = await evaluate(record, `(() => ({
     hasSigner: Boolean(window.nostr),
@@ -627,14 +847,14 @@ try {
   }))()`);
   if (initial.hasSigner || initial.webRtcUsed
     || !initial.torBoundary.includes("Use Tor Browser rather than SOCKS-proxying a normal browser")) {
-    throw new Error(`Mozilla Firefox crossed an initial privacy boundary: ${JSON.stringify(initial)}.`);
+    throw new Error(`${BROWSER_LABEL} crossed an initial privacy boundary: ${JSON.stringify(initial)}.`);
   }
 
   await evaluate(record, `(() => {
     const input = document.querySelector("#publish-file");
     if (!(input instanceof HTMLInputElement)) throw new Error("Publication file input is missing.");
     const transfer = new DataTransfer();
-    transfer.items.add(new File([new TextEncoder().encode("prepared in genuine Firefox")], "firefox-prepared.txt", {
+    transfer.items.add(new File([new TextEncoder().encode(${JSON.stringify(PREPARED_TEXT)})], ${JSON.stringify(PREPARED_FILENAME)}, {
       type: "text/plain",
       lastModified: 0,
     }));
@@ -650,7 +870,7 @@ try {
   }))()`);
   if (!/^wbk1_[A-Za-z0-9_-]{43}$/u.test(prepared.recoveryKey) || prepared.uploadDisabled !== true
     || blossomRequests.length !== 0) {
-    throw new Error(`Mozilla Firefox did not prepare an encrypted local-only file safely: ${JSON.stringify(prepared)}.`);
+    throw new Error(`${BROWSER_LABEL} did not prepare an encrypted local-only file safely: ${JSON.stringify(prepared)}.`);
   }
 
   await setChecked(record, 'input[name="signing-method"][value="external"]', true);
@@ -666,12 +886,12 @@ try {
   await click(record, "#upload-file");
   await waitForUnsignedTemplate(record, 24242);
   if (blossomRequests.filter((value) => value === "PUT /upload").length !== uploadsBeforeSignature) {
-    throw new Error("Mozilla Firefox uploaded before exact external authority was returned.");
+    throw new Error(`${BROWSER_LABEL} uploaded before exact external authority was returned.`);
   }
   await completeExternalSignature(record, 24242);
   await waitForText(record, "#publish-status", /hybrid metadata is staged/iu);
   if (uploadAuthorisations.length !== 1 || !publishedBytes || !publishedHash) {
-    throw new Error("Mozilla Firefox did not complete the externally authorised encrypted upload.");
+    throw new Error(`${BROWSER_LABEL} did not complete the externally authorised encrypted upload.`);
   }
 
   await click(record, "#sign-events");
@@ -681,7 +901,7 @@ try {
   await setChecked(record, "#publish-consent", true);
   await click(record, "#publish-events");
   await waitForText(record, "#publish-status", /2\/2 acknowledgements/iu);
-  if (!relayEvents.has(publishedFileEvent.id)) throw new Error("Mozilla Firefox publication did not reach the controlled relay.");
+  if (!relayEvents.has(publishedFileEvent.id)) throw new Error(`${BROWSER_LABEL} publication did not reach the controlled relay.`);
 
   await setValue(record, "#event-id", publishedFileEvent.id);
   await click(record, "#resolve-event");
@@ -691,9 +911,9 @@ try {
   await waitForText(record, "#retrieve-status", /locally decrypted bytes/iu);
   const publishedRecovery = await evaluate(record, `(async () => {
     const link = document.querySelector("#retrieve-links a");
-    if (!(link instanceof HTMLAnchorElement)) throw new Error("Published Firefox download link is missing.");
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Published browser download link is missing.");
     const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
-    if (!(blob instanceof Blob)) throw new Error("Published Firefox download Blob was not observed.");
+    if (!(blob instanceof Blob)) throw new Error("Published browser download Blob was not observed.");
     return {
       bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
       name: link.download,
@@ -701,13 +921,14 @@ try {
       rel: link.rel,
     };
   })()`);
-  if (publishedRecovery.name !== "firefox-prepared.txt"
+  if (publishedRecovery.name !== PREPARED_FILENAME
     || publishedRecovery.type !== "application/octet-stream"
     || !publishedRecovery.rel.includes("noopener")
     || !Buffer.from(publishedRecovery.bytes).equals(PREPARED_BYTES)) {
-    throw new Error("Mozilla Firefox did not recover its own externally signed publication exactly.");
+    throw new Error(`${BROWSER_LABEL} did not recover its own externally signed publication exactly.`);
   }
 
+  if (!IS_SAFARI) {
   const publishedFacts = (await snapshot(record, "#file-facts"))?.text ?? "";
   const infoHash = /Info hash([0-9a-f]{40})/u.exec(publishedFacts)?.[1];
   if (!infoHash) throw new Error("Mozilla Firefox did not expose the reviewed torrent info hash.");
@@ -792,8 +1013,8 @@ try {
     throw new Error("The controlled WSS tracker did not receive the Firefox publisher, failed-key and retry start announcements.");
   }
   await Promise.all([assertPeerEvidence(record), assertPeerEvidence(downloaderRecord)]);
-  assertAllowedRequests(record, allowedOrigins);
-  assertAllowedRequests(downloaderRecord, allowedOrigins);
+  await assertAllowedRequests(record, allowedOrigins);
+  await assertAllowedRequests(downloaderRecord, allowedOrigins);
   const peerPageState = await Promise.all([record, downloaderRecord].map((browserRecord) => evaluate(browserRecord, `(() => ({
     errors: [...window.__wildbloomPageErrors],
     hasSigner: Boolean(window.nostr),
@@ -886,6 +1107,7 @@ try {
   await closeFirefox(downloaderRecord);
   downloaderRecord = undefined;
   if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the withdrawn Firefox downloader restored peer authority.");
+  }
 
   await setValue(record, "#event-id", fixtureEvent.id);
   relaySilent = true;
@@ -898,7 +1120,7 @@ try {
       resolveDisabled: document.querySelector("#resolve-event")?.disabled,
     }))()`);
     if (timedOut.fetchDisabled !== true || timedOut.links !== 0 || timedOut.resolveDisabled !== false) {
-      throw new Error(`Mozilla Firefox retained stale retrieval authority after relay timeout: ${JSON.stringify(timedOut)}.`);
+      throw new Error(`${BROWSER_LABEL} retained stale retrieval authority after relay timeout: ${JSON.stringify(timedOut)}.`);
     }
   } finally {
     relaySilent = false;
@@ -906,19 +1128,30 @@ try {
 
   await click(record, "#resolve-event");
   await waitForText(record, "#retrieve-status", /separately received recovery key/iu);
+  await setValue(record, "#recovery-key-input", WRONG_RECOVERY_KEY);
+  await click(record, "#fetch-blossom");
+  await waitForText(record, "#retrieve-status", /wrong or the encrypted envelope was modified/iu);
+  const wrongKey = await evaluate(record, `(() => ({
+    cancelDisabled: document.querySelector("#cancel-download")?.disabled,
+    error: document.querySelector("#retrieve-status")?.classList.contains("error"),
+    links: document.querySelectorAll("#retrieve-links a").length,
+  }))()`);
+  if (wrongKey.cancelDisabled !== true || wrongKey.error !== true || wrongKey.links !== 0) {
+    throw new Error(`${BROWSER_LABEL} wrong-key rejection retained output or download authority: ${JSON.stringify(wrongKey)}.`);
+  }
   await setValue(record, "#recovery-key-input", fixture.recoveryKey);
   const startedBefore = hangingStarted;
   const closedBefore = hangingClosed;
   blossomMode = "hanging";
   try {
     await click(record, "#fetch-blossom");
-    await waitFor(() => hangingStarted > startedBefore, ACTION_TIMEOUT_MS, "Mozilla Firefox did not begin the partial Blossom response.");
+    await waitFor(() => hangingStarted > startedBefore, ACTION_TIMEOUT_MS, `${BROWSER_LABEL} did not begin the partial Blossom response.`);
     await click(record, "#cancel-download");
     await waitForText(record, "#retrieve-status", /retrieval cancelled/iu);
-    await waitFor(() => hangingClosed > closedBefore, ACTION_TIMEOUT_MS, "Mozilla Firefox cancellation did not close the Blossom response.");
+    await waitFor(() => hangingClosed > closedBefore, ACTION_TIMEOUT_MS, `${BROWSER_LABEL} cancellation did not close the Blossom response.`);
     const cancelled = await snapshot(record, "#retrieve-links");
     if (cancelled?.links !== 0 || !(await snapshot(record, "#cancel-download"))?.disabled) {
-      throw new Error("Mozilla Firefox retained stale output or cancellation authority after aborting retrieval.");
+      throw new Error(`${BROWSER_LABEL} retained stale output or cancellation authority after aborting retrieval.`);
     }
   } finally {
     blossomMode = "normal";
@@ -929,9 +1162,9 @@ try {
   await waitForText(record, "#retrieve-status", /locally decrypted bytes/iu);
   const recovered = await evaluate(record, `(async () => {
     const link = document.querySelector("#retrieve-links a");
-    if (!(link instanceof HTMLAnchorElement)) throw new Error("Verified Firefox download link is missing.");
+    if (!(link instanceof HTMLAnchorElement)) throw new Error("Verified browser download link is missing.");
     const blob = window.__wildbloomObservedObjectUrls?.get(link.href);
-    if (!(blob instanceof Blob)) throw new Error("Verified Firefox download Blob was not observed.");
+    if (!(blob instanceof Blob)) throw new Error("Verified browser download Blob was not observed.");
     return {
       bytes: Array.from(new Uint8Array(await blob.arrayBuffer())),
       name: link.download,
@@ -943,7 +1176,7 @@ try {
     || recovered.type !== "application/octet-stream"
     || !recovered.rel.includes("noopener")
     || !Buffer.from(recovered.bytes).equals(fixture.source)) {
-    throw new Error("Mozilla Firefox did not recover the exact published known-answer vector.");
+    throw new Error(`${BROWSER_LABEL} did not recover the exact published known-answer vector.`);
   }
 
   await closeServer(blossom);
@@ -954,7 +1187,7 @@ try {
   const deniedStatus = await snapshot(record, "#retrieve-status");
   const deniedLinks = await snapshot(record, "#retrieve-links");
   if (!deniedStatus?.error || deniedLinks?.links !== 0) {
-    throw new Error(`Mozilla Firefox retained stale or non-error state after denied service: ${JSON.stringify({ deniedLinks, deniedStatus })}.`);
+    throw new Error(`${BROWSER_LABEL} retained stale or non-error state after denied service: ${JSON.stringify({ deniedLinks, deniedStatus })}.`);
   }
 
   const finalState = await evaluate(record, `(() => ({
@@ -962,19 +1195,56 @@ try {
     hasSigner: Boolean(window.nostr),
     webRtcUsed: window.__wildbloomFirefoxWebRtcUsed,
   }))()`);
-  if (finalState.errors.length > 0 || finalState.hasSigner || !finalState.webRtcUsed) {
-    throw new Error(`Mozilla Firefox crossed its page, signer or WebRTC boundary: ${JSON.stringify(finalState)}.`);
+  if (finalState.errors.length > 0 || finalState.hasSigner || (IS_SAFARI ? finalState.webRtcUsed : !finalState.webRtcUsed)) {
+    throw new Error(`${BROWSER_LABEL} crossed its page, signer or WebRTC boundary: ${JSON.stringify(finalState)}.`);
   }
-  assertAllowedRequests(record, allowedOrigins);
+  await assertAllowedRequests(record, allowedOrigins);
+
+  if (IS_SAFARI) {
+    await evaluate(record, `(() => {
+      window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+      return true;
+    })()`);
+    const lifecycle = await evaluate(record, `(() => ({
+      values: Object.fromEntries([
+        "blossom-server", "relay-urls", "tracker-urls", "external-signer-pubkey",
+        "recovery-key-output", "external-unsigned-event", "external-signed-event",
+        "event-id", "recovery-key-input",
+      ].map((id) => [id, document.querySelector("#" + id)?.value ?? null])),
+      consents: Object.fromEntries([
+        "tor-consent", "upload-consent", "key-saved-consent", "seed-consent",
+        "publish-consent", "download-swarm-consent",
+      ].map((id) => [id, document.querySelector("#" + id)?.checked ?? null])),
+      disabled: Object.fromEntries([
+        "upload-file", "start-seeding", "stop-seeding", "sign-events", "publish-events",
+        "fetch-blossom", "fetch-swarm", "cancel-download",
+      ].map((id) => [id, document.querySelector("#" + id)?.disabled ?? null])),
+      fileCount: document.querySelector("#publish-file")?.files?.length ?? null,
+      objectUrls: window.__wildbloomObservedObjectUrls?.size ?? null,
+      publishLinks: document.querySelectorAll("#publish-links a, #recovery-links a, #external-signing-links a").length,
+      retrieveLinks: document.querySelectorAll("#retrieve-links a").length,
+      status: document.querySelector("#publish-status")?.textContent ?? "",
+    }))()`);
+    const retainedValues = Object.entries(lifecycle.values).filter(([, value]) => value !== "");
+    const retainedConsents = Object.entries(lifecycle.consents).filter(([, value]) => value !== false);
+    const enabledAuthority = Object.entries(lifecycle.disabled).filter(([, value]) => value !== true);
+    if (retainedValues.length > 0 || retainedConsents.length > 0 || enabledAuthority.length > 0
+      || lifecycle.fileCount !== 0 || lifecycle.objectUrls !== 0 || lifecycle.publishLinks !== 0
+      || lifecycle.retrieveLinks !== 0 || !lifecycle.status.includes("session cleared")) {
+      throw new Error(`Installed Safari page lifecycle retained authority: ${JSON.stringify(lifecycle)}.`);
+    }
+  }
   if (blossomErrors.length > 0 || relayErrors.length > 0 || trackerErrors.length > 0) {
     throw new Error(`Controlled service errors: ${[...blossomErrors, ...relayErrors, ...trackerErrors].join("; ")}`);
   }
-  process.stdout.write(
-    `${firefox.version} acceptance passed through two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption, consent withdrawal and page lifecycle teardown, recovery of the published independent known-answer vector through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests).\n`,
-  );
+  const evidence = IS_SAFARI
+    ? "one isolated native WebDriver session: trustworthy production origin, no ambient controlled-service request or signer, exact external-signature encrypted upload and two-event relay publication, self-recovery and an independent known-answer recovery through inert saves, relay timeout, partial-response cancellation, denied-service failure and page-lifecycle authority clearing"
+    : `two disposable profiles: trustworthy production origin, no ambient network or signer, exact external-signature encrypted upload and two-event relay publication, exact peer recovery through the controlled WSS tracker with host-only ICE and confirmed cleanup after failed decryption, consent withdrawal and page lifecycle teardown, recovery of the published independent known-answer vector through an inert save, relay timeout, download cancellation and denied-service failure (${webSeedAttempts} refused web-seed requests)`;
+  process.stdout.write(`${browser.version} acceptance passed through ${evidence}.\n`);
 } finally {
   await closeFirefox(downloaderRecord).catch(() => undefined);
-  await closeFirefox(record).catch(() => undefined);
+  if (IS_SAFARI) await closeSafari(record).catch(() => undefined);
+  else await closeFirefox(record).catch(() => undefined);
   if (!blossomClosed) await closeServer(blossom).catch(() => undefined);
   await new Promise((resolve) => relay.close(() => resolve())).catch(() => undefined);
   await new Promise((resolve) => tracker.close(resolve)).catch(() => undefined);

@@ -24,7 +24,8 @@ The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
 declared a production service.  It currently supports source files up to 256
 MiB. Independent cryptographic review, live human Tor Browser usability review,
-real Safari and cross-network packet evidence remain release gates. See
+and cross-network packet evidence remain release gates. Functional installed-
+Safari coverage now runs as a separate on-demand native WebDriver gate. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
@@ -182,6 +183,16 @@ ICE, peer cleanup after failed decryption and consent withdrawal, a published
 independently generated known-answer fixture, timeout, cancellation
 and denied-service failure. The active peer is also required to leave the
 tracker when the page session ends.
+
+The on-demand `safari-acceptance` workflow drives the Safari product installed
+on a macOS 26 runner through Apple's native SafariDriver, not Playwright
+WebKit. Its isolated automation window completes the exact external-signature
+encrypted upload and two-event relay publication, recovers both its own upload
+and an independently generated encryption vector after wrong-key rejection,
+and proves bounded relay timeout, partial-response cancellation, denied-service
+failure and page lifecycle clearing. SafariDriver permits one Safari automation
+session at a time, so the separate two-browser swarm gate remains the
+peer-delivery proof.
 
 `acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
 It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
