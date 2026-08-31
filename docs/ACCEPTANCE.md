@@ -249,7 +249,9 @@ and heap-bounded evidence, not an operating-system low-memory simulation.
 
 ## Release gates not yet satisfied
 
-- Independent cryptographic and browser security review.
+- Independent cryptographic and browser security review against the bounded
+  [`SECURITY-REVIEW-BRIEF.md`](SECURITY-REVIEW-BRIEF.md), followed by public
+  findings and remediation retest.
 - Human Tor Browser publication and retrieval review, including browser chrome,
   security-level changes, new-identity behaviour, cancellation and timeout UI.
   The automated headless branded-browser gate covers the content-engine
