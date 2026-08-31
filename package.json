@@ -45,7 +45,7 @@
     "ci": "npm run check && npm run audit"
   },
   "dependencies": {
-    "@noble/hashes": "2.0.1",
+    "@noble/hashes": "2.4.0",
     "create-torrent": "6.1.3",
     "nostr-tools": "2.25.0",
     "parse-torrent": "11.0.24",
