@@ -23,9 +23,10 @@ changing this browser protocol.
 The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
 declared a production service.  It currently supports source files up to 256
-MiB. Independent cryptographic review, live human Tor Browser usability review,
-and a completed physical-device packet-evidence run remain release gates. Functional installed-
-Safari coverage now runs as a separate on-demand native WebDriver gate. See
+MiB. [Independent cryptographic and browser security
+review](docs/SECURITY-REVIEW-BRIEF.md), live human Tor Browser usability review,
+and a completed physical-device packet-evidence run remain release gates.
+Functional installed-Safari coverage now runs as a separate on-demand native WebDriver gate. See
 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md).
 
 The canonical build is web-first and targets current browsers on Windows,
