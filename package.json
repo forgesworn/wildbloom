@@ -43,7 +43,8 @@
     "secrets": "node scripts/secret-scan.mjs",
     "audit": "node scripts/audit.mjs",
     "check": "npm run install:policy && npm run encryption:vector && npm run encryption:semantic-vectors && npm run acceptance:cross-device:self-test && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
-    "ci": "npm run check && npm run audit"
+    "ci": "npm run check && npm run audit",
+    "acceptance:recovery": "node scripts/recovery-acceptance.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.0.1",

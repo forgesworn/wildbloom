@@ -1,0 +1,46 @@
+name: Application recovery
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    name: fresh browser and two storage nodes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WILDBLOOM_NODE_SOURCE_COMMIT: cbbfdcd5f923527a30a2ea1a146b4beed0d21ade
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Build the pinned storage-node source
+        run: |
+          git init "$RUNNER_TEMP/recovery-node"
+          git -C "$RUNNER_TEMP/recovery-node" fetch --depth=1 https://github.com/forgesworn/wildbloom-node.git "$WILDBLOOM_NODE_SOURCE_COMMIT"
+          git -C "$RUNNER_TEMP/recovery-node" checkout --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/recovery-node" rev-parse HEAD)" = "$WILDBLOOM_NODE_SOURCE_COMMIT"
+          rustup toolchain install 1.94.1 --profile minimal
+          cargo +1.94.1 build --locked --manifest-path "$RUNNER_TEMP/recovery-node/Cargo.toml" -p wildbloomd
+      - run: npm run build
+      - name: Recover after losing the publisher and original node
+        env:
+          WILDBLOOM_NODE_BIN: ${{ runner.temp }}/recovery-node/target/debug/wildbloomd
+          WILDBLOOM_RECOVERY_EVIDENCE: ${{ runner.temp }}/application-recovery.json
+        run: npm run acceptance:recovery
+      - name: Retain the redacted acceptance record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: application-recovery-${{ github.sha }}
+          path: ${{ runner.temp }}/application-recovery.json
+          if-no-files-found: error
+          retention-days: 90

@@ -119,6 +119,61 @@ describe("Blossom publication", () => {
 });
 
 describe("verified Blossom retrieval", () => {
+  it("recovers from only the explicitly selected replica using the signed content address", async () => {
+    const inspected = await inspectFile(new File(["hello"], "hello.txt", { type: "text/plain" }));
+    const resolved = {
+      url: `https://lost.example/${inspected.sha256}.txt`,
+      sha256: inspected.sha256, size: 5, mimeType: "text/plain",
+    } as ResolvedHybridEvent;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("hello"));
+    const blob = await fetchVerifiedBlob(resolved, { fetchImpl: fetchMock, replicaServer: "https://replica.example/" });
+    expect(await blob.text()).toBe("hello");
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`https://replica.example/${inspected.sha256}`, expect.objectContaining({
+      redirect: "error", credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store",
+    }));
+    expect(resolved.url).toBe(`https://lost.example/${inspected.sha256}.txt`);
+  });
+
+  it.each(["http://replica.example", "https://user:pass@replica.example", "https://replica.example/path", "https://replica.example/?secret=value"])(
+    "refuses an unsafe replica before any network action: %s", async (replicaServer) => {
+      const hash = "ab".repeat(32);
+      const fetchMock = vi.fn<typeof fetch>();
+      await expect(fetchVerifiedBlob({ url: `https://lost.example/${hash}`, sha256: hash, size: 5 } as ResolvedHybridEvent,
+        { fetchImpl: fetchMock, replicaServer })).rejects.toThrow();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects corrupt replica bytes and never falls back to another server", async () => {
+    const inspected = await inspectFile(new File(["hello"], "hello.txt"));
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("wrong"));
+    await expect(fetchVerifiedBlob({ url: `https://lost.example/${inspected.sha256}`, sha256: inspected.sha256, size: 5 } as ResolvedHybridEvent,
+      { fetchImpl: fetchMock, replicaServer: "https://replica.example" })).rejects.toThrow(/SHA-256/u);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps explicit replica retrieval onion-only under the Tor profile", async () => {
+    const onion = "d4pr6hy7d4pr6hy7d4pr6hy7d4pr6hy7d4pr6hy7d4pr6hy7d4pxisid.onion";
+    const inspected = await inspectFile(new File(["hello"], "hello.txt"));
+    const resolved = { url: `http://${onion}/${inspected.sha256}.txt`, sha256: inspected.sha256, size: 5 } as ResolvedHybridEvent;
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("hello"));
+    await expect(fetchVerifiedBlob(resolved, { fetchImpl: fetchMock, profile: "tor", replicaServer: "https://replica.example" }))
+      .rejects.toThrow(/onion/u);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const result = await fetchVerifiedBlob(resolved, { fetchImpl: fetchMock, profile: "tor", replicaServer: `http://${onion}:8080` });
+    expect(await result.text()).toBe("hello");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://${onion}:8080/${inspected.sha256}`);
+  });
+
+  it("refuses a replica redirect even when the response repeats the signed hash", async () => {
+    const inspected = await inspectFile(new File(["hello"], "hello.txt"));
+    const response = new Response("hello");
+    Object.defineProperty(response, "url", { value: `https://other.example/${inspected.sha256}` });
+    await expect(fetchVerifiedBlob({ url: `https://lost.example/${inspected.sha256}`, sha256: inspected.sha256, size: 5 } as ResolvedHybridEvent,
+      { fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response), replicaServer: "https://replica.example" }))
+      .rejects.toThrow(/changed URL/u);
+  });
+
   it("returns only bytes matching the signed size and SHA-256", async () => {
     const bytes = new TextEncoder().encode("hello");
     const inspected = await inspectFile(new File([bytes], "hello.txt", { type: "text/plain" }));

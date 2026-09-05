@@ -45,6 +45,11 @@ chunks, pads the payload, and uploads only the encrypted envelope. The recovery
 key never enters Blossom, Nostr, a torrent or browser storage. Losing it loses
 the file.
 
+For recovery after losing a browser session or the original storage server,
+see the [application recovery journey](docs/APPLICATION-RECOVERY.md). An
+explicitly chosen existing replica is checked against the original signed
+hash and size before local decryption.
+
 ## Network profiles
 
 - **Direct encrypted delivery:** Nostr, Blossom and WebTorrent. Servers,

@@ -239,7 +239,8 @@ const blossom = createHttpServer((request, response) => {
       }));
       return;
     }
-    if (request.method === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
+    if (request.method === "GET" && uploadedBytes
+      && (url.pathname === `/${uploadedHash}.wbenc` || url.pathname === `/${uploadedHash}`)) {
       if (blossomRetrievalMode === "hanging") {
         hangingRetrievalStarted += 1;
         let counted = false;
@@ -562,31 +563,52 @@ async function waitForBrandedText(record, selector, pattern, timeoutMs = ONION_A
 async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
   const blossomLiteral = JSON.stringify(blossomOrigin);
   const relayLiteral = JSON.stringify(relayUrl);
+  const deadline = Date.now() + ONION_ACTION_TIMEOUT_MS;
+  let latest = { ready: false, stage: "not started" };
   await waitFor(async () => {
+    // A fresh identity may need more than ten seconds to establish an onion
+    // circuit. Keep both probes and the BiDi reply inside the original deadline.
+    const remaining = deadline - Date.now();
+    if (remaining <= 1_000) return false;
+    const probeTimeout = Math.min(30_000, Math.floor((remaining - 1_000) / 2));
     try {
-      return await brandedEvaluate(record, `(async () => {
-        const response = await fetch(${blossomLiteral}, {
-          cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (response.status !== 404) return false;
+      latest = await brandedEvaluate(record, `(async () => {
+        try {
+          const response = await fetch(${blossomLiteral}, {
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(${probeTimeout}),
+          });
+          if (response.status !== 404) return { ready: false, stage: "Blossom", status: response.status };
+        } catch (error) {
+          return { ready: false, stage: "Blossom", error: String(error) };
+        }
         return new Promise((resolve) => {
           const socket = new WebSocket(${relayLiteral});
-          const finish = (ready) => {
+          const finish = (ready, result) => {
             clearTimeout(timer);
             socket.close();
-            resolve(ready);
+            resolve({ ready, stage: "relay", result });
           };
-          const timer = setTimeout(() => finish(false), 10_000);
-          socket.addEventListener("open", () => finish(true), { once: true });
-          socket.addEventListener("error", () => finish(false), { once: true });
+          const timer = setTimeout(() => finish(false, "timeout"), ${probeTimeout});
+          socket.addEventListener("open", () => finish(true, "open"), { once: true });
+          socket.addEventListener("error", () => finish(false, "error"), { once: true });
         });
-      })()`, 20_000);
-    } catch {
+      })()`, Math.min(65_000, remaining));
+      return latest.ready;
+    } catch (error) {
+      latest = { ready: false, stage: "browser probe", error: String(error) };
       return false;
     }
-  }, ONION_ACTION_TIMEOUT_MS, "Branded Tor Browser did not reach the controlled Blossom and relay onions.", 1_000);
+  }, ONION_ACTION_TIMEOUT_MS, () => `Branded Tor Browser did not reach the controlled Blossom and relay onions: ${JSON.stringify({
+    probe: latest,
+    requests: record.requests.slice(-12),
+    blossomListening: blossom.listening,
+    blossomRequests: blossomRequests.slice(-12),
+    blossomErrors,
+    relayErrors,
+    browserOutput: record.output().slice(-2_000),
+  })}`, 1_000);
 }
 
 async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, ceremony) {
@@ -846,6 +868,7 @@ async function exerciseBrandedRetriever(record, blossomOrigin, relayUrl, eventId
   await warmBrandedOnionTargets(record, blossomOrigin, relayUrl);
   await brandedSetChecked(record, 'input[name="network-profile"][value="tor"]', true);
   await brandedSetValue(record, "#blossom-server", blossomOrigin);
+  await brandedSetValue(record, "#replica-server", blossomOrigin);
   await brandedSetValue(record, "#relay-urls", relayUrl);
   await brandedSetChecked(record, "#tor-consent", true);
   await brandedSetValue(record, "#event-id", eventId);
@@ -1076,6 +1099,7 @@ try {
   process.stdout.write("The rotated identity reached the controlled Blossom and relay onions before retrieval.\n");
   await retriever.page.check('input[name="network-profile"][value="tor"]');
   await retriever.page.fill("#blossom-server", blossomOnionOrigin);
+  await retriever.page.fill("#replica-server", blossomOnionOrigin);
   await retriever.page.fill("#relay-urls", relayUrl);
   await retriever.page.check("#tor-consent");
   await retriever.page.fill("#event-id", eventId);
@@ -1158,6 +1182,7 @@ try {
   );
 } catch (error) {
   process.stderr.write(`Tor acceptance failed before cleanup: ${String(error)}\n`);
+  process.stderr.write(`Disposable Tor notice log: ${torLog.slice(-8_000) || "no Tor output"}\n`);
   throw error;
 } finally {
   process.stdout.write("Closing disposable onion acceptance resources.\n");
