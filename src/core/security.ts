@@ -137,7 +137,12 @@ export function sanitiseFileName(value: string): string {
     .replace(/^\.+/u, "")
     .trim();
   const fallback = cleaned || "blob.bin";
-  return fallback.length <= 180 ? fallback : fallback.slice(0, 180);
+  if (fallback.length <= 180) return fallback;
+  // Keep Unicode scalar values intact at the UTF-16 length boundary.
+  const last = fallback.charCodeAt(179);
+  const next = fallback.charCodeAt(180);
+  const end = last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? 179 : 180;
+  return fallback.slice(0, end);
 }
 
 export function fileExtension(name: string): string {

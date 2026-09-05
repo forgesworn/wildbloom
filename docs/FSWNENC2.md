@@ -10,6 +10,12 @@ counter-from-zero nonce is safe regardless of how the input key is managed.
 
 Scheme name: `forgesworn-aes-256-gcm-chunked-v2`.
 
+The shared `test-vectors/unicode-filenames.json` cases cover NFC accents and
+truncation at 180 UTF-16 units without splitting an emoji's surrogate pair.
+These are filename canonicalisation corrections within the existing metadata
+schema; record encoding, HKDF and envelope version are unchanged. Stash Rust
+0.6.1 applies NFC on new writes but retains reads of its earlier non-NFC names.
+
 The cryptographic core (AES-256-GCM, 1 MiB records, per-record counter in the
 nonce and the AAD, the canonical metadata, and the padding bucket) is unchanged
 from `FSWNENC1`. Only two things change: the header gains a 32-byte salt, and
