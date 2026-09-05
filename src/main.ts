@@ -62,6 +62,7 @@ const retrieveStatus = element<HTMLOutputElement>("retrieve-status");
 const fileInput = element<HTMLInputElement>("publish-file");
 const protectFile = element<HTMLInputElement>("protect-file");
 const eventIdInput = element<HTMLInputElement>("event-id");
+const replicaInput = element<HTMLInputElement>("replica-server");
 const fileFacts = element<HTMLDListElement>("file-facts");
 const resolvedFacts = element<HTMLDListElement>("resolved-facts");
 const publishLinks = element<HTMLDivElement>("publish-links");
@@ -393,10 +394,12 @@ function applyProfile(): void {
     seedConsent.checked = false;
     seedButton.disabled = true;
     blossomInput.placeholder = "http://<56-character-v3-address>.onion";
+    replicaInput.placeholder = "http://<56-character-v3-address>.onion";
     relayInput.placeholder = "ws://<56-character-v3-address>.onion";
   } else {
     torConsent.checked = false;
     blossomInput.placeholder = "https://cdn.example.com";
+    replicaInput.placeholder = "https://replica.example.com";
     relayInput.placeholder = "wss://relay.example.com";
   }
   updateSigningCopy();
@@ -426,6 +429,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
     externalPubkeyInput.value = "";
     signerStatus.textContent = "Signer not connected for this network profile";
     blossomInput.value = "";
+    replicaInput.value = "";
     relayInput.value = "";
     trackerInput.value = "";
     applyProfile();
@@ -469,7 +473,7 @@ fileInput.addEventListener("change", () => {
   setStatus(publishStatus, "File selection changed. Inspect locally before enabling any network action.");
 });
 
-for (const input of [blossomInput, relayInput, trackerInput]) {
+for (const input of [blossomInput, relayInput, trackerInput, replicaInput]) {
   input.addEventListener("input", () => {
     resetPublicationAfterInspection();
     resetResolution();
@@ -866,6 +870,7 @@ blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async (
   if (downloadController) throw new Error("A download is already in progress.");
   const selectedResolved = resolved;
   const selectedProfile = profile();
+  const selectedReplica = replicaInput.value.trim();
   const expectedRevision = resolutionRevision;
   const controller = new AbortController();
   downloadController = controller;
@@ -878,6 +883,7 @@ blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async (
       fetchImpl: fetch,
       profile: selectedProfile,
       signal: controller.signal,
+      replicaServer: selectedReplica,
     });
     const payload = await revealPayload(verified, selectedResolved, controller.signal);
     if (controller.signal.aborted
@@ -1010,6 +1016,7 @@ function endPageSession(): void {
   pubkey = null;
   fileInput.value = "";
   blossomInput.value = "";
+  replicaInput.value = "";
   relayInput.value = "";
   trackerInput.value = "";
   eventIdInput.value = "";

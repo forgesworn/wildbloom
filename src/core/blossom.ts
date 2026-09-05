@@ -23,6 +23,11 @@ export interface BlossomRequestOptions {
   readonly authorisationLifetimeSeconds?: number;
 }
 
+export interface BlossomRetrievalOptions extends BlossomRequestOptions {
+  /** Explicitly chosen replica origin; never discovered or tried automatically. */
+  readonly replicaServer?: string;
+}
+
 function requestDeadline(options: BlossomRequestOptions, operation: "upload" | "retrieval") {
   const timeoutMs = options.timeoutMs ?? BLOSSOM_OPERATION_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error("Blossom timeout must be a positive integer.");
@@ -192,11 +197,14 @@ async function readTextCapped(response: Response, maximumBytes: number, signal: 
 
 export async function fetchVerifiedBlob(
   resolved: ResolvedHybridEvent,
-  options: BlossomRequestOptions = {},
+  options: BlossomRetrievalOptions = {},
 ): Promise<Blob> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const profile = options.profile ?? "direct";
-  const url = normaliseBlossomUrl(resolved.url, resolved.sha256, profile);
+  const signedUrl = normaliseBlossomUrl(resolved.url, resolved.sha256, profile);
+  const url = options.replicaServer?.trim()
+    ? `${normaliseBlossomServer(options.replicaServer.trim(), profile)}/${assertHex64(resolved.sha256, "File SHA-256")}`
+    : signedUrl;
   const deadline = requestDeadline(options, "retrieval");
   try {
     if (deadline.signal.aborted) throw deadline.signal.reason;

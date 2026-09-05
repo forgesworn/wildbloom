@@ -375,6 +375,7 @@ async function assertPageSessionCleared(page, label, requireLifecycleMessage = t
   const state = await page.evaluate(() => ({
     values: Object.fromEntries([
       "blossom-server",
+      "replica-server",
       "relay-urls",
       "tracker-urls",
       "external-signer-pubkey",
@@ -627,6 +628,7 @@ try {
   }
   const protectedControls = [
     "blossom-server",
+    "replica-server",
     "relay-urls",
     "tracker-urls",
     "external-signer-pubkey",
@@ -1040,6 +1042,7 @@ try {
   await page.evaluate((recoveryKey) => {
     document.querySelector("#recovery-key-input").value = recoveryKey;
     document.querySelector("#external-signer-pubkey").value = "ab".repeat(32);
+    document.querySelector("#replica-server").value = "https://replica.example";
     document.querySelector("#external-unsigned-event").value = "sensitive unsigned event";
     document.querySelector("#external-signed-event").value = "sensitive signed event";
     document.querySelector("#event-id").value = "cd".repeat(32);

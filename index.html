@@ -115,18 +115,19 @@
 
       <section id="install" class="story-section install-section" aria-labelledby="install-heading">
         <p class="section-kicker">Install</p>
-        <h2 id="install-heading">Start with source while signed installers finish their trust checks.</h2>
+        <h2 id="install-heading">Try a preview, or build from source.</h2>
         <p class="story-intro">
-          The node targets the three desktop families, but public
-          downloads stay unpublished until macOS notarisation, Windows code
-          signing and clean-machine installation have all been proved.  We
-          won't disguise an unsigned preview as a release.
+          Preview installers are available for Windows, Linux and both Mac
+          architectures. Windows packages are unsigned; Mac builds use ad-hoc
+          signing and are not notarised. Trusted platform signing and acceptance
+          on clean retail machines remain open.
         </p>
         <div class="install-grid">
           <article>
             <p class="platform">Windows · Linux · macOS</p>
             <h3>Wildbloom Node</h3>
-            <p>Follow the locked source build while installer signing is being completed.</p>
+            <p>Preview 0.2.2 includes the shared storage fixes and a verified upstream Tor runtime.</p>
+            <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.2.2-preview.1" rel="noreferrer">Download preview installers</a>
             <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Build the desktop app from source</a>
           </article>
           <article>
@@ -372,6 +373,11 @@
           Nostr event ID
           <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
         </label>
+        <label>
+          Another Blossom server (optional)
+          <input id="replica-server" type="url" aria-describedby="replica-help" placeholder="https://replica.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
+        </label>
+        <p id="replica-help" class="hint">If the original server is unavailable, enter a server that already holds a copy before resolving the event. Leave blank to use the signed event's URL. A Blossom fetch contacts only the chosen server, which sees your connection and the file's hash. The signed size, hash and encryption checks still apply. This does not create a replica or prove ongoing storage.</p>
         <label id="recovery-key-field" hidden>
           Recovery key
           <input id="recovery-key-input" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="wbk1_…" />
