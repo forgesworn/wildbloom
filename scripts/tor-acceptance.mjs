@@ -600,7 +600,15 @@ async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
       latest = { ready: false, stage: "browser probe", error: String(error) };
       return false;
     }
-  }, ONION_ACTION_TIMEOUT_MS, () => `Branded Tor Browser did not reach the controlled Blossom and relay onions: ${JSON.stringify(latest)}`, 1_000);
+  }, ONION_ACTION_TIMEOUT_MS, () => `Branded Tor Browser did not reach the controlled Blossom and relay onions: ${JSON.stringify({
+    probe: latest,
+    requests: record.requests.slice(-12),
+    blossomListening: blossom.listening,
+    blossomRequests: blossomRequests.slice(-12),
+    blossomErrors,
+    relayErrors,
+    browserOutput: record.output().slice(-2_000),
+  })}`, 1_000);
 }
 
 async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, ceremony) {
@@ -1174,6 +1182,7 @@ try {
   );
 } catch (error) {
   process.stderr.write(`Tor acceptance failed before cleanup: ${String(error)}\n`);
+  process.stderr.write(`Disposable Tor notice log: ${torLog.slice(-8_000) || "no Tor output"}\n`);
   throw error;
 } finally {
   process.stdout.write("Closing disposable onion acceptance resources.\n");
