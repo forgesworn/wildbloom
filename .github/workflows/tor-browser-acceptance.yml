@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      TOR_BROWSER_VERSION: 15.0.20
+      TOR_BROWSER_VERSION: 15.0.21
       TOR_BROWSER_SIGNING_FINGERPRINT: EF6E286DDA85EA2A4BA7DE684E2C6E8793298290
       WILDBLOOM_TOR_BROWSER_PATH: ${{ github.workspace }}/.artifacts/tor-browser/Browser/firefox
     steps:
@@ -30,7 +30,9 @@ jobs:
           download_dir="$PWD/.artifacts/tor-browser-download"
           browser_dir="$PWD/.artifacts/tor-browser"
           archive="tor-browser-linux-x86_64-${TOR_BROWSER_VERSION}.tar.xz"
-          base_url="https://dist.torproject.org/torbrowser/${TOR_BROWSER_VERSION}"
+          # The current-release directory removes old versions. The official
+          # archive retains this exact pin after the next browser release.
+          base_url="https://archive.torproject.org/tor-package-archive/torbrowser/${TOR_BROWSER_VERSION}"
           mkdir -p "$download_dir" "$browser_dir"
           attempt=0
           until curl --proto '=https' --tlsv1.2 --location --fail --silent --show-error \
