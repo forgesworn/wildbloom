@@ -85,7 +85,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .install-grid .platform { color: #446b48; }
 .install-grid h3 { color: #101710; }
 .install-grid p { margin-bottom: 1rem; color: #334336; }
-.install-grid a { font-weight: 760; }
+.install-grid a { display: flex; align-items: center; min-height: 44px; padding: 0.35rem 0; font-weight: 760; }
 .protocol-flow { display: grid; margin: 2.5rem 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
 .protocol-flow li { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 1rem; padding: 1.3rem 0; border-bottom: 1px solid var(--line); }
 .protocol-flow > li > span { display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid #41604a; border-radius: 999px; color: var(--moss); font: 700 0.75rem ui-monospace, monospace; }
