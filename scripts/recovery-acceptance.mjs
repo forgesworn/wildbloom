@@ -33,6 +33,7 @@ const relayEvents = new Map();
 const fixtureErrors = [];
 let browser;
 let evidence;
+let relayStopped = false;
 const relay = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: 128 * 1024 });
 relay.on("error", () => fixtureErrors.push("Controlled relay error"));
 relay.on("connection", (socket, request) => {
@@ -179,6 +180,13 @@ try {
   await status(p, "#publish-status", "Exact external signatures accepted");
   assert.ok(!event.tags.some(([name]) => ["magnet", "i", "tracker"].includes(name)));
   assert.equal(await p.isHidden("#external-signing-panel"), true, "No torrent signing handoff without trackers");
+  const savingEvent = p.waitForEvent("download");
+  await p.locator("#signed-event-links a").click();
+  const savedEventDownload = await savingEvent;
+  const savedEventBytes = readFileSync(await savedEventDownload.path());
+  assert.deepEqual(JSON.parse(savedEventBytes.toString("utf8")), JSON.parse(JSON.stringify(event)));
+  assert.ok(!savedEventBytes.includes(Buffer.from(recoveryKey)));
+  assert.ok(!savedEventBytes.includes(Buffer.from("recovery-proof.bin")));
   await p.check("#publish-consent");
   await p.click("#publish-events");
   await status(p, "#publish-status", "1/1 acknowledgements");
@@ -253,6 +261,42 @@ try {
   assert.ok(retriever.sockets.every((url) => url === relayUrl));
   assert.equal(await r.evaluate(() => window.__wildbloomRecoveryPeerUsed), false);
 
+  // Keep the relay-discovery journey above, then prove recovery also survives
+  // loss of discovery itself using the event file the publisher actually saved.
+  await closeControlledServer(relay);
+  relayStopped = true;
+  const local = await pageAt(appOrigin, new Set([appOrigin, replica.origin]));
+  const l = local.page;
+  assert.equal(await l.evaluate(() => typeof window.nostr), "undefined");
+  assert.equal(await l.inputValue("#relay-urls"), "");
+  assert.equal(await l.inputValue("#tracker-urls"), "");
+  await l.fill("#replica-server", replica.origin);
+  await l.getByText("Use a saved signed event without a relay", { exact: true }).click();
+  const beforeLocalImport = local.requests.length;
+  await l.setInputFiles("#saved-event-file", { name: savedEventDownload.suggestedFilename(), mimeType: "application/json", buffer: savedEventBytes });
+  await status(l, "#retrieve-status", "Saved event loaded locally");
+  assert.equal(await l.isDisabled("#fetch-blossom"), true, "Loading a file does not validate or fetch it");
+  await l.click("#verify-saved-event");
+  await status(l, "#retrieve-status", "separately received recovery key");
+  assert.equal(local.requests.length, beforeLocalImport, "Saved-event import and verification cannot make HTTP requests");
+  assert.deepEqual(local.sockets, [], "Saved-event discovery cannot open a relay or tracker connection");
+  await l.fill("#recovery-key-input", recoveryKey);
+  await l.click("#fetch-blossom");
+  await status(l, "#retrieve-status", "locally decrypted bytes");
+  const savingLocalFile = l.waitForEvent("download");
+  await l.getByRole("link", { name: "Save verified recovery-proof.bin" }).click();
+  assert.equal(hash(readFileSync(await (await savingLocalFile).path())), hash(sourceBytes));
+  assert.ok(local.requests.slice(beforeLocalImport).every((url) => url === `${replica.origin}/${ciphertextHash}`));
+  assert.deepEqual(local.sockets, []);
+  assert.equal(await l.evaluate(() => window.__wildbloomRecoveryPeerUsed), false);
+  await assertNoBrowserPersistence(l, local.context, "Saved-event retriever with discovery relay stopped");
+  await l.reload();
+  assert.equal(await l.inputValue("#saved-event-json"), "");
+  assert.equal(await l.inputValue("#saved-event-file"), "");
+  assert.equal(await l.locator("#resolved-event-links a").count(), 0);
+  await local.context.close();
+  contexts.delete(local.context);
+
   // Disk corruption must be detected despite a successful HTTP response, and
   // must clear an earlier verified download. A real source-loss error is separate.
   await stop(replica.child);
@@ -278,16 +322,17 @@ try {
     build, nodeVersion: nodeVersion.stdout.trim(), nodeBinarySha256: hash(readFileSync(binary)),
     nodeSourceCommit: process.env.WILDBLOOM_NODE_SOURCE_COMMIT ?? null, browserVersion: browser.version(),
     checks: ["manual-event-handoff", "no-configured-trackers", "no-torrent-metadata-or-peer-connection", "no-browser-persistence", "fresh-signer-free-retriever", "original-node-stopped",
-      "replica-restarted", "explicit-replica-choice", "wrong-key-refused", "exact-file-recovered", "corrupt-copy-refused", "stale-save-cleared"],
+      "replica-restarted", "explicit-replica-choice", "wrong-key-refused", "exact-file-recovered", "corrupt-copy-refused", "stale-save-cleared",
+      "saved-canonical-event-without-file-key", "discovery-relay-stopped", "saved-event-import-without-network", "exact-recovery-without-relay-or-signer"],
     limits: "Two loopback Node processes on one host and a synthetic signer fixture; physical devices, real signer custody and ongoing replica policy remain separate." };
 } finally {
   for (const context of contexts) await context.close().catch(() => undefined);
   await browser?.close();
-  await closeControlledServer(relay);
+  if (!relayStopped) await closeControlledServer(relay);
   for (const child of children) await stop(child);
   rmSync(root, { recursive: true, force: true });
 }
 if (process.env.WILDBLOOM_RECOVERY_EVIDENCE) {
   writeFileSync(privateRecordOutput(process.env.WILDBLOOM_RECOVERY_EVIDENCE, "Recovery evidence"), `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
 }
-process.stdout.write("Application recovery passed: fresh browser, original Node unavailable, exact replica recovery after restart, wrong-key and corrupt-copy refusal, no retained browser state.\n");
+process.stdout.write("Application recovery passed: fresh browsers, original Node unavailable, exact replica recovery after restart through relay discovery and a locally saved event with the relay stopped, wrong-key and corrupt-copy refusal, no retained browser state.\n");

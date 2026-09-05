@@ -21,6 +21,12 @@ the finish line.
   tracker list: one NIP-94 signature, no torrent, disabled peer actions, no
   restored public defaults and fresh consent after removing trackers. Invalid
   configured trackers are rejected before signing or upload.
+- Canonical signed-event export before relay publication; bounded file/JSON
+  import without network activity; signature and expected-ID rejection;
+  cancellation of superseded local reads; independent fetch consent; and
+  clearing imported state on navigation/profile change. The two-Node recovery
+  gate also stops the discovery relay before a fresh browser imports the saved
+  event and recovers exact bytes from the explicitly selected replica.
 - Branded Mozilla Firefox on Linux, through two disposable profiles and
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
   application network or signer, external-signature encrypted upload and

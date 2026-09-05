@@ -134,7 +134,9 @@ Browser usability or fingerprint equivalence.
 
 ## Retrieval
 
-1. Query chosen relays by an exact 64-hex event ID.
+1. Query chosen relays by an exact 64-hex event ID, or import a saved signed
+   event as bounded canonical JSON and verify it locally. Import makes no
+   network request and requires a matching ID if the user supplies one.
 2. Accept only a valid kind `1063` event with a valid Nostr signature.
 3. Require exactly one URL, MIME type, `x`, `ox` and byte count, with both
    SHA-256 tags identifying the same unchanged bytes. Magnet and info hash must
@@ -150,6 +152,13 @@ Browser usability or fingerprint equivalence.
 8. Offer verified bytes only through an octet-stream, `noopener` save link.
    Blob URLs inherit the creating page's origin, so remote MIME types are never
    allowed to become navigable HTML or SVG within Wildbloom's authority.
+
+The publisher can save the signed file event before publishing it to relays;
+a retriever can save the verified event too. These exports contain canonical
+public event fields only, never the file recovery key. Import uses the same
+file-event verifier as relay discovery, and every subsequent download remains
+a distinct action. No relay service or publishing signer is needed for saved
+event recovery. This retains discovery data, not a replica of the file.
 
 ## Deliberate omissions
 

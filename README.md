@@ -49,7 +49,10 @@ the file.
 For recovery after losing a browser session or the original storage server,
 see the [application recovery journey](docs/APPLICATION-RECOVERY.md). An
 explicitly chosen existing replica is checked against the original signed
-hash and size before local decryption.
+hash and size before local decryption. Save the signed file event as well as
+the separate recovery key to recover without relying on a discovery relay.
+The saved event can be verified locally in a fresh browser; only the explicit
+fetch contacts the chosen storage server.
 
 ## Network profiles
 

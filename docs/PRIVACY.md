@@ -102,6 +102,12 @@ acceptance also plants a pre-existing `localStorage.debug` preference and proves
 that WebTorrent neither consumes nor changes it; this prevents a stale browser
 setting from enabling dependency diagnostics in production.
 
+Signed event files and recovery keys you deliberately download remain wherever
+you save them. The event download contains public signed metadata and excludes
+the file recovery key. Imported event JSON and file selections stay in page
+memory and are cleared on navigation or a network-profile change; their local
+verification does not contact a relay, storage server or signer.
+
 Secret and machine-formatted controls ask the browser not to autofill,
 autocapitalise, autocorrect, spellcheck or translate their values. The response
 Permissions-Policy denies Clipboard API reads and writes and a broad explicit

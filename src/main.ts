@@ -1,7 +1,7 @@
 import "./style.css";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
-import { buildFileEvent, buildTorrentEvent, parseSignedEventJson, signEventExactly } from "./core/nostr.js";
+import { buildFileEvent, buildTorrentEvent, MAX_SIGNED_EVENT_JSON_BYTES, parseSignedEventJson, resolveFileEventJson, signEventExactly } from "./core/nostr.js";
 import { publishToRelays, resolveFromRelays } from "./core/relay.js";
 import {
   assertHex64,
@@ -62,10 +62,15 @@ const retrieveStatus = element<HTMLOutputElement>("retrieve-status");
 const fileInput = element<HTMLInputElement>("publish-file");
 const protectFile = element<HTMLInputElement>("protect-file");
 const eventIdInput = element<HTMLInputElement>("event-id");
+const savedEventInput = element<HTMLTextAreaElement>("saved-event-json");
+const savedEventFileInput = element<HTMLInputElement>("saved-event-file");
+const verifySavedEventButton = element<HTMLButtonElement>("verify-saved-event");
 const replicaInput = element<HTMLInputElement>("replica-server");
 const fileFacts = element<HTMLDListElement>("file-facts");
 const resolvedFacts = element<HTMLDListElement>("resolved-facts");
 const publishLinks = element<HTMLDivElement>("publish-links");
+const signedEventLinks = element<HTMLDivElement>("signed-event-links");
+const resolvedEventLinks = element<HTMLDivElement>("resolved-event-links");
 const recoveryLinks = element<HTMLDivElement>("recovery-links");
 const retrieveLinks = element<HTMLDivElement>("retrieve-links");
 const recoveryKeyPanel = element<HTMLElement>("recovery-key-panel");
@@ -222,6 +227,13 @@ function addDownload(target: HTMLDivElement, blob: Blob, fileName: string, label
   target.append(anchor);
 }
 
+function addFileEventDownload(target: HTMLDivElement, event: SignedNostrEvent): void {
+  // Export the signed canonical fields only, never relay extras or local keys.
+  const { id, pubkey, sig, kind, created_at, tags, content } = event;
+  const json = `${JSON.stringify({ id, pubkey, sig, kind, created_at, tags, content })}\n`;
+  addDownload(target, new Blob([json], { type: "application/json" }), `wildbloom-file-event-${id}.json`, "Save signed file event");
+}
+
 function externalSigningLabel(template: EventTemplate): string {
   if (template.kind === 24242) return "Blossom upload authorisation";
   if (template.kind === 1063) return "NIP-94 file event";
@@ -309,6 +321,7 @@ function resetPublicationAfterInspection(): void {
   signButton.disabled = true;
   publishButton.disabled = true;
   clearDownloads(publishLinks);
+  clearDownloads(signedEventLinks);
 }
 
 function resetInspection(): void {
@@ -331,6 +344,7 @@ function resetResolution(): void {
   lookupController?.abort();
   lookupController = null;
   resolveButton.disabled = false;
+  verifySavedEventButton.disabled = false;
   downloadController?.abort();
   downloadController = null;
   downloadTransport = null;
@@ -345,6 +359,27 @@ function resetResolution(): void {
   swarmFetchButton.disabled = true;
   resolvedFacts.replaceChildren();
   clearDownloads(retrieveLinks);
+  clearDownloads(resolvedEventLinks);
+}
+
+function showResolvedEvent(nextResolved: ResolvedHybridEvent): void {
+  resolved = nextResolved;
+  showFacts(resolvedFacts, [
+    ["Event ID", nextResolved.event.id],
+    ["Author", nextResolved.event.pubkey],
+    ["Public name", nextResolved.name],
+    ["Public bytes", String(nextResolved.size)],
+    ["SHA-256", nextResolved.sha256],
+    ["Blossom", nextResolved.url],
+    ["Protection", nextResolved.encryption ?? "None"],
+    ["Info hash", nextResolved.infoHash ?? "Not advertised"],
+  ]);
+  addFileEventDownload(resolvedEventLinks, nextResolved.event);
+  recoveryKeyField.hidden = !nextResolved.encryption;
+  updateRetrievalButtons();
+  setStatus(retrieveStatus, nextResolved.encryption
+    ? "Signed event verified. Enter the separately received recovery key when downloading."
+    : "Signed event verified. The advertised payload is plaintext; no file has been downloaded.");
 }
 
 function updateUploadButton(): void {
@@ -430,6 +465,8 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
     replicaInput.value = "";
     relayInput.value = "";
     trackerInput.value = "";
+    savedEventInput.value = "";
+    savedEventFileInput.value = "";
     applyProfile();
     setStatus(publishStatus, "Network profile changed. Re-enter endpoints and repeat every network consent.");
   });
@@ -484,6 +521,44 @@ eventIdInput.addEventListener("input", () => {
   resetResolution();
   setStatus(retrieveStatus, "Event ID changed. Resolve the signed event again before downloading.");
 });
+
+savedEventInput.addEventListener("input", () => {
+  resetResolution();
+  savedEventFileInput.value = "";
+  setStatus(retrieveStatus, "Saved event changed. Verify it locally before downloading.");
+});
+
+savedEventFileInput.addEventListener("change", () => guard(retrieveStatus, async () => {
+  resetResolution();
+  savedEventInput.value = "";
+  const file = savedEventFileInput.files?.[0];
+  setStatus(retrieveStatus, "Choose a saved event or paste its JSON, then verify it locally.");
+  if (!file) return;
+  if (file.size > MAX_SIGNED_EVENT_JSON_BYTES) {
+    savedEventFileInput.value = "";
+    throw new Error("The signed-event file exceeds the 128 KiB limit.");
+  }
+  const expectedRevision = resolutionRevision;
+  verifySavedEventButton.disabled = true;
+  try {
+    const json = await file.text();
+    if (resolutionRevision !== expectedRevision) return;
+    savedEventInput.value = json;
+    setStatus(retrieveStatus, "Saved event loaded locally. Choose Verify saved event locally before downloading.");
+  } catch (error) {
+    if (resolutionRevision === expectedRevision) throw error;
+  } finally {
+    if (resolutionRevision === expectedRevision) verifySavedEventButton.disabled = false;
+  }
+}));
+
+verifySavedEventButton.addEventListener("click", () => guard(retrieveStatus, async () => {
+  // Local validation needs neither a signer, Tor connection nor relay consent.
+  // The selected profile still constrains every endpoint in the signed event.
+  resetResolution();
+  const expectedId = eventIdInput.value.trim();
+  showResolvedEvent(resolveFileEventJson(savedEventInput.value, profile(), expectedId || undefined));
+}));
 
 protectFile.addEventListener("change", () => {
   resetInspection();
@@ -773,6 +848,8 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
     nextSignedEvents.push(torrentEvent);
   }
   signedEvents = nextSignedEvents;
+  clearDownloads(signedEventLinks);
+  addFileEventDownload(signedEventLinks, fileEvent);
   publishButton.disabled = !publishConsent.checked;
   const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
   setStatus(
@@ -829,21 +906,7 @@ resolveButton.addEventListener("click", () => guard(retrieveStatus, async () => 
       || resolutionRevision !== expectedRevision
       || profile() !== selectedProfile
       || eventIdInput.value.trim().toLowerCase() !== eventId) return;
-    resolved = nextResolved;
-    showFacts(resolvedFacts, [
-      ["Author", nextResolved.event.pubkey],
-      ["Public name", nextResolved.name],
-      ["Public bytes", String(nextResolved.size)],
-      ["SHA-256", nextResolved.sha256],
-      ["Blossom", nextResolved.url],
-      ["Protection", nextResolved.encryption ?? "None"],
-      ["Info hash", nextResolved.infoHash ?? "Not advertised"],
-    ]);
-    recoveryKeyField.hidden = !nextResolved.encryption;
-    updateRetrievalButtons();
-    setStatus(retrieveStatus, nextResolved.encryption
-      ? "Signed event verified. Enter the separately received recovery key when downloading."
-      : "Signed event verified. The advertised payload is plaintext; no file has been downloaded.");
+    showResolvedEvent(nextResolved);
   } catch (error) {
     if (!controller.signal.aborted) throw error;
   } finally {
@@ -1020,6 +1083,8 @@ function endPageSession(): void {
   relayInput.value = "";
   trackerInput.value = "";
   eventIdInput.value = "";
+  savedEventInput.value = "";
+  savedEventFileInput.value = "";
   externalPubkeyInput.value = "";
   torConsent.checked = false;
   signerStatus.textContent = "Signer not connected; the previous page session ended";

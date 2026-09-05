@@ -348,6 +348,8 @@
         <div class="gate">
           <p id="sign-event-copy">Signing creates a NIP-94 file event locally. Configured trackers also add a NIP-35 torrent index.</p>
           <button id="sign-events" type="button" disabled>Review and sign events</button>
+          <p>Save the signed file event to recover without a discovery relay. It contains public metadata, never the file or its recovery key. Keep the recovery key separately.</p>
+          <div id="signed-event-links" class="downloads"></div>
         </div>
 
         <div class="gate danger">
@@ -367,12 +369,12 @@
           <span>03</span>
           <div>
             <h2 id="retrieve-heading">Retrieve and verify</h2>
-            <p>Resolve a signed NIP-94 event, then choose HTTP or peer delivery.</p>
+            <p>Look up a signed event on your relays or verify a saved event locally, then choose how to fetch the file.</p>
           </div>
         </div>
 
         <label>
-          Nostr event ID
+          Nostr event ID <small>optional for a saved event; when supplied, it must match</small>
           <input id="event-id" type="text" inputmode="text" maxlength="64" placeholder="64-character hex event ID" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
         </label>
         <label>
@@ -387,7 +389,23 @@
         <div class="actions">
           <button id="resolve-event" type="button">Resolve signed event</button>
         </div>
+        <details>
+          <summary>Use a saved signed event without a relay</summary>
+          <p>Load the signed file event you saved or received, or paste its JSON below. Verification checks its signature and file information locally. Check the author or retained event ID before fetching; a valid signature alone does not identify someone you trust.</p>
+          <label>
+            Signed event file <small>JSON, at most 128 KiB</small>
+            <input id="saved-event-file" type="file" accept="application/json,.json" />
+          </label>
+          <label>
+            Complete signed file event JSON
+            <textarea id="saved-event-json" rows="6" maxlength="131072" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+          </label>
+          <div class="actions">
+            <button id="verify-saved-event" type="button">Verify saved event locally</button>
+          </div>
+        </details>
         <dl id="resolved-facts" class="facts" aria-live="polite"></dl>
+        <div id="resolved-event-links" class="downloads"></div>
 
         <div class="actions split">
           <button id="fetch-blossom" type="button" disabled>Fetch and verify from Blossom</button>
