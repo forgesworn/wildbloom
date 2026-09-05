@@ -160,7 +160,7 @@ try {
   assert.equal(await p.evaluate(() => typeof window.nostr), "undefined");
   await p.fill("#blossom-server", primary.origin);
   await p.fill("#relay-urls", relayUrl);
-  await p.fill("#tracker-urls", `${relayUrl}tracker`);
+  assert.equal(await p.inputValue("#tracker-urls"), "");
   await p.check('input[name="signing-method"][value="external"]');
   await p.fill("#external-signer-pubkey", pubkey);
   await p.click("#connect-signer");
@@ -172,14 +172,17 @@ try {
   await p.check("#upload-consent");
   await p.click("#upload-file");
   await handoff(p, 24242);
-  await status(p, "#publish-status", "hybrid metadata is staged");
+  await status(p, "#publish-status", "Blossom metadata is staged");
+  assert.equal(await p.locator("#publish-links a").count(), 0, "No torrent download without configured trackers");
   await p.click("#sign-events");
   const event = await handoff(p, 1063);
-  await handoff(p, 2003);
   await status(p, "#publish-status", "Exact external signatures accepted");
+  assert.ok(!event.tags.some(([name]) => ["magnet", "i", "tracker"].includes(name)));
+  assert.equal(await p.isHidden("#external-signing-panel"), true, "No torrent signing handoff without trackers");
   await p.check("#publish-consent");
   await p.click("#publish-events");
-  await status(p, "#publish-status", "2/2 acknowledgements");
+  await status(p, "#publish-status", "1/1 acknowledgements");
+  assert.equal(relayEvents.size, 1, "Only the file event is published without trackers");
   const ciphertextHash = event.tags.find(([name]) => name === "x")[1];
   const signedUrl = event.tags.find(([name]) => name === "url")[1];
   assert.equal(new URL(signedUrl).origin, primary.origin);
@@ -201,6 +204,7 @@ try {
   assert.ok(upload.ok, "Second real node must accept the authorised ciphertext");
   assert.equal((await upload.json()).sha256, ciphertextHash);
   await assertNoBrowserPersistence(p, publisher.context, "Publisher");
+  assert.equal(await p.evaluate(() => window.__wildbloomRecoveryPeerUsed), false);
   await publisher.context.close();
   contexts.delete(publisher.context);
   await stop(primary.child);
@@ -245,7 +249,7 @@ try {
   assert.ok(retriever.requests.slice(beforeSelection).filter((url) => new URL(url).origin !== appOrigin)
     .every((url) => url === `${replica.origin}/${ciphertextHash}`), "Only chosen hash-addressed replica may receive retrieval HTTP requests");
   assert.equal(await r.inputValue("#recovery-key-input"), "");
-  assert.deepEqual(publisher.sockets, [relayUrl, relayUrl]);
+  assert.deepEqual(publisher.sockets, [relayUrl]);
   assert.ok(retriever.sockets.every((url) => url === relayUrl));
   assert.equal(await r.evaluate(() => window.__wildbloomRecoveryPeerUsed), false);
 
@@ -273,7 +277,7 @@ try {
     browserSourceClean: spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" }).stdout.trim() === "",
     build, nodeVersion: nodeVersion.stdout.trim(), nodeBinarySha256: hash(readFileSync(binary)),
     nodeSourceCommit: process.env.WILDBLOOM_NODE_SOURCE_COMMIT ?? null, browserVersion: browser.version(),
-    checks: ["manual-event-handoff", "no-browser-persistence", "fresh-signer-free-retriever", "original-node-stopped",
+    checks: ["manual-event-handoff", "no-configured-trackers", "no-torrent-metadata-or-peer-connection", "no-browser-persistence", "fresh-signer-free-retriever", "original-node-stopped",
       "replica-restarted", "explicit-replica-choice", "wrong-key-refused", "exact-file-recovered", "corrupt-copy-refused", "stale-save-cleared"],
     limits: "Two loopback Node processes on one host and a synthetic signer fixture; physical devices, real signer custody and ongoing replica policy remain separate." };
 } finally {

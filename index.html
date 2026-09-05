@@ -200,7 +200,7 @@
           <legend>Network profile</legend>
           <label class="profile-option">
             <input name="network-profile" type="radio" value="direct" checked />
-            <span><strong>Direct encrypted delivery</strong><small>Nostr, Blossom and host-candidate WebTorrent. Services and peers see your IP address.</small></span>
+            <span><strong>Direct encrypted delivery</strong><small>Nostr and Blossom, with optional WebTorrent peers. Services and peers see your IP address.</small></span>
           </label>
           <label class="profile-option">
             <input name="network-profile" type="radio" value="tor" />
@@ -226,8 +226,9 @@
             <textarea id="relay-urls" rows="3" placeholder="wss://relay.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
           <label id="tracker-field">
-            WebTorrent trackers <small>one per line</small>
-            <textarea id="tracker-urls" rows="3" placeholder="wss://tracker.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+            WebTorrent trackers <small>optional, one per line</small>
+            <textarea id="tracker-urls" rows="3" aria-describedby="tracker-help" placeholder="wss://tracker.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+            <small id="tracker-help">Leave blank to publish and retrieve through Blossom without a torrent.</small>
           </label>
         </div>
         <p id="ice-boundary" class="privacy-boundary">
@@ -333,6 +334,7 @@
         </div>
 
         <div id="seed-gate" class="gate">
+          <p>Optional: configure trackers before uploading to make this file available to peers.</p>
           <label class="check">
             <input id="seed-consent" type="checkbox" />
             <span>I understand trackers, peers and WebRTC connection candidates can expose network addresses and torrent activity.</span>
@@ -344,7 +346,7 @@
         </div>
 
         <div class="gate">
-          <p id="sign-event-copy">Signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.</p>
+          <p id="sign-event-copy">Signing creates a NIP-94 file event locally. Configured trackers also add a NIP-35 torrent index.</p>
           <button id="sign-events" type="button" disabled>Review and sign events</button>
         </div>
 

@@ -96,12 +96,15 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
    author, exact fields and a valid signature.
 4. The browser uploads the unchanged bytes with BUD-02 and rejects a descriptor
    whose URL, hash or size differs.
-5. In direct mode it creates a one-file BitTorrent v1 descriptor containing
-   the Blossom URL as a web seed and user-selected WebSocket trackers.
+5. In direct mode, when trackers are configured, it creates a one-file
+   BitTorrent v1 descriptor containing the Blossom URL as a web seed and the
+   user-selected WebSocket trackers. An empty list creates no torrent and
+   needs no tracker service; invalid non-empty endpoints are still rejected
+   before signing or upload. No public defaults are supplied.
    WebTorrent receives an explicit empty ICE-server list; it must not inherit
    library-supplied public STUN/TURN infrastructure.
-6. NIP-07 or the external handoff signs a NIP-94 file event and, in direct
-   mode, a NIP-35 torrent index. The encryption scheme is an explicit versioned extension tag.
+6. NIP-07 or the external handoff signs a NIP-94 file event and, when torrent
+   metadata was prepared, a NIP-35 torrent index. The encryption scheme is an explicit versioned extension tag.
    For protected events, `x` and NIP-94's pre-upload-server-transformation
    `ox` both hash the randomised encrypted envelope. Neither may contain the
    plaintext source hash, which would create a confirmation oracle. The URL,

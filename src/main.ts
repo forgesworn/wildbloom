@@ -161,9 +161,7 @@ function relays(): string[] {
 
 function trackers(): string[] {
   if (profile() === "tor") throw new Error("WebTorrent is disabled in Tor-only mode.");
-  const result = parseEndpointList(trackerInput.value, (value) => normaliseTrackerUrl(value));
-  if (result.length === 0) throw new Error("Provide at least one WebSocket tracker.");
-  return result;
+  return parseEndpointList(trackerInput.value, (value) => normaliseTrackerUrl(value));
 }
 
 function setStatus(target: HTMLOutputElement, message: string, error = false): void {
@@ -365,12 +363,12 @@ function updateSigningCopy(): void {
   if (signingMethod() === "external") {
     signEventCopy.textContent = profile() === "tor"
       ? "External signing hands off one exact encrypted NIP-94 event without installing a Tor Browser add-on. The signer still learns the public event and identity."
-      : "External signing hands off the exact NIP-94 and NIP-35 event JSON without giving Wildbloom a private key.";
+      : "External signing hands off the exact NIP-94 file event without giving Wildbloom a private key. Configured trackers also add a NIP-35 torrent index.";
     return;
   }
   signEventCopy.textContent = profile() === "tor"
     ? "NIP-07 signing creates one encrypted NIP-94 file event locally. A Tor Browser add-on can alter its fingerprint."
-    : "NIP-07 signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.";
+    : "NIP-07 signing creates a NIP-94 file event locally. Configured trackers also add a NIP-35 torrent index.";
 }
 
 function applySigningMethod(): void {
@@ -648,7 +646,7 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
     });
     if (controller.signal.aborted || publicationRevision !== expectedRevision || inspected !== selectedInspected) return;
     let nextTorrentPlan: TorrentPlan | null = null;
-    if (selectedProfile === "direct") {
+    if (selectedTrackers.length > 0) {
       setStatus(publishStatus, "Blossom accepted the exact payload. Building torrent metadata locally…");
       nextTorrentPlan = await createHybridTorrent(selectedInspected, nextDescriptor.url, selectedTrackers);
     }
@@ -672,7 +670,9 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
     signButton.disabled = false;
     setStatus(publishStatus, torrentPlan
       ? "Encrypted hybrid metadata is staged. Nothing has been seeded or published to Nostr."
-      : "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created.");
+      : selectedProfile === "tor"
+        ? "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created."
+        : "Blossom metadata is staged. No torrent metadata was created or Nostr event published.");
   } catch (error) {
     if (!(controller.signal.aborted && publicationRevision !== expectedRevision)) throw error;
   } finally {

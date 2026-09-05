@@ -17,6 +17,10 @@ the finish line.
   Linux and macOS.
 - The same production journey in Playwright Firefox on Linux and Playwright
   WebKit on macOS.
+- Direct encrypted Blossom publication and exact recovery with an empty
+  tracker list: one NIP-94 signature, no torrent, disabled peer actions, no
+  restored public defaults and fresh consent after removing trackers. Invalid
+  configured trackers are rejected before signing or upload.
 - Branded Mozilla Firefox on Linux, through two disposable profiles and
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
   application network or signer, external-signature encrypted upload and

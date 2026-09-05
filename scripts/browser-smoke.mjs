@@ -1024,6 +1024,74 @@ try {
   await page.check("#publish-consent");
   await page.click("#publish-events");
   await page.locator("#publish-status").filter({ hasText: "2/2 acknowledgements" }).waitFor();
+  // Removing trackers must invalidate the old hybrid authority and permit the
+  // normal encrypted Blossom journey without inventing a tracker or a torrent.
+  // A non-empty unsafe tracker remains an error before any signer/network work.
+  await page.fill("#tracker-urls", "https://tracker.example.com");
+  await page.check("#upload-consent");
+  await page.check("#key-saved-consent");
+  const authorisationsBeforeNoTrackers = uploadAuthorisations.length;
+  const requestsBeforeInvalidTracker = remoteRequests.length;
+  await page.click("#upload-file");
+  await page.locator("#publish-status.error").filter({ hasText: "wss:" }).waitFor();
+  if (remoteRequests.length !== requestsBeforeInvalidTracker || !(await page.isHidden("#external-signing-panel"))) {
+    throw new Error("An invalid configured tracker reached the signer or network.");
+  }
+  await page.fill("#tracker-urls", " \n , \n ");
+  for (const selector of ["#upload-consent", "#key-saved-consent", "#seed-consent", "#publish-consent"]) {
+    if (await page.isChecked(selector)) throw new Error(`Removing trackers retained consent: ${selector}`);
+  }
+  for (const selector of ["#upload-file", "#sign-events", "#publish-events", "#start-seeding"]) {
+    if (await page.isEnabled(selector)) throw new Error(`Removing trackers retained staged authority: ${selector}`);
+  }
+  await page.check("#upload-consent");
+  await page.check("#key-saved-consent");
+  await page.click("#upload-file");
+  await page.locator("#external-signing-panel").waitFor({ state: "visible" });
+  const noTrackerUploadTemplate = JSON.parse(await page.inputValue("#external-unsigned-event"));
+  if (noTrackerUploadTemplate.kind !== 24242) throw new Error("Blossom without trackers skipped scoped upload authority.");
+  await page.fill("#external-signed-event", JSON.stringify(finalizeEvent(noTrackerUploadTemplate, SECRET)));
+  await page.click("#accept-external-signature");
+  await page.locator("#publish-status").filter({ hasText: "Blossom metadata is staged" }).waitFor();
+  if (uploadAuthorisations.length !== authorisationsBeforeNoTrackers + 1
+    || (await page.locator("#file-facts").textContent())?.includes("Info hash")
+    || await page.locator("#publish-links a").count() !== 0) {
+    throw new Error("Blossom without trackers did not stage exactly one upload without torrent metadata.");
+  }
+  await page.check("#seed-consent");
+  if (await page.isEnabled("#start-seeding")) throw new Error("An empty tracker list enabled peer seeding.");
+  await page.uncheck("#seed-consent");
+  await page.click("#sign-events");
+  await page.locator("#external-signing-panel").waitFor({ state: "visible" });
+  const noTrackerFileTemplate = JSON.parse(await page.inputValue("#external-unsigned-event"));
+  if (noTrackerFileTemplate.kind !== 1063
+    || noTrackerFileTemplate.tags.some(([name]) => ["magnet", "i", "tracker"].includes(name))) {
+    throw new Error("Blossom without trackers advertised a torrent or requested a torrent signature.");
+  }
+  const noTrackerFileEvent = finalizeEvent(noTrackerFileTemplate, SECRET);
+  await page.fill("#external-signed-event", JSON.stringify(noTrackerFileEvent));
+  await page.click("#accept-external-signature");
+  await page.locator("#publish-status").filter({ hasText: "Exact external signatures accepted" }).waitFor();
+  if (!(await page.isHidden("#external-signing-panel"))) throw new Error("Blossom without trackers requested another signature.");
+  await page.check("#publish-consent");
+  await page.click("#publish-events");
+  await page.locator("#publish-status").filter({ hasText: "1/1 acknowledgements" }).waitFor();
+  await page.fill("#event-id", noTrackerFileEvent.id);
+  await page.click("#resolve-event");
+  await page.locator("#retrieve-status").filter({ hasText: "separately received recovery key" }).waitFor();
+  await page.check("#download-swarm-consent");
+  if (await page.isEnabled("#fetch-swarm")) throw new Error("An event without a torrent enabled peer retrieval.");
+  await page.fill("#recovery-key-input", await page.inputValue("#recovery-key-output"));
+  await page.click("#fetch-blossom");
+  await page.locator("#retrieve-links a").waitFor();
+  const noTrackerRecovered = await page.locator("#retrieve-links a").evaluate(async (anchor) => ({
+    name: anchor.download,
+    text: await window.__wildbloomObservedObjectUrls.get(anchor.href).text(),
+  }));
+  if (noTrackerRecovered.name !== "replacement.txt" || noTrackerRecovered.text !== "replacement") {
+    throw new Error("Blossom without trackers did not recover the exact encrypted source.");
+  }
+  await assertAccessible(page, "Direct Blossom delivery without trackers");
   if (nip07PublicKeyCalls !== nip07CallsBeforeExternal.publicKey || nip07SignatureCalls !== nip07CallsBeforeExternal.signatures) {
     throw new Error("External signer mode invoked the injected NIP-07 signer.");
   }
@@ -1066,7 +1134,7 @@ try {
   const adaptiveEvidence = browserName === "system-chromium" || browserName === "chromium"
     ? "320px reflow and forced-colours"
     : "320px reflow";
-  process.stdout.write(`Browser acceptance passed in ${browserName}: exact fail-closed response policy, supported browser capabilities denied, Trusted Types enforced when implemented, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery, published one- and two-record known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
+  process.stdout.write(`Browser acceptance passed in ${browserName}: exact fail-closed response policy, supported browser capabilities denied, Trusted Types enforced when implemented, no ambient network or retained browser state, protected input hints, pagehide and navigation-return session clearing, WCAG A/AA scan, keyboard focus/actions, ${adaptiveEvidence}, encrypted upload/recovery with optional trackers, published one- and two-record known-answer recovery with wrong-key rejection and validly signed hostile HTML held inside inert verified saves, NIP-07 plus exact extension-free signing handoff, controlled relay round-trip, upload/download cancellation with closed connections, superseded local/signing state, consent reset and fail-closed Tor-only transport verified.\n`);
 } finally {
   if (browser) await browser.close();
   await new Promise((resolve) => relay.close(resolve));

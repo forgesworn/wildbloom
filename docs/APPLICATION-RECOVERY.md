@@ -54,8 +54,10 @@ WILDBLOOM_NODE_BIN=/path/to/wildbloomd npm run acceptance:recovery
 
 The harness creates two separate real Node processes and fresh data stores,
 bound only to loopback with Tor disabled. A synthetic signer outside the
-browser completes the normal JSON handoff. The browser uploads encrypted
-bytes and publishes signed events to a controlled relay. The harness creates
+browser completes the normal JSON handoff. With the tracker list left empty,
+the browser uploads encrypted bytes and publishes one signed NIP-94 event to
+a controlled relay. No torrent metadata, torrent signature or peer connection
+is needed. The harness creates
 an authorised second copy, closes the entire publisher context, stops the
 original node and restarts the replica from disk.
 
