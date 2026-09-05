@@ -563,31 +563,44 @@ async function waitForBrandedText(record, selector, pattern, timeoutMs = ONION_A
 async function warmBrandedOnionTargets(record, blossomOrigin, relayUrl) {
   const blossomLiteral = JSON.stringify(blossomOrigin);
   const relayLiteral = JSON.stringify(relayUrl);
+  const deadline = Date.now() + ONION_ACTION_TIMEOUT_MS;
+  let latest = { ready: false, stage: "not started" };
   await waitFor(async () => {
+    // A fresh identity may need more than ten seconds to establish an onion
+    // circuit. Keep both probes and the BiDi reply inside the original deadline.
+    const remaining = deadline - Date.now();
+    if (remaining <= 1_000) return false;
+    const probeTimeout = Math.min(30_000, Math.floor((remaining - 1_000) / 2));
     try {
-      return await brandedEvaluate(record, `(async () => {
-        const response = await fetch(${blossomLiteral}, {
-          cache: "no-store",
-          redirect: "error",
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (response.status !== 404) return false;
+      latest = await brandedEvaluate(record, `(async () => {
+        try {
+          const response = await fetch(${blossomLiteral}, {
+            cache: "no-store",
+            redirect: "error",
+            signal: AbortSignal.timeout(${probeTimeout}),
+          });
+          if (response.status !== 404) return { ready: false, stage: "Blossom", status: response.status };
+        } catch (error) {
+          return { ready: false, stage: "Blossom", error: String(error) };
+        }
         return new Promise((resolve) => {
           const socket = new WebSocket(${relayLiteral});
-          const finish = (ready) => {
+          const finish = (ready, result) => {
             clearTimeout(timer);
             socket.close();
-            resolve(ready);
+            resolve({ ready, stage: "relay", result });
           };
-          const timer = setTimeout(() => finish(false), 10_000);
-          socket.addEventListener("open", () => finish(true), { once: true });
-          socket.addEventListener("error", () => finish(false), { once: true });
+          const timer = setTimeout(() => finish(false, "timeout"), ${probeTimeout});
+          socket.addEventListener("open", () => finish(true, "open"), { once: true });
+          socket.addEventListener("error", () => finish(false, "error"), { once: true });
         });
-      })()`, 20_000);
-    } catch {
+      })()`, Math.min(65_000, remaining));
+      return latest.ready;
+    } catch (error) {
+      latest = { ready: false, stage: "browser probe", error: String(error) };
       return false;
     }
-  }, ONION_ACTION_TIMEOUT_MS, "Branded Tor Browser did not reach the controlled Blossom and relay onions.", 1_000);
+  }, ONION_ACTION_TIMEOUT_MS, () => `Branded Tor Browser did not reach the controlled Blossom and relay onions: ${JSON.stringify(latest)}`, 1_000);
 }
 
 async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowedOrigins, ceremony) {
