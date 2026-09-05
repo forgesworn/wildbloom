@@ -239,7 +239,8 @@ const blossom = createHttpServer((request, response) => {
       }));
       return;
     }
-    if (request.method === "GET" && uploadedBytes && url.pathname === `/${uploadedHash}.wbenc`) {
+    if (request.method === "GET" && uploadedBytes
+      && (url.pathname === `/${uploadedHash}.wbenc` || url.pathname === `/${uploadedHash}`)) {
       if (blossomRetrievalMode === "hanging") {
         hangingRetrievalStarted += 1;
         let counted = false;
@@ -846,6 +847,7 @@ async function exerciseBrandedRetriever(record, blossomOrigin, relayUrl, eventId
   await warmBrandedOnionTargets(record, blossomOrigin, relayUrl);
   await brandedSetChecked(record, 'input[name="network-profile"][value="tor"]', true);
   await brandedSetValue(record, "#blossom-server", blossomOrigin);
+  await brandedSetValue(record, "#replica-server", blossomOrigin);
   await brandedSetValue(record, "#relay-urls", relayUrl);
   await brandedSetChecked(record, "#tor-consent", true);
   await brandedSetValue(record, "#event-id", eventId);
@@ -1076,6 +1078,7 @@ try {
   process.stdout.write("The rotated identity reached the controlled Blossom and relay onions before retrieval.\n");
   await retriever.page.check('input[name="network-profile"][value="tor"]');
   await retriever.page.fill("#blossom-server", blossomOnionOrigin);
+  await retriever.page.fill("#replica-server", blossomOnionOrigin);
   await retriever.page.fill("#relay-urls", relayUrl);
   await retriever.page.check("#tor-consent");
   await retriever.page.fill("#event-id", eventId);
