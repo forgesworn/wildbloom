@@ -122,7 +122,8 @@ function expectedEnvelopeBytes() {
   }));
   const plaintextBytes = Math.ceil((4 + metadata.length + MAXIMUM_SOURCE_BYTES) / MEBIBYTE) * MEBIBYTE;
   const recordCount = plaintextBytes / MEBIBYTE;
-  return 24 + plaintextBytes + recordCount * 16;
+  // FSWNENC2 adds a 32-byte salt to the historical 24-byte header.
+  return 56 + plaintextBytes + recordCount * 16;
 }
 
 async function hashDownloadedFile(path) {

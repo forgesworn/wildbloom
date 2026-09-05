@@ -56,7 +56,8 @@ delivery. It is interoperability work, not a new storage network.
 - NIP-35 kind `2003` for torrent indexing.
 - BUD-01/02/10/11 for Blossom retrieval, upload, references and authorisation.
 - The documented `encryption` tag value
-  `wildbloom-aes-256-gcm-chunked-v1` is a Wildbloom extension.
+  `forgesworn-aes-256-gcm-chunked-v2` is the current shared envelope extension;
+  `wildbloom-aes-256-gcm-chunked-v1` remains a historical read extension.
 
 These specifications are drafts. Do not silently invent compatibility claims;
 document and test any extension tags before adding them.

@@ -123,7 +123,10 @@ reproducible, round-trip, separate the two modes, and reject a flipped tag.
 
 ## Status
 
-Specified and vectored; not yet implemented in production. The production flip
-(`FSWNENC2` dual-reading `FSWNENC1`) is a coordinated rollout across the
-Wildbloom and Stash implementations. This document and its vectors are the
-shared contract both build against.
+Implemented in Wildbloom's writer and reader, and in Stash and stash-rs
+`v0.5.0`, following the coordinated switch on 29 August 2026. Wildbloom's
+verified hosted candidate includes that writer. All three readers retain
+`FSWNENC1` and `WBLMENC1` compatibility without migrating existing envelopes.
+The fixed vectors remain the shared contract; deterministic test salts and
+keys must never enter a production encoder. Independent professional security
+review remains open in `SECURITY-REVIEW-BRIEF.md`.

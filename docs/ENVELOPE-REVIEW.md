@@ -13,6 +13,11 @@ transport, and the Nostr layer are reviewed separately.
 
 Date: 2026-08-29.
 
+This is the historical design review, performed with independent models, not a
+professional third-party security audit. The original findings below describe
+the reviewed version; the remediation status was reconciled on 5 September
+2026 against the current implementations and tests.
+
 ## Verdict
 
 **The cryptography is sound; the format is not yet a settled standard.** The
@@ -66,19 +71,19 @@ real gap a standard must close; **minor** is a tightening.
   whitespace, integer format, or a string-escaping profile. A JSON library that
   escapes non-ASCII names as `\uXXXX` produces different bytes and is rejected.
   The `name` must also be a fixed point of the filename sanitiser and `type` of
-  the MIME normaliser, neither of which is specified. **Outstanding.**
+  the MIME normaliser, neither of which is specified. **Resolved; see remediation status below.**
 - **[blocker] Padding-bucket function is prose only.** The exact function
   (`≤64 KiB → 64 KiB`; `≤1 MiB → next power of two`; else next 1 MiB) is a hard
   decode check, but the spec does not state whether its input is the source size
   or the logical `4 + metadata + source` length (it is the logical length), nor
-  pin the behaviour at exactly 1 MiB. **Outstanding.**
+  pin the behaviour at exactly 1 MiB. **Resolved; see remediation status below.**
 - **[minor] Endianness and framing of the inner length, the AAD counter, and the
   last-record remainder are only inferable.** State them.
 
 ### Normative language and vectors
 
 - **[major] No RFC 2119 language.** The validation rules are one descriptive
-  sentence. Rewrite each rejection path as a testable MUST. **Outstanding.**
+  sentence. Rewrite each rejection path as a testable MUST. **Resolved; see remediation status below.**
 - **[major] No shareable negative vectors.** All tamper tests are TypeScript
   only, and three rejection paths (non-canonical metadata, over-max record
   count, bad padding bucket) are untested even there. Publish a negative-vector
@@ -133,16 +138,25 @@ Done:
   (`test-vectors/encryption-negative.json`, 12 cases) published and asserted
   against the reference decoder.
 
-Outstanding, in priority order:
+Completed since the original review:
 
-1. `FSWNENC2`: **spec and vectors done** — the 56-byte header grammar (32-byte
-   salt at offset 24), the HKDF-SHA256 derivation, and per-file and vault
-   known-answer vectors are pinned in [`FSWNENC2.md`](./FSWNENC2.md) with a
-   reference encoder/decoder. **Outstanding:** the coordinated production flip
-   (`FSWNENC2` dual-reading `FSWNENC1`) across both codebases.
-2. Add the two constructed negative cases (non-canonical metadata, wrong padding
-   bucket), which require an envelope built from scratch under the test key.
-3. Correct the record-count residual-risk figure (state the derived maximum, not
-   258, and that it is a decode-work bound).
-4. Commission a third-party cryptographic audit before treating the format as a
-   settled public standard.
+- Wildbloom PR #21 (`198556c`), Stash `ec071b2` and stash-rs `29f0016` completed
+  the coordinated FSWNENC2 writer switch on 29 August 2026. Both Stash source
+  versions are tagged `v0.5.0`; all three retain the older readers. This does
+  not assert npm/crates.io publication or deployment of every consumer.
+- Nine independently constructed, language-neutral semantic vectors in
+  `test-vectors/encryption-semantic.json` cover valid controls, authenticated
+  non-canonical metadata and authenticated wrong padding for all three magic
+  values. The browser decoder asserts the exact semantic error, so rejection
+  cannot pass merely because the fixture failed GCM authentication.
+- The decode-work cap is derived from the maximum source and metadata sizes:
+  257 records. Header-boundary tests reject 258 for every supported magic.
+- The current scheme, header, writer status, filename leaf selection and MIME
+  rejection rules in `ENCRYPTION.md` now match the browser implementation.
+
+Outstanding:
+
+1. Commission the independent professional cryptographic and browser review
+   defined in [`SECURITY-REVIEW-BRIEF.md`](./SECURITY-REVIEW-BRIEF.md), remediate
+   its findings, retain the retest and publish the final report. Neither this
+   model-assisted review nor the new fixtures closes that gate.

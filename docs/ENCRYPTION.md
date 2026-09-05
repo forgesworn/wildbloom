@@ -1,7 +1,10 @@
 # Encryption envelope
 
-Wildbloom's current private payload format is
-`wildbloom-aes-256-gcm-chunked-v1`.
+Wildbloom writes `forgesworn-aes-256-gcm-chunked-v2` (`FSWNENC2`). It also
+reads historical `FSWNENC1` and `WBLMENC1` envelopes under
+`wildbloom-aes-256-gcm-chunked-v1`. The current key derivation and header are
+specified in [`FSWNENC2.md`](./FSWNENC2.md); the metadata, padding and validation
+rules below are shared by all three readers.
 
 It is a versioned application envelope built from standard Web Crypto
 AES-256-GCM. The format has had an independent standards review, recorded in
@@ -28,14 +31,19 @@ is still outstanding before it should be treated as a settled public standard.
 
 ## Binary format
 
-The 24-byte clear header is:
+The current 56-byte clear header is:
 
 | Offset | Bytes | Meaning |
 | --- | ---: | --- |
-| 0 | 8 | ASCII `FSWNENC1`. A decoder MUST also read the legacy magic `WBLMENC1` |
+| 0 | 8 | ASCII `FSWNENC2` |
 | 8 | 4 | Big-endian chunk size, currently 1 MiB |
 | 12 | 4 | Big-endian authenticated-record count |
 | 16 | 8 | Random nonce prefix |
+| 24 | 32 | Fresh random HKDF-SHA256 salt |
+
+The AES key is derived from the per-file recovery key and header salt exactly
+as specified in `FSWNENC2.md`. Historical `FSWNENC1` and `WBLMENC1` headers
+are 24 bytes, omit the salt and use the recovery key directly as the AES key.
 
 Each record encrypts at most 1 MiB and appends a 16-byte GCM authentication
 tag. The 12-byte nonce is the random eight-byte prefix followed by the
@@ -45,7 +53,7 @@ size, record count, nonce prefix, record order and record position.
 
 The encrypted logical plaintext is:
 
-1. four-byte metadata JSON length;
+1. four-byte big-endian metadata JSON byte length;
 2. canonical JSON containing `name`, `size` and `type`;
 3. source file bytes;
 4. cryptographically random padding.
@@ -68,15 +76,16 @@ canonical form. Specifically:
 
 - `size` MUST be the source byte count as a base-10 JSON integer: no sign, no
   exponent, no leading zeros.
-- `name` MUST be the source filename after, in order: Unicode NFC
+- `name` MUST be the source filename after, in order: taking the final path
+  component after either `/` or `\`; Unicode NFC
   normalisation; removal of code points `U+0000`–`U+001F` and `U+007F`; mapping
   each of `< > : " | ? *` to `_`; removal of leading `.`; trimming of leading
   and trailing whitespace; replacement by `blob.bin` if the result is empty; and
   truncation to at most 180 UTF-16 code units. The stored `name` MUST be a fixed
   point of this function; a decoder recomputes it and rejects a mismatch.
-- `type` MUST be the source media type lower-cased, with `U+0000`–`U+001F` and
-  `U+007F` removed, truncated to at most 255 characters, and replaced by
-  `application/octet-stream` if empty.
+- `type` MUST be the source media type lower-cased, with an empty value replaced
+  by `application/octet-stream`. A value longer than 255 characters or containing
+  `U+0000`–`U+001F` or `U+007F` MUST be rejected; it is not trimmed or repaired.
 - String values MUST use the minimal JSON escaping profile: only `"`, `\`, and
   the control code points `U+0000`–`U+001F` are escaped, using the two-character
   short escapes where they exist and `\u00XX` otherwise; `/` is NOT escaped; all
@@ -100,8 +109,8 @@ envelope whose decrypted plaintext length differs.
 
 ## Versioning and legacy read
 
-The magic is the version field. A conformant encoder MUST write `FSWNENC1`. A
-conformant decoder MUST read both `FSWNENC1` and the legacy `WBLMENC1`, and MUST
+The magic is the version field. A conformant encoder MUST write `FSWNENC2`. A
+conformant decoder MUST read `FSWNENC2`, `FSWNENC1` and legacy `WBLMENC1`, and MUST
 accept both the current media type `application/vnd.forgesworn.encrypted` and
 the legacy `application/vnd.wildbloom.encrypted`. `FSWNENC1` and `WBLMENC1` name
 byte-identical cryptography; only the eight magic bytes differ, and because the
@@ -109,20 +118,22 @@ magic is inside the AAD an existing envelope's magic cannot be altered without
 breaking its tag. The legacy read is retained for envelopes written before the
 rename and carries a deprecation horizon rather than a permanent guarantee.
 
-The next version, `FSWNENC2`, is a coordinated change with the Stash
-implementation that shares this format. It adds a 32-byte random salt to the
-clear header and derives the AES key per envelope with
-`HKDF-SHA256(ikm = the envelope key, salt = the header salt, info =
-"forgesworn-aes-256-gcm-chunked/v2")`, under the same header layout for both
-per-file and vault-key sealing. This closes the shared-key nonce-reuse exposure
-described in the independent review; it does not affect Wildbloom, which always
-uses a fresh per-file key. `FSWNENC2` will dual-read `FSWNENC1` and carry the
-scheme name `forgesworn-aes-256-gcm-chunked-v2`. It is fully specified, with its
-own known-answer vectors, in [`FSWNENC2.md`](./FSWNENC2.md); that document and
-its vectors are the shared contract both implementations build against before
-any production flip ships.
+The coordinated writer switch completed on 29 August 2026: Wildbloom PR #21
+(`198556c`), Stash `ec071b2` and stash-rs `29f0016` (both tagged `v0.5.0`).
+All three write `FSWNENC2` with a fresh salt and read the older envelopes in
+place. This closes the shared-key nonce-reuse exposure described in the review;
+Wildbloom additionally retains a fresh random per-file recovery key. Existing
+envelopes are never silently re-sealed. A Git tag proves a source version;
+package publication and a consuming application's deployment are separate
+release evidence.
 
 ## Published known-answer vectors
+
+The current per-file and vault-key vectors are
+[`fswnenc2-per-file.json`](../test-vectors/fswnenc2-per-file.json) and
+[`fswnenc2-vault.json`](../test-vectors/fswnenc2-vault.json), documented in
+`FSWNENC2.md` and independently checked by `tests/fswnenc2.test.ts`.
+The following v1 vectors remain frozen compatibility fixtures.
 
 [`test-vectors/encryption-v2.json`](../test-vectors/encryption-v2.json) is the
 language-neutral one-record interoperability vector for this format, carrying
@@ -229,7 +240,9 @@ record. Plaintext is offered for saving only after every record succeeds.
   process-wide zeroisation: browser internals, immutable strings and Blob/File
   implementations may retain copies outside JavaScript's control.
 - GCM safety depends on unique nonces for a key. Wildbloom uses a fresh random
-  key and nonce prefix for every envelope and refuses more than 258 records.
+  input key, salt and nonce prefix for every new envelope. The 257-record cap
+  bounds decode work: `ceil((256 MiB + 4 + 4096) / 1 MiB) = 257`, including the
+  metadata-length prefix and maximum metadata. It is not a nonce-safety limit.
 - No password KDF is involved. The recovery key has full cryptographic entropy
   and must not be replaced with a human password.
 - Padding reveals a size bucket, and traffic volume can reveal more.
@@ -239,3 +252,12 @@ record. Plaintext is offered for saving only after every record succeeds.
   in-code tamper tests, and an independent standards review
   ([`ENVELOPE-REVIEW.md`](./ENVELOPE-REVIEW.md)). A third-party cryptographic
   audit is still outstanding.
+
+The authenticated semantic vectors in
+[`encryption-semantic.json`](../test-vectors/encryption-semantic.json) add valid
+GCM records with non-canonical metadata or the wrong padding bucket, plus a
+valid control for each of `WBLMENC1`, `FSWNENC1` and `FSWNENC2`. The browser
+decoder must reach the specific semantic rejection, not merely an AEAD error.
+`npm run encryption:semantic-vectors` checks exact reproducibility during the
+full release gate; `node scripts/encryption-semantic-vectors.mjs --write`
+regenerates the public fixtures.
