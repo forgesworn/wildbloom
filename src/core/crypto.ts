@@ -1,5 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
-import { assertPrototypeFileSize, assertPrototypeTransferSize, sanitiseFileName } from "./security.js";
+import { MAX_PROTOTYPE_FILE_BYTES, assertPrototypeFileSize, assertPrototypeTransferSize, sanitiseFileName } from "./security.js";
 import {
   WILDBLOOM_ENCRYPTED_FILE_NAME,
   WILDBLOOM_ENCRYPTED_MIME_TYPE,
@@ -8,13 +8,12 @@ import {
 } from "./types.js";
 
 const HEX = "0123456789abcdef";
-// New frames are written under the product-neutral magic. Legacy WBLMENC1
-// frames stay readable: every record authenticates the actual header bytes as
-// AAD, so a blob decrypts under whichever magic it was sealed with.
+// Historical frames stay readable: every record authenticates the actual
+// header bytes, so changing the magic without re-encrypting is rejected.
 const ENVELOPE_MAGIC = new TextEncoder().encode("FSWNENC1");
 const ENVELOPE_MAGIC_LEGACY = new TextEncoder().encode("WBLMENC1");
-// FSWNENC2 is read-only for now: a 56-byte header carrying a 32-byte salt, with
-// the AES key derived per envelope. Wildbloom still writes FSWNENC1.
+// New frames use FSWNENC2: a 56-byte header carrying a 32-byte salt, with
+// the AES key derived per envelope.
 const ENVELOPE_MAGIC_V2 = new TextEncoder().encode("FSWNENC2");
 const ENVELOPE_HEADER_BYTES = 24;
 const ENVELOPE_HEADER_BYTES_V2 = 56;
@@ -23,6 +22,11 @@ const HKDF_INFO_V2 = new TextEncoder().encode("forgesworn-aes-256-gcm-chunked/v2
 const ENVELOPE_CHUNK_BYTES = 1024 * 1024;
 const ENVELOPE_TAG_BYTES = 16;
 const MAX_ENVELOPE_METADATA_BYTES = 4096;
+// The source plus its four-byte metadata length and bounded metadata occupies
+// at most 257 one-MiB records. This limits decode work, not GCM nonce safety.
+const MAX_ENVELOPE_RECORDS = Math.ceil(
+  (MAX_PROTOTYPE_FILE_BYTES + 4 + MAX_ENVELOPE_METADATA_BYTES) / ENVELOPE_CHUNK_BYTES,
+);
 const MIN_PADDING_BUCKET_BYTES = 64 * 1024;
 const RECOVERY_KEY_PREFIX = "wbk1_";
 
@@ -300,7 +304,7 @@ async function parseEnvelopeHeader(file: Blob, signal?: AbortSignal): Promise<{
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   const chunkSize = view.getUint32(8, false);
   const recordCount = view.getUint32(12, false);
-  if (chunkSize !== ENVELOPE_CHUNK_BYTES || recordCount < 1 || recordCount > 258) {
+  if (chunkSize !== ENVELOPE_CHUNK_BYTES || recordCount < 1 || recordCount > MAX_ENVELOPE_RECORDS) {
     throw new Error("The Wildbloom envelope header is invalid.");
   }
   const minimumSize = headerBytes
@@ -349,9 +353,10 @@ export async function decryptPrivacyEnvelope(
   assertActive(signal, "Local decryption");
   assertPrototypeTransferSize(file.size);
   if (!recoveryKey.startsWith(RECOVERY_KEY_PREFIX)) throw new Error("The recovery key is not a Wildbloom v1 key.");
-  const rawKey = base64UrlDecode(recoveryKey.slice(RECOVERY_KEY_PREFIX.length));
-  assertActive(signal, "Local decryption");
   const { header, headerBytes, chunkSize, recordCount, noncePrefix, salt } = await parseEnvelopeHeader(file, signal);
+  // Do not materialise mutable key bytes until the untrusted header has passed:
+  // a malformed header must not bypass their finally-block erasure below.
+  const rawKey = base64UrlDecode(recoveryKey.slice(RECOVERY_KEY_PREFIX.length));
   let key: CryptoKey;
   try {
     if (salt) {

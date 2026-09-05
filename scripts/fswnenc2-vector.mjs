@@ -6,8 +6,8 @@
 // differs, and that difference is invisible in the envelope.
 //
 // This is the shared contract between the Wildbloom and Stash implementations.
-// It is NOT wired into production yet: the production flip is the coordinated,
-// wire-breaking rollout (FSWNENC2 dual-reading FSWNENC1) done on both sides.
+// Both sides now write FSWNENC2 and retain their historical readers. These
+// deterministic test keys, salts and padding are never production inputs.
 //
 // Run `node scripts/fswnenc2-vector.mjs` to regenerate the vectors under
 // test-vectors/. The suite (tests/fswnenc2.test.ts) checks they are
