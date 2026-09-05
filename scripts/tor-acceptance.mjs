@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools/pure";
 import { chromium } from "playwright-core";
 import { WebSocketServer } from "ws";
+import { closeControlledServer as closeServer } from "./controlled-server.mjs";
 import { WebDriverBiDi } from "./webdriver-bidi.mjs";
 
 const HOST = "127.0.0.1";
@@ -113,10 +114,6 @@ function listen(server, port = 0) {
     server.once("error", reject);
     server.listen(port, HOST);
   });
-}
-
-function closeServer(server) {
-  return new Promise((resolve) => server.close(() => resolve()));
 }
 
 async function availablePort() {
@@ -312,6 +309,7 @@ relay.on("connection", (socket, request) => {
 
 async function createPage(context, label, appOrigin, allowedOrigins, signer) {
   const page = await context.newPage();
+  page.setDefaultTimeout(30_000);
   const errors = [];
   const failedRequests = [];
   const undeclaredRequests = [];
@@ -1083,9 +1081,11 @@ try {
   await retriever.page.fill("#event-id", eventId);
   await retriever.page.click("#resolve-event");
   await waitForPageText(retriever, "#retrieve-status", /separately received recovery key/iu);
+  process.stdout.write("The rotated identity verified the signed discovery event.\n");
   await retriever.page.fill("#recovery-key-input", recoveryKey);
   await retriever.page.click("#fetch-blossom");
   await waitForPageText(retriever, "#retrieve-status", /locally decrypted bytes/iu);
+  process.stdout.write("The rotated identity decrypted the onion payload locally.\n");
   const downloadPromise = retriever.page.waitForEvent("download");
   await retriever.page.getByRole("link", { name: "Save verified onion-proof.txt" }).click();
   const download = await downloadPromise;
@@ -1093,6 +1093,7 @@ try {
   if (!downloadedPath || !readFileSync(downloadedPath).equals(SOURCE_BYTES)) throw new Error("Real-onion recovery did not reproduce the source bytes.");
   if (await retriever.page.evaluate(() => window.__wildbloomTorWebRtcUsed)) throw new Error("Tor-only retrieval created WebRTC state.");
   if (retriever.page.url() !== `${appOrigin}/`) throw new Error("Retriever left the exact app onion origin.");
+  process.stdout.write("The saved onion payload matches the exact source bytes.\n");
 
   if (torBrowser) {
     await signalNewIdentity(controlPort, controlCookie);
@@ -1119,6 +1120,7 @@ try {
     process.stdout.write(`${torBrowser.version} externally signed and published encrypted metadata without an add-on, then a fresh profile recovered the exact source after NEWNYM, bounded relay timeout and download-cancellation checks.\n`);
   }
 
+  process.stdout.write("Denying the controlled Blossom onion, including existing connections.\n");
   await closeServer(blossom);
   blossomClosed = true;
   await retriever.page.fill("#recovery-key-input", recoveryKey);
@@ -1154,7 +1156,11 @@ try {
   process.stdout.write(
     `Tor transport acceptance passed in ${browserName} with a harness-only secure-origin override through Tor ${/(?:Tor version |Tor )([0-9]+(?:\.[0-9]+)+)/u.exec(torLog)?.[1] ?? "unknown"}: disposable v3 onion app, Blossom and Nostr relay completed encrypted publication and exact recovery after NEWNYM, refused WebRTC and failed closed after the Blossom target was denied.${brandedResult}\n`,
   );
+} catch (error) {
+  process.stderr.write(`Tor acceptance failed before cleanup: ${String(error)}\n`);
+  throw error;
 } finally {
+  process.stdout.write("Closing disposable onion acceptance resources.\n");
   await closeBrandedTorBrowser(brandedRecord).catch(() => undefined);
   if (retrieverContext) await retrieverContext.close().catch(() => undefined);
   if (publisherContext) await publisherContext.close().catch(() => undefined);
@@ -1164,4 +1170,5 @@ try {
   await stopChild(production);
   await stopChild(torProcess);
   rmSync(tempRoot, { recursive: true, force: true });
+  process.stdout.write("Disposable onion acceptance cleanup finished.\n");
 }
