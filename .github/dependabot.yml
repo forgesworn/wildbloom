@@ -10,6 +10,16 @@ updates:
       timezone: Europe/London
     open-pull-requests-limit: 5
     groups:
+      # First match wins. @vitest/* peer-depend on the exact vitest version, so
+      # the ungrouped major path raises one PR per package and neither can
+      # install: npm ci dies on ERESOLVE with vitest@4 pinned against
+      # @vitest/coverage-v8@5. Move the family together.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+        update-types:
+          - major
+          - minor
+          - patch
       production-minor-and-patch:
         dependency-type: production
         update-types:
