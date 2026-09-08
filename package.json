@@ -63,11 +63,11 @@
     "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "4.1.11",
     "bittorrent-tracker": "11.2.3",
-    "playwright-core": "1.62.1",
+    "playwright-core": "1.63.0",
     "typescript": "7.0.2",
     "vite": "8.2.2",
     "vitest": "4.1.11",
-    "wrangler": "4.127.0",
+    "wrangler": "4.129.0",
     "ws": "8.21.3"
   }
 }
