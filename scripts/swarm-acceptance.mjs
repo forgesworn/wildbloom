@@ -449,6 +449,24 @@ try {
   await downloader.page.check("#download-swarm-consent");
   await downloader.page.click("#fetch-swarm");
   await downloader.page.locator("#retrieve-status").filter({ hasText: "Swarm ciphertext" }).waitFor({ timeout: 60_000 });
+  await waitFor(() => peerCount(tracker, infoHash) >= 2, 10_000, "The downloader did not rejoin before consent was restored.");
+
+  // Withdrawing and restoring consent in one task must not permit a new peer
+  // session while the previous one may still be tearing down.
+  const retickedDownloader = await downloader.page.evaluate(() => {
+    const consent = document.querySelector("#download-swarm-consent");
+    consent.click();
+    consent.click();
+    return { checked: consent.checked, fetchDisabled: document.querySelector("#fetch-swarm").disabled };
+  });
+  if (!retickedDownloader.checked || !retickedDownloader.fetchDisabled) {
+    throw new Error(`Swarm retrieval could restart before peer cleanup was confirmed: ${JSON.stringify(retickedDownloader)}`);
+  }
+  await waitFor(() => peerCount(tracker, infoHash) <= 1, 10_000, "Restored swarm consent kept the previous downloading peer.");
+  await downloader.page.locator("#fetch-swarm:enabled").waitFor({ timeout: 10_000 });
+  await downloader.page.fill("#recovery-key-input", recoveryKey);
+  await downloader.page.click("#fetch-swarm");
+  await downloader.page.locator("#retrieve-status").filter({ hasText: "Swarm ciphertext" }).waitFor({ timeout: 60_000 });
   await waitFor(() => peerCount(tracker, infoHash) >= 2, 10_000, "The downloader did not rejoin before page-lifecycle teardown.");
   await downloader.page.evaluate(() => {
     window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
@@ -477,6 +495,21 @@ try {
     throw new Error(`Page lifecycle teardown retained downloader state: ${JSON.stringify(lifecycleState)}`);
   }
 
+  const retickedSeed = await publisher.page.evaluate(() => {
+    const consent = document.querySelector("#seed-consent");
+    consent.click();
+    consent.click();
+    return { checked: consent.checked, seedDisabled: document.querySelector("#start-seeding").disabled };
+  });
+  if (!retickedSeed.checked || !retickedSeed.seedDisabled) {
+    throw new Error(`Seeding could restart before peer cleanup was confirmed: ${JSON.stringify(retickedSeed)}`);
+  }
+  await waitFor(() => peerCount(tracker, infoHash) === 0, 10_000, "Restored seeding consent kept the previous publishing peer.");
+  await publisher.page.locator("#start-seeding:enabled").waitFor({ timeout: 10_000 });
+  await publisher.page.click("#start-seeding");
+  await publisher.page.locator("#publish-status").filter({ hasText: `Seeding ${infoHash}` }).waitFor({ timeout: 30_000 });
+  await waitFor(() => peerCount(tracker, infoHash) === 1, 10_000, "The publisher did not rejoin before the source changed.");
+
   await publisher.page.setInputFiles("#publish-file", {
     name: "replacement.txt",
     mimeType: "text/plain",
@@ -495,7 +528,7 @@ try {
   if (peerCount(tracker, infoHash) !== 0) throw new Error("Closing the downloader restored a withdrawn peer session.");
 
   process.stdout.write(
-    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE, stored-debug isolation, no retained browser state and confirmed peer cleanup after failed decryption, consent withdrawal, page lifecycle teardown and source change (${webSeedAttempts} refused web-seed requests).\n`,
+    `Swarm acceptance passed in ${browserName}: two isolated production pages transferred and recovered ${SOURCE_BYTES.length} source bytes through the exact controlled WSS tracker with an unavailable web seed, host-only ICE, stored-debug isolation, no retained browser state and confirmed peer cleanup after failed decryption, consent withdrawal, restored consent during teardown, page lifecycle teardown and source change (${webSeedAttempts} refused web-seed requests).\n`,
   );
 } catch (error) {
   const diagnostics = [];

@@ -116,7 +116,8 @@ let downloadController: AbortController | null = null;
 let seedController: AbortController | null = null;
 let resolved: ResolvedHybridEvent | null = null;
 let downloadTransport: "blossom" | "swarm" | null = null;
-let swarmCleanupPending = false;
+let retrievalAttempts = 0;
+const pendingPeerStops = { seed: 0, retrieval: 0 };
 let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
@@ -187,8 +188,33 @@ async function confirmPeerStopped(session: StopHandle): Promise<void> {
   }
 }
 
-function confirmPeerStoppedInBackground(session: StopHandle, target: HTMLOutputElement): void {
-  void confirmPeerStopped(session).catch((error) => setStatus(target, safeDiagnostic(error), true));
+// While an earlier session may still be a peer, no new session of the same
+// kind may join, and an unconfirmed teardown withdraws that kind of consent.
+async function stopPeerSession(session: StopHandle, kind: keyof typeof pendingPeerStops): Promise<void> {
+  pendingPeerStops[kind] += 1;
+  refreshPeerStartButton(kind);
+  try {
+    await confirmPeerStopped(session);
+  } catch (error) {
+    (kind === "seed" ? seedConsent : swarmConsent).checked = false;
+    throw error;
+  } finally {
+    pendingPeerStops[kind] -= 1;
+    refreshPeerStartButton(kind);
+  }
+}
+
+function refreshPeerStartButton(kind: keyof typeof pendingPeerStops): void {
+  if (kind === "seed") seedButton.disabled = !seedStartAllowed();
+  else updateRetrievalButtons();
+}
+
+function confirmPeerStoppedInBackground(
+  session: StopHandle,
+  target: HTMLOutputElement,
+  kind: keyof typeof pendingPeerStops,
+): void {
+  void stopPeerSession(session, kind).catch((error) => setStatus(target, safeDiagnostic(error), true));
 }
 
 function showFacts(target: HTMLDListElement, entries: ReadonlyArray<readonly [string, string]>): void {
@@ -310,7 +336,7 @@ function resetPublicationAfterInspection(): void {
   signedEvents = [];
   seedController?.abort();
   seedController = null;
-  if (seedSession) confirmPeerStoppedInBackground(seedSession, publishStatus);
+  if (seedSession) confirmPeerStoppedInBackground(seedSession, publishStatus, "seed");
   seedSession = null;
   stopSeedButton.disabled = true;
   uploadConsent.checked = false;
@@ -350,7 +376,7 @@ function resetResolution(): void {
   downloadController = null;
   downloadTransport = null;
   cancelDownloadButton.disabled = true;
-  if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus);
+  if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus, "retrieval");
   downloadSession = null;
   resolved = null;
   swarmConsent.checked = false;
@@ -388,10 +414,15 @@ function updateUploadButton(): void {
   uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady && !descriptor && !uploadController);
 }
 
+function seedStartAllowed(): boolean {
+  return !!(seedConsent.checked && inspected && torrentPlan && !seedSession && !seedController
+    && pendingPeerStops.seed === 0 && profile() === "direct");
+}
+
 function updateRetrievalButtons(): void {
   const busy = downloadController !== null;
   blossomFetchButton.disabled = busy || !resolved;
-  swarmFetchButton.disabled = busy || swarmCleanupPending || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
+  swarmFetchButton.disabled = busy || pendingPeerStops.retrieval > 0 || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
   cancelDownloadButton.disabled = !busy;
 }
 
@@ -741,7 +772,7 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
     clearDownloads(publishLinks);
     if (nextTorrentPlan) {
       addDownload(publishLinks, nextTorrentPlan.torrentBlob, `${selectedInspected.name}.torrent`, "Download .torrent metadata");
-      seedButton.disabled = !seedConsent.checked;
+      seedButton.disabled = !seedStartAllowed();
     }
     signButton.disabled = false;
     setStatus(publishStatus, torrentPlan
@@ -775,16 +806,17 @@ seedConsent.addEventListener("change", () => {
     if (seedSession) {
       const session = seedSession;
       seedSession = null;
-      confirmPeerStoppedInBackground(session, publishStatus);
+      confirmPeerStoppedInBackground(session, publishStatus, "seed");
     }
     stopSeedButton.disabled = true;
   }
-  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && !seedSession && !seedController && profile() === "direct");
+  seedButton.disabled = !seedStartAllowed();
 });
 
 seedButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !torrentPlan || !seedConsent.checked) throw new Error("Build the torrent and acknowledge swarm visibility first.");
   if (seedController || seedSession) throw new Error("WebTorrent is already starting or seeding.");
+  if (pendingPeerStops.seed > 0) throw new Error("Wait for the previous seeding session to stop.");
   const controller = new AbortController();
   seedController = controller;
   setStatus(publishStatus, "Joining the WebTorrent swarm…");
@@ -801,7 +833,7 @@ seedButton.addEventListener("click", () => guard(publishStatus, async () => {
     if (seedController === controller) {
       seedController = null;
       stopSeedButton.disabled = true;
-      seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+      seedButton.disabled = !seedStartAllowed();
     } else if ((seedController || seedSession) && controller.signal.aborted
       && error instanceof Error && error.message === "WebTorrent seeding cancelled.") {
       return;
@@ -821,8 +853,7 @@ stopSeedButton.addEventListener("click", () => guard(publishStatus, async () => 
   const session = seedSession;
   seedSession = null;
   stopSeedButton.disabled = true;
-  await confirmPeerStopped(session);
-  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+  await stopPeerSession(session, "seed");
   setStatus(publishStatus, "Peer seeding stopped. Blossom and published relay events are unchanged.");
 }));
 
@@ -945,6 +976,7 @@ blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async (
   const expectedRevision = resolutionRevision;
   const controller = new AbortController();
   downloadController = controller;
+  retrievalAttempts += 1;
   downloadTransport = "blossom";
   updateRetrievalButtons();
   clearDownloads(retrieveLinks);
@@ -988,7 +1020,7 @@ swarmConsent.addEventListener("change", () => {
       const expectedRevision = resolutionRevision;
       downloadSession = null;
       setStatus(retrieveStatus, "Leaving the WebTorrent swarm…");
-      void confirmPeerStopped(session).then(
+      void stopPeerSession(session, "retrieval").then(
         () => {
           if (resolutionRevision === expectedRevision && !swarmConsent.checked) {
             setStatus(retrieveStatus, "Swarm participation stopped. Previously received local bytes are unchanged.");
@@ -1004,31 +1036,24 @@ swarmConsent.addEventListener("change", () => {
 swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
   if (!resolved || !resolved.magnetUri || !swarmConsent.checked) throw new Error("Resolve a torrent event and acknowledge swarm visibility first.");
   if (downloadController) throw new Error("A download is already in progress.");
+  if (pendingPeerStops.retrieval > 0) throw new Error("Wait for the previous swarm session to stop.");
   const selectedResolved = resolved;
   const selectedProfile = profile();
   const expectedRevision = resolutionRevision;
+  const expectedAttempts = retrievalAttempts;
   if (downloadSession) {
     const previousSession = downloadSession;
     downloadSession = null;
-    swarmCleanupPending = true;
-    updateRetrievalButtons();
     setStatus(retrieveStatus, "Leaving the previous WebTorrent swarm session…");
-    try {
-      await confirmPeerStopped(previousSession);
-    } catch (error) {
-      swarmConsent.checked = false;
-      throw error;
-    } finally {
-      swarmCleanupPending = false;
-      updateRetrievalButtons();
-    }
+    await stopPeerSession(previousSession, "retrieval");
     // Consent, the event or another download may have changed during cleanup.
     if (!swarmConsent.checked
       || downloadController
+      || retrievalAttempts !== expectedAttempts
       || resolved !== selectedResolved
       || resolutionRevision !== expectedRevision
       || profile() !== selectedProfile) {
-      if (!downloadController && resolutionRevision === expectedRevision) {
+      if (!downloadController && retrievalAttempts === expectedAttempts && resolutionRevision === expectedRevision) {
         setStatus(retrieveStatus, "Previous swarm session stopped. No new swarm download was started.");
       }
       return;
@@ -1036,6 +1061,7 @@ swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () 
   }
   const controller = new AbortController();
   downloadController = controller;
+  retrievalAttempts += 1;
   downloadTransport = "swarm";
   updateRetrievalButtons();
   clearDownloads(retrieveLinks);
