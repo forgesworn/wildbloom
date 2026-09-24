@@ -1,7 +1,7 @@
 import "./style.css";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
-import { buildFileEvent, buildTorrentEvent, parseSignedEventJson, signEventExactly } from "./core/nostr.js";
+import { buildFileEvent, buildTorrentEvent, MAX_SIGNED_EVENT_JSON_BYTES, parseSignedEventJson, resolveFileEventJson, signEventExactly } from "./core/nostr.js";
 import { publishToRelays, resolveFromRelays } from "./core/relay.js";
 import {
   assertHex64,
@@ -62,10 +62,15 @@ const retrieveStatus = element<HTMLOutputElement>("retrieve-status");
 const fileInput = element<HTMLInputElement>("publish-file");
 const protectFile = element<HTMLInputElement>("protect-file");
 const eventIdInput = element<HTMLInputElement>("event-id");
+const savedEventInput = element<HTMLTextAreaElement>("saved-event-json");
+const savedEventFileInput = element<HTMLInputElement>("saved-event-file");
+const verifySavedEventButton = element<HTMLButtonElement>("verify-saved-event");
 const replicaInput = element<HTMLInputElement>("replica-server");
 const fileFacts = element<HTMLDListElement>("file-facts");
 const resolvedFacts = element<HTMLDListElement>("resolved-facts");
 const publishLinks = element<HTMLDivElement>("publish-links");
+const signedEventLinks = element<HTMLDivElement>("signed-event-links");
+const resolvedEventLinks = element<HTMLDivElement>("resolved-event-links");
 const recoveryLinks = element<HTMLDivElement>("recovery-links");
 const retrieveLinks = element<HTMLDivElement>("retrieve-links");
 const recoveryKeyPanel = element<HTMLElement>("recovery-key-panel");
@@ -111,6 +116,8 @@ let downloadController: AbortController | null = null;
 let seedController: AbortController | null = null;
 let resolved: ResolvedHybridEvent | null = null;
 let downloadTransport: "blossom" | "swarm" | null = null;
+let retrievalAttempts = 0;
+const pendingPeerStops = { seed: 0, retrieval: 0 };
 let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
@@ -161,9 +168,7 @@ function relays(): string[] {
 
 function trackers(): string[] {
   if (profile() === "tor") throw new Error("WebTorrent is disabled in Tor-only mode.");
-  const result = parseEndpointList(trackerInput.value, (value) => normaliseTrackerUrl(value));
-  if (result.length === 0) throw new Error("Provide at least one WebSocket tracker.");
-  return result;
+  return parseEndpointList(trackerInput.value, (value) => normaliseTrackerUrl(value));
 }
 
 function setStatus(target: HTMLOutputElement, message: string, error = false): void {
@@ -183,8 +188,33 @@ async function confirmPeerStopped(session: StopHandle): Promise<void> {
   }
 }
 
-function confirmPeerStoppedInBackground(session: StopHandle, target: HTMLOutputElement): void {
-  void confirmPeerStopped(session).catch((error) => setStatus(target, safeDiagnostic(error), true));
+// While an earlier session may still be a peer, no new session of the same
+// kind may join, and an unconfirmed teardown withdraws that kind of consent.
+async function stopPeerSession(session: StopHandle, kind: keyof typeof pendingPeerStops): Promise<void> {
+  pendingPeerStops[kind] += 1;
+  refreshPeerStartButton(kind);
+  try {
+    await confirmPeerStopped(session);
+  } catch (error) {
+    (kind === "seed" ? seedConsent : swarmConsent).checked = false;
+    throw error;
+  } finally {
+    pendingPeerStops[kind] -= 1;
+    refreshPeerStartButton(kind);
+  }
+}
+
+function refreshPeerStartButton(kind: keyof typeof pendingPeerStops): void {
+  if (kind === "seed") seedButton.disabled = !seedStartAllowed();
+  else updateRetrievalButtons();
+}
+
+function confirmPeerStoppedInBackground(
+  session: StopHandle,
+  target: HTMLOutputElement,
+  kind: keyof typeof pendingPeerStops,
+): void {
+  void stopPeerSession(session, kind).catch((error) => setStatus(target, safeDiagnostic(error), true));
 }
 
 function showFacts(target: HTMLDListElement, entries: ReadonlyArray<readonly [string, string]>): void {
@@ -222,6 +252,13 @@ function addDownload(target: HTMLDivElement, blob: Blob, fileName: string, label
     objectUrls.delete(url);
   }, 30_000), { once: true });
   target.append(anchor);
+}
+
+function addFileEventDownload(target: HTMLDivElement, event: SignedNostrEvent): void {
+  // Export the signed canonical fields only, never relay extras or local keys.
+  const { id, pubkey, sig, kind, created_at, tags, content } = event;
+  const json = `${JSON.stringify({ id, pubkey, sig, kind, created_at, tags, content })}\n`;
+  addDownload(target, new Blob([json], { type: "application/json" }), `wildbloom-file-event-${id}.json`, "Save signed file event");
 }
 
 function externalSigningLabel(template: EventTemplate): string {
@@ -299,7 +336,7 @@ function resetPublicationAfterInspection(): void {
   signedEvents = [];
   seedController?.abort();
   seedController = null;
-  if (seedSession) confirmPeerStoppedInBackground(seedSession, publishStatus);
+  if (seedSession) confirmPeerStoppedInBackground(seedSession, publishStatus, "seed");
   seedSession = null;
   stopSeedButton.disabled = true;
   uploadConsent.checked = false;
@@ -311,6 +348,7 @@ function resetPublicationAfterInspection(): void {
   signButton.disabled = true;
   publishButton.disabled = true;
   clearDownloads(publishLinks);
+  clearDownloads(signedEventLinks);
 }
 
 function resetInspection(): void {
@@ -333,11 +371,12 @@ function resetResolution(): void {
   lookupController?.abort();
   lookupController = null;
   resolveButton.disabled = false;
+  verifySavedEventButton.disabled = false;
   downloadController?.abort();
   downloadController = null;
   downloadTransport = null;
   cancelDownloadButton.disabled = true;
-  if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus);
+  if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus, "retrieval");
   downloadSession = null;
   resolved = null;
   swarmConsent.checked = false;
@@ -347,6 +386,27 @@ function resetResolution(): void {
   swarmFetchButton.disabled = true;
   resolvedFacts.replaceChildren();
   clearDownloads(retrieveLinks);
+  clearDownloads(resolvedEventLinks);
+}
+
+function showResolvedEvent(nextResolved: ResolvedHybridEvent): void {
+  resolved = nextResolved;
+  showFacts(resolvedFacts, [
+    ["Event ID", nextResolved.event.id],
+    ["Author", nextResolved.event.pubkey],
+    ["Public name", nextResolved.name],
+    ["Public bytes", String(nextResolved.size)],
+    ["SHA-256", nextResolved.sha256],
+    ["Blossom", nextResolved.url],
+    ["Protection", nextResolved.encryption ?? "None"],
+    ["Info hash", nextResolved.infoHash ?? "Not advertised"],
+  ]);
+  addFileEventDownload(resolvedEventLinks, nextResolved.event);
+  recoveryKeyField.hidden = !nextResolved.encryption;
+  updateRetrievalButtons();
+  setStatus(retrieveStatus, nextResolved.encryption
+    ? "Signed event verified. Enter the separately received recovery key when downloading."
+    : "Signed event verified. The advertised payload is plaintext; no file has been downloaded.");
 }
 
 function updateUploadButton(): void {
@@ -354,10 +414,15 @@ function updateUploadButton(): void {
   uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady && !descriptor && !uploadController);
 }
 
+function seedStartAllowed(): boolean {
+  return !!(seedConsent.checked && inspected && torrentPlan && !seedSession && !seedController
+    && pendingPeerStops.seed === 0 && profile() === "direct");
+}
+
 function updateRetrievalButtons(): void {
   const busy = downloadController !== null;
   blossomFetchButton.disabled = busy || !resolved;
-  swarmFetchButton.disabled = busy || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
+  swarmFetchButton.disabled = busy || pendingPeerStops.retrieval > 0 || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
   cancelDownloadButton.disabled = !busy;
 }
 
@@ -365,12 +430,12 @@ function updateSigningCopy(): void {
   if (signingMethod() === "external") {
     signEventCopy.textContent = profile() === "tor"
       ? "External signing hands off one exact encrypted NIP-94 event without installing a Tor Browser add-on. The signer still learns the public event and identity."
-      : "External signing hands off the exact NIP-94 and NIP-35 event JSON without giving Wildbloom a private key.";
+      : "External signing hands off the exact NIP-94 file event without giving Wildbloom a private key. Configured trackers also add a NIP-35 torrent index.";
     return;
   }
   signEventCopy.textContent = profile() === "tor"
     ? "NIP-07 signing creates one encrypted NIP-94 file event locally. A Tor Browser add-on can alter its fingerprint."
-    : "NIP-07 signing creates a NIP-94 hybrid file event and a NIP-35 torrent index locally.";
+    : "NIP-07 signing creates a NIP-94 file event locally. Configured trackers also add a NIP-35 torrent index.";
 }
 
 function applySigningMethod(): void {
@@ -432,6 +497,8 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
     replicaInput.value = "";
     relayInput.value = "";
     trackerInput.value = "";
+    savedEventInput.value = "";
+    savedEventFileInput.value = "";
     applyProfile();
     setStatus(publishStatus, "Network profile changed. Re-enter endpoints and repeat every network consent.");
   });
@@ -486,6 +553,44 @@ eventIdInput.addEventListener("input", () => {
   resetResolution();
   setStatus(retrieveStatus, "Event ID changed. Resolve the signed event again before downloading.");
 });
+
+savedEventInput.addEventListener("input", () => {
+  resetResolution();
+  savedEventFileInput.value = "";
+  setStatus(retrieveStatus, "Saved event changed. Verify it locally before downloading.");
+});
+
+savedEventFileInput.addEventListener("change", () => guard(retrieveStatus, async () => {
+  resetResolution();
+  savedEventInput.value = "";
+  const file = savedEventFileInput.files?.[0];
+  setStatus(retrieveStatus, "Choose a saved event or paste its JSON, then verify it locally.");
+  if (!file) return;
+  if (file.size > MAX_SIGNED_EVENT_JSON_BYTES) {
+    savedEventFileInput.value = "";
+    throw new Error("The signed-event file exceeds the 128 KiB limit.");
+  }
+  const expectedRevision = resolutionRevision;
+  verifySavedEventButton.disabled = true;
+  try {
+    const json = await file.text();
+    if (resolutionRevision !== expectedRevision) return;
+    savedEventInput.value = json;
+    setStatus(retrieveStatus, "Saved event loaded locally. Choose Verify saved event locally before downloading.");
+  } catch (error) {
+    if (resolutionRevision === expectedRevision) throw error;
+  } finally {
+    if (resolutionRevision === expectedRevision) verifySavedEventButton.disabled = false;
+  }
+}));
+
+verifySavedEventButton.addEventListener("click", () => guard(retrieveStatus, async () => {
+  // Local validation needs neither a signer, Tor connection nor relay consent.
+  // The selected profile still constrains every endpoint in the signed event.
+  resetResolution();
+  const expectedId = eventIdInput.value.trim();
+  showResolvedEvent(resolveFileEventJson(savedEventInput.value, profile(), expectedId || undefined));
+}));
 
 protectFile.addEventListener("change", () => {
   resetInspection();
@@ -648,7 +753,7 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
     });
     if (controller.signal.aborted || publicationRevision !== expectedRevision || inspected !== selectedInspected) return;
     let nextTorrentPlan: TorrentPlan | null = null;
-    if (selectedProfile === "direct") {
+    if (selectedTrackers.length > 0) {
       setStatus(publishStatus, "Blossom accepted the exact payload. Building torrent metadata locally…");
       nextTorrentPlan = await createHybridTorrent(selectedInspected, nextDescriptor.url, selectedTrackers);
     }
@@ -667,12 +772,14 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
     clearDownloads(publishLinks);
     if (nextTorrentPlan) {
       addDownload(publishLinks, nextTorrentPlan.torrentBlob, `${selectedInspected.name}.torrent`, "Download .torrent metadata");
-      seedButton.disabled = !seedConsent.checked;
+      seedButton.disabled = !seedStartAllowed();
     }
     signButton.disabled = false;
     setStatus(publishStatus, torrentPlan
       ? "Encrypted hybrid metadata is staged. Nothing has been seeded or published to Nostr."
-      : "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created.");
+      : selectedProfile === "tor"
+        ? "Tor-only Blossom metadata is staged. No clearnet fallback or torrent metadata was created."
+        : "Blossom metadata is staged. No torrent metadata was created or Nostr event published.");
   } catch (error) {
     if (!(controller.signal.aborted && publicationRevision !== expectedRevision)) throw error;
   } finally {
@@ -699,16 +806,17 @@ seedConsent.addEventListener("change", () => {
     if (seedSession) {
       const session = seedSession;
       seedSession = null;
-      confirmPeerStoppedInBackground(session, publishStatus);
+      confirmPeerStoppedInBackground(session, publishStatus, "seed");
     }
     stopSeedButton.disabled = true;
   }
-  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && !seedSession && !seedController && profile() === "direct");
+  seedButton.disabled = !seedStartAllowed();
 });
 
 seedButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !torrentPlan || !seedConsent.checked) throw new Error("Build the torrent and acknowledge swarm visibility first.");
-  if (seedController) throw new Error("WebTorrent is already starting.");
+  if (seedController || seedSession) throw new Error("WebTorrent is already starting or seeding.");
+  if (pendingPeerStops.seed > 0) throw new Error("Wait for the previous seeding session to stop.");
   const controller = new AbortController();
   seedController = controller;
   setStatus(publishStatus, "Joining the WebTorrent swarm…");
@@ -720,9 +828,16 @@ seedButton.addEventListener("click", () => guard(publishStatus, async () => {
     stopSeedButton.disabled = false;
     setStatus(publishStatus, `Seeding ${torrentPlan.infoHash}. Keep this tab open to remain a peer.`);
   } catch (error) {
-    if (seedController === controller) seedController = null;
-    stopSeedButton.disabled = true;
-    seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+    // A cancelled attempt must not reset controls or status that now belong to
+    // a newer one; cleanup failures are still reported.
+    if (seedController === controller) {
+      seedController = null;
+      stopSeedButton.disabled = true;
+      seedButton.disabled = !seedStartAllowed();
+    } else if ((seedController || seedSession) && controller.signal.aborted
+      && error instanceof Error && error.message === "WebTorrent seeding cancelled.") {
+      return;
+    }
     throw error;
   }
 }));
@@ -738,8 +853,7 @@ stopSeedButton.addEventListener("click", () => guard(publishStatus, async () => 
   const session = seedSession;
   seedSession = null;
   stopSeedButton.disabled = true;
-  await confirmPeerStopped(session);
-  seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+  await stopPeerSession(session, "seed");
   setStatus(publishStatus, "Peer seeding stopped. Blossom and published relay events are unchanged.");
 }));
 
@@ -773,6 +887,8 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
     nextSignedEvents.push(torrentEvent);
   }
   signedEvents = nextSignedEvents;
+  clearDownloads(signedEventLinks);
+  addFileEventDownload(signedEventLinks, fileEvent);
   publishButton.disabled = !publishConsent.checked;
   const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
   setStatus(
@@ -829,21 +945,7 @@ resolveButton.addEventListener("click", () => guard(retrieveStatus, async () => 
       || resolutionRevision !== expectedRevision
       || profile() !== selectedProfile
       || eventIdInput.value.trim().toLowerCase() !== eventId) return;
-    resolved = nextResolved;
-    showFacts(resolvedFacts, [
-      ["Author", nextResolved.event.pubkey],
-      ["Public name", nextResolved.name],
-      ["Public bytes", String(nextResolved.size)],
-      ["SHA-256", nextResolved.sha256],
-      ["Blossom", nextResolved.url],
-      ["Protection", nextResolved.encryption ?? "None"],
-      ["Info hash", nextResolved.infoHash ?? "Not advertised"],
-    ]);
-    recoveryKeyField.hidden = !nextResolved.encryption;
-    updateRetrievalButtons();
-    setStatus(retrieveStatus, nextResolved.encryption
-      ? "Signed event verified. Enter the separately received recovery key when downloading."
-      : "Signed event verified. The advertised payload is plaintext; no file has been downloaded.");
+    showResolvedEvent(nextResolved);
   } catch (error) {
     if (!controller.signal.aborted) throw error;
   } finally {
@@ -874,6 +976,7 @@ blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async (
   const expectedRevision = resolutionRevision;
   const controller = new AbortController();
   downloadController = controller;
+  retrievalAttempts += 1;
   downloadTransport = "blossom";
   updateRetrievalButtons();
   clearDownloads(retrieveLinks);
@@ -917,7 +1020,7 @@ swarmConsent.addEventListener("change", () => {
       const expectedRevision = resolutionRevision;
       downloadSession = null;
       setStatus(retrieveStatus, "Leaving the WebTorrent swarm…");
-      void confirmPeerStopped(session).then(
+      void stopPeerSession(session, "retrieval").then(
         () => {
           if (resolutionRevision === expectedRevision && !swarmConsent.checked) {
             setStatus(retrieveStatus, "Swarm participation stopped. Previously received local bytes are unchanged.");
@@ -933,16 +1036,32 @@ swarmConsent.addEventListener("change", () => {
 swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
   if (!resolved || !resolved.magnetUri || !swarmConsent.checked) throw new Error("Resolve a torrent event and acknowledge swarm visibility first.");
   if (downloadController) throw new Error("A download is already in progress.");
-  if (downloadSession) {
-    const previousSession = downloadSession;
-    downloadSession = null;
-    await confirmPeerStopped(previousSession);
-  }
+  if (pendingPeerStops.retrieval > 0) throw new Error("Wait for the previous swarm session to stop.");
   const selectedResolved = resolved;
   const selectedProfile = profile();
   const expectedRevision = resolutionRevision;
+  const expectedAttempts = retrievalAttempts;
+  if (downloadSession) {
+    const previousSession = downloadSession;
+    downloadSession = null;
+    setStatus(retrieveStatus, "Leaving the previous WebTorrent swarm session…");
+    await stopPeerSession(previousSession, "retrieval");
+    // Consent, the event or another download may have changed during cleanup.
+    if (!swarmConsent.checked
+      || downloadController
+      || retrievalAttempts !== expectedAttempts
+      || resolved !== selectedResolved
+      || resolutionRevision !== expectedRevision
+      || profile() !== selectedProfile) {
+      if (!downloadController && retrievalAttempts === expectedAttempts && resolutionRevision === expectedRevision) {
+        setStatus(retrieveStatus, "Previous swarm session stopped. No new swarm download was started.");
+      }
+      return;
+    }
+  }
   const controller = new AbortController();
   downloadController = controller;
+  retrievalAttempts += 1;
   downloadTransport = "swarm";
   updateRetrievalButtons();
   clearDownloads(retrieveLinks);
@@ -1020,6 +1139,8 @@ function endPageSession(): void {
   relayInput.value = "";
   trackerInput.value = "";
   eventIdInput.value = "";
+  savedEventInput.value = "";
+  savedEventFileInput.value = "";
   externalPubkeyInput.value = "";
   torConsent.checked = false;
   signerStatus.textContent = "Signer not connected; the previous page session ended";

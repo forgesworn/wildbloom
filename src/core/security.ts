@@ -64,7 +64,10 @@ function requireSecureTransport(
     if (url.protocol === secureProtocol || url.protocol === localProtocol) return;
     throw new Error(`Tor-only endpoints must use ${secureProtocol} or ${localProtocol}.`);
   }
-  if (url.hostname.endsWith(".onion")) throw new Error("Select Tor-only mode before using an onion service.");
+  // Trailing root dots still name an onion service, which must not reach DNS.
+  if (url.hostname.replace(/\.+$/u, "").endsWith(".onion")) {
+    throw new Error("Select Tor-only mode before using an onion service.");
+  }
   if (url.protocol === secureProtocol) return;
   if (url.protocol === localProtocol && isLocalHost(url.hostname)) return;
   throw new Error(`Only ${secureProtocol} endpoints are accepted (or ${localProtocol} localhost for development).`);
@@ -131,18 +134,22 @@ export function parseEndpointList(value: string, parser: (entry: string) => stri
 export function sanitiseFileName(value: string): string {
   const leaf = value.split(/[\\/]/u).at(-1) ?? "";
   const cleaned = leaf
-    .normalize("NFC")
+    // Remove controls before NFC so a removed control cannot leave a newly
+    // composable sequence behind.
     .replace(/[\u0000-\u001f\u007f]/gu, "")
+    .normalize("NFC")
     .replace(/[<>:"|?*]/gu, "_")
-    .replace(/^\.+/u, "")
-    .trim();
+    // Strip dots and whitespace together so a second pass cannot change the
+    // result; readers require the stored name to be a fixed point.
+    .replace(/^[\s.]+/u, "")
+    .trimEnd();
   const fallback = cleaned || "blob.bin";
   if (fallback.length <= 180) return fallback;
   // Keep Unicode scalar values intact at the UTF-16 length boundary.
   const last = fallback.charCodeAt(179);
   const next = fallback.charCodeAt(180);
   const end = last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff ? 179 : 180;
-  return fallback.slice(0, end);
+  return fallback.slice(0, end).trimEnd();
 }
 
 export function fileExtension(name: string): string {

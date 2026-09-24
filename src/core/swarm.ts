@@ -19,6 +19,67 @@ function privateWebTorrentClientOptions() {
     utp: false,
   };
 }
+type ChunkCallback = (error: Error | null, chunk?: Uint8Array) => void;
+
+// WebTorrent otherwise selects its origin-private file-system store whenever the
+// browser offers one, and that store outlives the page session. Keep every
+// piece in page memory so stopping a peer session leaves no browser storage.
+export class PageMemoryChunkStore {
+  readonly chunkLength: number;
+  private readonly lastChunkIndex: number;
+  private readonly lastChunkLength: number;
+  private chunks: Array<Uint8Array | undefined> | null = [];
+
+  constructor(chunkLength: number, options: { length?: number } = {}) {
+    this.chunkLength = Number(chunkLength);
+    if (!Number.isSafeInteger(this.chunkLength) || this.chunkLength <= 0) {
+      throw new Error("A WebTorrent chunk length is required.");
+    }
+    const length = Number(options.length);
+    if (!Number.isSafeInteger(length) || length <= 0) throw new Error("A WebTorrent store length is required.");
+    this.lastChunkIndex = Math.ceil(length / this.chunkLength) - 1;
+    this.lastChunkLength = length % this.chunkLength || this.chunkLength;
+  }
+
+  put(index: number, chunk: Uint8Array, callback: (error: Error | null) => void = () => undefined): void {
+    const expectedLength = index === this.lastChunkIndex ? this.lastChunkLength : this.chunkLength;
+    const error = !this.chunks
+      ? new Error("Storage is closed")
+      : !Number.isSafeInteger(index) || index < 0 || index > this.lastChunkIndex || chunk.length !== expectedLength
+        ? new Error("Unexpected WebTorrent chunk.")
+        : null;
+    if (!error) this.chunks![index] = chunk;
+    queueMicrotask(() => callback(error));
+  }
+
+  get(
+    index: number,
+    options: { offset?: number; length?: number } | null | ChunkCallback,
+    callback: ChunkCallback = () => undefined,
+  ): void {
+    if (typeof options === "function") return this.get(index, null, options);
+    const chunk = this.chunks?.[index];
+    if (!chunk) {
+      const error = Object.assign(new Error(this.chunks ? "Chunk not found" : "Storage is closed"), { notFound: !!this.chunks });
+      queueMicrotask(() => callback(error));
+      return;
+    }
+    const offset = options?.offset ?? 0;
+    const length = options?.length ?? chunk.length - offset;
+    const result = offset === 0 && length === chunk.length ? chunk : chunk.subarray(offset, offset + length);
+    queueMicrotask(() => callback(null, result));
+  }
+
+  close(callback: (error: Error | null) => void = () => undefined): void {
+    this.chunks = null;
+    queueMicrotask(() => callback(null));
+  }
+
+  destroy(callback: (error: Error | null) => void = () => undefined): void {
+    this.close(callback);
+  }
+}
+
 type WebTorrentConstructor = typeof import("webtorrent/dist/webtorrent.min.js")["default"];
 export type WebTorrentLoader = () => Promise<{ default: WebTorrentConstructor }>;
 type WebTorrentModule = { default: WebTorrentConstructor };
@@ -218,6 +279,7 @@ export async function startBrowserSeeding(
       announceList: plan.trackers.map((tracker) => [tracker]),
       urlList: [plan.webSeed],
       private: false,
+      store: PageMemoryChunkStore,
     }, (torrent) => {
       if (settled) return;
       if (torrent.infoHash.toLowerCase() !== plan.infoHash) {
@@ -270,7 +332,7 @@ export async function downloadFromSwarm(
       return;
     }
     client.on("error", fail);
-    client.add(resolved.magnetUri as string, {}, (torrent) => {
+    client.add(resolved.magnetUri as string, { store: PageMemoryChunkStore }, (torrent) => {
       if (settled) return;
       if (torrent.infoHash.toLowerCase() !== resolved.infoHash || torrent.length !== resolved.size) {
         fail(new Error("Torrent metadata does not match the signed Nostr event."));

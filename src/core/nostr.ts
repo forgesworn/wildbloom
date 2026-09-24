@@ -30,7 +30,7 @@ import {
 const AUTH_KIND = 24242;
 const FILE_KIND = 1063;
 const TORRENT_KIND = 2003;
-const MAX_SIGNED_EVENT_JSON_BYTES = 128 * 1024;
+export const MAX_SIGNED_EVENT_JSON_BYTES = 128 * 1024;
 const SIGNED_EVENT_KEYS = "content,created_at,id,kind,pubkey,sig,tags";
 
 function uniqueTag(tags: readonly string[][], name: string, maximumLength = 8192): string {
@@ -84,21 +84,41 @@ export function assertSignedEventExactly(
   return event;
 }
 
+function parseBoundedEventJson(json: string): unknown {
+  if (json.length > MAX_SIGNED_EVENT_JSON_BYTES
+    || new TextEncoder().encode(json).byteLength > MAX_SIGNED_EVENT_JSON_BYTES) {
+    throw new Error("The signed-event JSON is unexpectedly large.");
+  }
+  try {
+    return JSON.parse(json);
+  } catch {
+    throw new Error("The signed-event JSON is invalid.");
+  }
+}
+
 export function parseSignedEventJson(
   template: EventTemplate,
   json: string,
   expectedPubkey?: string,
 ): SignedNostrEvent {
-  if (new TextEncoder().encode(json).byteLength > MAX_SIGNED_EVENT_JSON_BYTES) {
-    throw new Error("The returned signed-event JSON is unexpectedly large.");
+  return assertSignedEventExactly(template, parseBoundedEventJson(json), expectedPubkey);
+}
+
+export function resolveFileEventJson(
+  json: string,
+  profile: NetworkProfile = "direct",
+  expectedEventId?: string,
+): ResolvedHybridEvent {
+  const value = parseBoundedEventJson(json);
+  if (!value || typeof value !== "object" || Array.isArray(value)
+    || Object.keys(value).sort().join(",") !== SIGNED_EVENT_KEYS) {
+    throw new Error("Expected one complete signed Nostr event with only the canonical fields.");
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch {
-    throw new Error("The returned signed-event JSON is invalid.");
+  const resolved = resolveHybridEvent(value as SignedNostrEvent, profile);
+  if (expectedEventId !== undefined && resolved.event.id !== assertHex64(expectedEventId, "Event ID")) {
+    throw new Error("The saved event does not match the expected event ID.");
   }
-  return assertSignedEventExactly(template, parsed, expectedPubkey);
+  return resolved;
 }
 
 export async function signEventExactly(

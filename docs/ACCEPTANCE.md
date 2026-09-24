@@ -17,6 +17,16 @@ the finish line.
   Linux and macOS.
 - The same production journey in Playwright Firefox on Linux and Playwright
   WebKit on macOS.
+- Direct encrypted Blossom publication and exact recovery with an empty
+  tracker list: one NIP-94 signature, no torrent, disabled peer actions, no
+  restored public defaults and fresh consent after removing trackers. Invalid
+  configured trackers are rejected before signing or upload.
+- Canonical signed-event export before relay publication; bounded file/JSON
+  import without network activity; signature and expected-ID rejection;
+  cancellation of superseded local reads; independent fetch consent; and
+  clearing imported state on navigation/profile change. The two-Node recovery
+  gate also stops the discovery relay before a fresh browser imports the saved
+  event and recovers exact bytes from the explicitly selected replica.
 - Branded Mozilla Firefox on Linux, through two disposable profiles and
   loopback-only WebDriver BiDi: trustworthy production origin, no ambient
   application network or signer, external-signature encrypted upload and
@@ -53,7 +63,8 @@ the finish line.
   MIME, cache, security-header, size or SHA-256 drift.
 - No remote request on page load.
 - No application mutation or retained entries in cookies, local or session
-  storage, IndexedDB, Cache Storage or service workers after a complete browser
+  storage, IndexedDB, Cache Storage, the origin-private file system or service
+  workers after a complete browser
   journey. Secret and structured controls carry browser-retention hints.
 - Peer journeys preserve but do not consume a hostile pre-existing
   `localStorage.debug` preference, emit no dependency debug diagnostics, then

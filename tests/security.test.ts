@@ -75,6 +75,12 @@ describe("secure endpoint handling", () => {
     expect(normaliseBlossomServer(`http://${onion}`, "tor")).toBe(`http://${onion}`);
     expect(normaliseRelayUrl(`ws://${onion}`, "tor")).toBe(`ws://${onion}/`);
     expect(() => normaliseBlossomServer(`https://${onion}`, "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseBlossomServer(`https://${onion}.`, "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseRelayUrl(`wss://${onion}./`, "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseBlossomUrl(`https://${onion}./${"ab".repeat(32)}`, "ab".repeat(32), "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseTrackerUrl(`wss://${onion}.`, "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseBlossomServer(`https://${onion}..`, "direct")).toThrow(/Tor-only/u);
+    expect(() => normaliseRelayUrl(`wss://${onion.toUpperCase()}.../`, "direct")).toThrow(/Tor-only/u);
     expect(() => normaliseTrackerUrl(`wss://${onion}`, "tor")).toThrow(/disabled/u);
 
     const corrupted = `${onion[0] === "a" ? "b" : "a"}${onion.slice(1)}`;
@@ -92,6 +98,26 @@ describe("file boundaries", () => {
   it("removes paths and control characters from display names", () => {
     expect(sanitiseFileName("../../private/<demo>\u0000.txt")).toBe("_demo_.txt");
     expect(sanitiseFileName(".../../")).toBe("blob.bin");
+  });
+
+  it("returns a fixed point so encrypted names always decode", () => {
+    const long = `${"a".repeat(179)} tail.txt`;
+    const cases: Array<[string, string]> = [
+      [" .env", "env"],
+      ["\uFEFF.bashrc", "bashrc"],
+      [" .", "blob.bin"],
+      [" ..hidden ", "hidden"],
+      [". . .x", "x"],
+      ["e\u0000\u0301.txt", "\u00e9.txt"],
+      ["\u1100\u0001\u1161", "\uac00"],
+      [long, "a".repeat(179)],
+      [`${"a".repeat(179)}\u{1F331}`, "a".repeat(179)],
+    ];
+    for (const [input, expected] of cases) {
+      const cleaned = sanitiseFileName(input);
+      expect(cleaned).toBe(expected);
+      expect(sanitiseFileName(cleaned)).toBe(cleaned);
+    }
   });
 
   it("uses a conservative extension fallback", () => {

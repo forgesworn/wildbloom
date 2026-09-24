@@ -31,7 +31,8 @@ cryptographically valid.
    upload** verifies the exact template, author and signature before the first
    upload request.
 6. After Blossom accepts the bytes, choose **Review and sign events**. Repeat
-   the handoff for the kind `1063` event and, in direct mode, kind `2003` event.
+   the handoff for the kind `1063` event. Direct mode with configured trackers
+   also requests a kind `2003` event; leaving trackers empty needs only `1063`.
 7. Relay publication remains a separate consent and action after every exact
    signature has been accepted.
 
@@ -43,7 +44,7 @@ nothing.
 ## Privacy boundary
 
 The unsigned templates contain intended public metadata: blob hash, server,
-timestamps, event content and, in direct mode, tracker and torrent facts. The
+timestamps, event content and, when trackers are configured, torrent facts. The
 returned signed event also contains the public signing identity. The transfer
 medium and signer can observe or retain them. A networked signer can make its
 own requests, and a reused Nostr identity remains linkable regardless of Tor.

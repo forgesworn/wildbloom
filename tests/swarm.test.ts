@@ -4,6 +4,7 @@ import {
   createWebTorrentLoader,
   downloadFromSwarm,
   importWebTorrentWithoutStoredDebug,
+  PageMemoryChunkStore,
   startBrowserSeeding,
   withBlockedPersistentDebug,
   type WebTorrentLoader,
@@ -208,15 +209,20 @@ describe("WebTorrent safety boundary", () => {
 
   it("disables undeclared STUN, DHT and local-discovery infrastructure", async () => {
     let options: unknown;
+    let torrentOptions: { store?: unknown } | undefined;
     class Client {
       constructor(value: unknown) { options = value; }
       on(): void {}
-      seed(_file: File, _options: unknown, callback: (torrent: { infoHash: string }) => void): void { callback({ infoHash }); }
+      seed(_file: File, value: { store?: unknown }, callback: (torrent: { infoHash: string }) => void): void {
+        torrentOptions = value;
+        callback({ infoHash });
+      }
       destroy(callback?: () => void): void { callback?.(); }
     }
     const { inspected, plan } = publication();
     const session = await startBrowserSeeding(inspected, plan, "direct", loaderFor(Client));
     expect(options).toEqual(privateClientOptions);
+    expect(torrentOptions?.store).toBe(PageMemoryChunkStore);
     await session.stop();
   });
 
@@ -367,12 +373,14 @@ describe("WebTorrent safety boundary", () => {
       sha256: hash,
     } as unknown as ResolvedHybridEvent;
     let options: unknown;
+    let torrentOptions: { store?: unknown } | undefined;
     class Client {
       static last: Client;
       destroyed = false;
       constructor(value: unknown) { Client.last = this; options = value; }
       on(): void {}
-      add(_magnet: string, _options: unknown, callback: (torrent: object) => void): void {
+      add(_magnet: string, value: { store?: unknown }, callback: (torrent: object) => void): void {
+        torrentOptions = value;
         callback({
           infoHash,
           length: 5,
@@ -389,6 +397,7 @@ describe("WebTorrent safety boundary", () => {
     expect(await result.blob.text()).toBe("hello");
     expect(progress).toBe(1);
     expect(options).toEqual(privateClientOptions);
+    expect(torrentOptions?.store).toBe(PageMemoryChunkStore);
     await result.session.stop();
     expect(Client.last.destroyed).toBe(true);
   });
@@ -548,5 +557,49 @@ describe("WebTorrent safety boundary", () => {
     releaseLoader?.({ default: Client as never });
     await expect(result).rejects.toThrow(/cancelled/u);
     expect(constructions).toBe(0);
+  });
+});
+
+describe("WebTorrent page-memory chunk store", () => {
+  const callback = <T extends unknown[]>() => {
+    let resolve!: (value: T) => void;
+    const settled = new Promise<T>((next) => { resolve = next; });
+    return { settled, done: (...values: T) => resolve(values) };
+  };
+
+  it("keeps exact pieces in memory and releases them on close", async () => {
+    const store = new PageMemoryChunkStore(4, { length: 10 });
+    for (const [index, bytes] of [[0, [1, 2, 3, 4]], [1, [5, 6, 7, 8]], [2, [9, 10]]] as const) {
+      const put = callback<[Error | null]>();
+      store.put(index, new Uint8Array(bytes), put.done);
+      expect((await put.settled)[0]).toBeNull();
+    }
+    const range = callback<[Error | null, Uint8Array?]>();
+    store.get(1, { offset: 1, length: 2 }, range.done);
+    expect([...((await range.settled)[1] ?? [])]).toEqual([6, 7]);
+    const whole = callback<[Error | null, Uint8Array?]>();
+    store.get(2, whole.done);
+    expect([...((await whole.settled)[1] ?? [])]).toEqual([9, 10]);
+
+    const closed = callback<[Error | null]>();
+    store.destroy(closed.done);
+    expect((await closed.settled)[0]).toBeNull();
+    const afterClose = callback<[Error | null, Uint8Array?]>();
+    store.get(0, afterClose.done);
+    expect((await afterClose.settled)[0]?.message).toBe("Storage is closed");
+  });
+
+  it("rejects pieces outside the torrent length and reports missing pieces", async () => {
+    expect(() => new PageMemoryChunkStore(4, {})).toThrow(/length/u);
+    expect(() => new PageMemoryChunkStore(0, { length: 4 })).toThrow(/chunk length/u);
+    const store = new PageMemoryChunkStore(4, { length: 10 });
+    for (const [index, length] of [[0, 3], [2, 4], [3, 2], [-1, 4]] as const) {
+      const put = callback<[Error | null]>();
+      store.put(index, new Uint8Array(length), put.done);
+      expect((await put.settled)[0]?.message).toBe("Unexpected WebTorrent chunk.");
+    }
+    const missing = callback<[Error & { notFound?: boolean } | null, Uint8Array?]>();
+    store.get(1, null, missing.done);
+    expect((await missing.settled)[0]?.notFound).toBe(true);
   });
 });

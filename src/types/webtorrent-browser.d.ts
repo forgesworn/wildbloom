@@ -21,6 +21,7 @@ declare module "webtorrent/dist/webtorrent.min.js" {
     urlList?: string[];
     name?: string;
     private?: boolean;
+    store?: new (chunkLength: number, options: { length?: number }) => unknown;
   }
 
   interface WebTorrentClientOptions {

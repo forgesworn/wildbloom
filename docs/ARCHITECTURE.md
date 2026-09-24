@@ -96,12 +96,15 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
    author, exact fields and a valid signature.
 4. The browser uploads the unchanged bytes with BUD-02 and rejects a descriptor
    whose URL, hash or size differs.
-5. In direct mode it creates a one-file BitTorrent v1 descriptor containing
-   the Blossom URL as a web seed and user-selected WebSocket trackers.
+5. In direct mode, when trackers are configured, it creates a one-file
+   BitTorrent v1 descriptor containing the Blossom URL as a web seed and the
+   user-selected WebSocket trackers. An empty list creates no torrent and
+   needs no tracker service; invalid non-empty endpoints are still rejected
+   before signing or upload. No public defaults are supplied.
    WebTorrent receives an explicit empty ICE-server list; it must not inherit
    library-supplied public STUN/TURN infrastructure.
-6. NIP-07 or the external handoff signs a NIP-94 file event and, in direct
-   mode, a NIP-35 torrent index. The encryption scheme is an explicit versioned extension tag.
+6. NIP-07 or the external handoff signs a NIP-94 file event and, when torrent
+   metadata was prepared, a NIP-35 torrent index. The encryption scheme is an explicit versioned extension tag.
    For protected events, `x` and NIP-94's pre-upload-server-transformation
    `ox` both hash the randomised encrypted envelope. Neither may contain the
    plaintext source hash, which would create a confirmation oracle. The URL,
@@ -131,7 +134,9 @@ Browser usability or fingerprint equivalence.
 
 ## Retrieval
 
-1. Query chosen relays by an exact 64-hex event ID.
+1. Query chosen relays by an exact 64-hex event ID, or import a saved signed
+   event as bounded canonical JSON and verify it locally. Import makes no
+   network request and requires a matching ID if the user supplies one.
 2. Accept only a valid kind `1063` event with a valid Nostr signature.
 3. Require exactly one URL, MIME type, `x`, `ox` and byte count, with both
    SHA-256 tags identifying the same unchanged bytes. Magnet and info hash must
@@ -147,6 +152,13 @@ Browser usability or fingerprint equivalence.
 8. Offer verified bytes only through an octet-stream, `noopener` save link.
    Blob URLs inherit the creating page's origin, so remote MIME types are never
    allowed to become navigable HTML or SVG within Wildbloom's authority.
+
+The publisher can save the signed file event before publishing it to relays;
+a retriever can save the verified event too. These exports contain canonical
+public event fields only, never the file recovery key. Import uses the same
+file-event verifier as relay discovery, and every subsequent download remains
+a distinct action. No relay service or publishing signer is needed for saved
+event recovery. This retains discovery data, not a replica of the file.
 
 ## Deliberate omissions
 

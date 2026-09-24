@@ -69,6 +69,9 @@ Review `src/main.ts` and the injected boundaries in `src/core/` for:
 
 - absence of raw private-key or `nsec` input;
 - exact-template validation after NIP-07 and manual external signing;
+- canonical signed-file-event export and bounded local import, including
+  signature/expected-ID checks, untrusted author identity and no network
+  activity until a separate fetch action;
 - no application network action on load;
 - distinct, revocable consent for upload, relay publication, seeding, lookup
   and download;
@@ -94,8 +97,9 @@ upload-authorisation lifetime and hostname/hash scope, descriptor validation,
 hash and byte-count binding, torrent reconstruction, single-file enforcement,
 web-seed authority and tracker/ICE disclosure.
 
-The `encryption` tag value `wildbloom-aes-256-gcm-chunked-v1` is a documented
-Wildbloom extension. The review must distinguish draft requirements, local
+The current `encryption` tag value `forgesworn-aes-256-gcm-chunked-v2` is a
+documented shared envelope extension; `wildbloom-aes-256-gcm-chunked-v1` remains
+a historical read extension. The review must distinguish draft requirements, local
 implementation choices and extension behaviour, and identify any unsupported
 interoperability claim.
 

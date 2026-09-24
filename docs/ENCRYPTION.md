@@ -77,12 +77,15 @@ canonical form. Specifically:
 - `size` MUST be the source byte count as a base-10 JSON integer: no sign, no
   exponent, no leading zeros.
 - `name` MUST be the source filename after, in order: taking the final path
-  component after either `/` or `\`; Unicode NFC
-  normalisation; removal of code points `U+0000`–`U+001F` and `U+007F`; mapping
-  each of `< > : " | ? *` to `_`; removal of leading `.`; trimming of leading
-  and trailing whitespace; replacement by `blob.bin` if the result is empty; and
-  truncation to at most 180 UTF-16 code units. The stored `name` MUST be a fixed
-  point of this function; a decoder recomputes it and rejects a mismatch.
+  component after either `/` or `\`; removal of code points `U+0000`–`U+001F`
+  and `U+007F`; Unicode NFC normalisation; mapping
+  each of `< > : " | ? *` to `_`; removal of every leading `.` and whitespace
+  code point, in any order; removal of trailing whitespace; replacement by
+  `blob.bin` if the result is empty; and truncation to at most 180 UTF-16 code
+  units without splitting a surrogate pair, followed by removal of trailing
+  whitespace. Whitespace is the ECMAScript `WhiteSpace` and `LineTerminator`
+  set, which includes `U+FEFF`. The stored `name` MUST be a fixed point of this
+  function; a decoder recomputes it and rejects a mismatch.
 - `type` MUST be the source media type lower-cased, with an empty value replaced
   by `application/octet-stream`. A value longer than 255 characters or containing
   `U+0000`–`U+001F` or `U+007F` MUST be rejected; it is not trimmed or repaired.

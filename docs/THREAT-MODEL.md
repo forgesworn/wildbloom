@@ -73,7 +73,7 @@
 | Direct-mode signer approval finishes after a switch to Tor-only mode | Discard the signature, clear the signer identity and require a fresh Tor-profile connection |
 | User withdraws Tor, upload, relay-publication or swarm consent during active work | Abort the corresponding pending work and clear downstream authority; already uploaded bytes or sent relay events cannot be retracted |
 | User withdraws swarm consent after verified bytes arrive | Confirm destruction of the retained peer session before reporting that participation stopped; if cleanup cannot be confirmed, instruct the user to close the tab |
-| Browser or dependency attempts to persist state | Production code uses no cookie or persistent browser store; acceptance instruments mutations and requires empty cookies, local/session storage, IndexedDB, Cache Storage and service-worker registrations after the journey |
+| Browser or dependency attempts to persist state | Production code uses no cookie or persistent browser store; acceptance instruments mutations and requires empty cookies, local/session storage, IndexedDB, Cache Storage, origin-private file system and service-worker registrations after the journey; WebTorrent pieces use an in-memory store instead of its default file-system store |
 | A stale `localStorage.debug` preference enables WebTorrent diagnostics | Mask only that preference during the lazy dependency import, preserve the stored value unchanged, and prove that peer journeys emit no debug output |
 | Navigation or back-forward cache retains recovery material or network authority | On `pagehide`, invalidate pending results, abort work, clear page memory and controls, revoke object URLs and start peer cleanup; force a fresh document if BFCache restores the page |
 

@@ -7,12 +7,13 @@ through three existing protocols:
 
 - Nostr provides signed discovery and attribution.
 - Blossom provides content-addressed HTTP upload and retrieval.
-- BitTorrent/WebTorrent provides peer delivery, with the Blossom URL embedded
-  as a web seed.
+- BitTorrent/WebTorrent provides optional peer delivery, with the Blossom URL
+  embedded as a web seed.
 
 The primary object is a standard NIP-94 kind `1063` event containing a Blossom
-URL, SHA-256, magnet URI and torrent info hash. Wildbloom also creates a NIP-35
-kind `2003` torrent index event. It does not put file bytes on Nostr and does
+URL and SHA-256. When trackers are configured in direct mode, it also contains
+a magnet URI and torrent info hash, alongside a NIP-35 kind `2003` torrent index
+event. Wildbloom does not put file bytes on Nostr and does
 not turn the browser itself into a storage node. The companion
 [Wildbloom Node](https://github.com/forgesworn/wildbloom-node) project adds
 operator-owned, persistent Blossom storage and authorised replication without
@@ -48,11 +49,14 @@ the file.
 For recovery after losing a browser session or the original storage server,
 see the [application recovery journey](docs/APPLICATION-RECOVERY.md). An
 explicitly chosen existing replica is checked against the original signed
-hash and size before local decryption.
+hash and size before local decryption. Save the signed file event as well as
+the separate recovery key to recover without relying on a discovery relay.
+The saved event can be verified locally in a fresh browser; only the explicit
+fetch contacts the chosen storage server.
 
 ## Network profiles
 
-- **Direct encrypted delivery:** Nostr, Blossom and WebTorrent. Servers,
+- **Direct encrypted delivery:** Nostr, Blossom and optional WebTorrent. Servers,
   trackers and peers can observe network metadata and IP addresses. Wildbloom
   supplies no implicit public STUN/TURN server, so current peer connectivity is
   deliberately best-effort and may be limited to compatible local networks.
@@ -100,9 +104,11 @@ need the native Node install hooks carried by WebTorrent's cross-runtime
 dependency tree. Hosted Playwright commands also resolve the already locked
 package offline rather than allowing `npx` to fetch a missing package.
 
-Open the local URL printed by Vite. Supply your own Blossom server, Nostr
-relays and WebSocket trackers. Wildbloom deliberately carries no endorsed
-network defaults.
+Open the local URL printed by Vite. Supply your own Blossom server and Nostr
+relays. WebSocket trackers are optional: leave them blank for Blossom delivery,
+or configure them before uploading to also prepare torrent metadata. Seeding
+still requires a separate consent and action. Wildbloom deliberately carries
+no endorsed network defaults.
 
 ## Verify it
 
