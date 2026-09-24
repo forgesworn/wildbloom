@@ -64,6 +64,14 @@ describe("Wildbloom privacy envelopes", () => {
     expect(await decrypted.text()).toBe("flip to v2");
   }, 20_000);
 
+  it("round-trips names whose leading whitespace hides a dot", async () => {
+    for (const name of [" .env", "\uFEFF.bashrc", `${"n".repeat(179)} x.txt`]) {
+      const protectedFile = await encryptPrivacyEnvelope(new File(["name edge"], name, { type: "text/plain" }));
+      const decrypted = await decryptPrivacyEnvelope(protectedFile.file, protectedFile.recoveryKey);
+      expect(await decrypted.text()).toBe("name edge");
+    }
+  }, 20_000);
+
   it("recovers the independent two-record vector across the authenticated chunk boundary", async () => {
     const fixture = emittedVector("--emit-multirecord");
     expect(fixture.envelopeBytes).toBe(2_097_208);
