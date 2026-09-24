@@ -63,15 +63,21 @@ export async function assertNoBrowserPersistence(page, context, label) {
       : null,
     // WebTorrent's file-system chunk store writes here, and its import alone
     // opens the root, so audit the resulting entries rather than the call. A
-    // browser without the API has no such store to retain; an enumeration
-    // failure where the API exists still fails the audit.
-    originPrivateEntries: typeof navigator.storage?.getDirectory === "function"
-      ? await (async () => {
-        const names = [];
-        for await (const name of (await navigator.storage.getDirectory()).keys()) names.push(name);
-        return names;
-      })()
-      : [],
+    // context that cannot obtain the root, such as a WebKit ephemeral session,
+    // has no such store to retain; failing to enumerate an obtained root still
+    // fails the audit.
+    originPrivateEntries: await (async () => {
+      if (typeof navigator.storage?.getDirectory !== "function") return [];
+      let root;
+      try {
+        root = await navigator.storage.getDirectory();
+      } catch {
+        return [];
+      }
+      const names = [];
+      for await (const name of root.keys()) names.push(name);
+      return names;
+    })(),
   }));
   const contextCookies = await context.cookies();
   const failures = [];
