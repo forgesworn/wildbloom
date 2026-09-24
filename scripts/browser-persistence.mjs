@@ -61,7 +61,10 @@ export async function assertNoBrowserPersistence(page, context, label) {
     serviceWorkers: navigator.serviceWorker
       ? (await navigator.serviceWorker.getRegistrations()).length
       : null,
-    // WebTorrent's file-system chunk store writes here without a mutation hook.
+    // WebTorrent's file-system chunk store writes here, and its import alone
+    // opens the root, so audit the resulting entries rather than the call. A
+    // browser without the API has no such store to retain; an enumeration
+    // failure where the API exists still fails the audit.
     originPrivateEntries: typeof navigator.storage?.getDirectory === "function"
       ? await (async () => {
         const names = [];

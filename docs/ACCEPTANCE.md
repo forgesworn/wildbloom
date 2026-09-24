@@ -63,7 +63,8 @@ the finish line.
   MIME, cache, security-header, size or SHA-256 drift.
 - No remote request on page load.
 - No application mutation or retained entries in cookies, local or session
-  storage, IndexedDB, Cache Storage or service workers after a complete browser
+  storage, IndexedDB, Cache Storage, the origin-private file system or service
+  workers after a complete browser
   journey. Secret and structured controls carry browser-retention hints.
 - Peer journeys preserve but do not consume a hostile pre-existing
   `localStorage.debug` preference, emit no dependency debug diagnostics, then

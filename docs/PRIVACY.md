@@ -95,9 +95,12 @@ cannot make a reused Nostr key or the signer's own network activity anonymous.
 ## Browser state
 
 Wildbloom does not persist application data in cookies, local or session
-storage, IndexedDB, Cache Storage or a service worker. Production browser
-acceptance checks those stores after complete publication and retrieval
-journeys, and records any attempted mutation of their persistent APIs. Peer
+storage, IndexedDB, Cache Storage, the origin-private file system or a service
+worker. WebTorrent would otherwise keep torrent pieces in the origin-private
+file system, so seeding and swarm retrieval hold them in page memory instead:
+up to the file size while seeding, and roughly twice that while a swarm
+download is verified. Production browser acceptance checks those stores after
+complete publication and retrieval journeys, and records any attempted mutation of their persistent APIs. Peer
 acceptance also plants a pre-existing `localStorage.debug` preference and proves
 that WebTorrent neither consumes nor changes it; this prevents a stale browser
 setting from enabling dependency diagnostics in production.
