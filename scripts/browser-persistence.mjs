@@ -61,6 +61,14 @@ export async function assertNoBrowserPersistence(page, context, label) {
     serviceWorkers: navigator.serviceWorker
       ? (await navigator.serviceWorker.getRegistrations()).length
       : null,
+    // WebTorrent's file-system chunk store writes here without a mutation hook.
+    originPrivateEntries: typeof navigator.storage?.getDirectory === "function"
+      ? await (async () => {
+        const names = [];
+        for await (const name of (await navigator.storage.getDirectory()).keys()) names.push(name);
+        return names;
+      })()
+      : [],
   }));
   const contextCookies = await context.cookies();
   const failures = [];
@@ -82,6 +90,9 @@ export async function assertNoBrowserPersistence(page, context, label) {
   else if (state.cacheEntries !== 0) failures.push(`Cache Storage has ${state.cacheEntries} entries`);
   if (state.serviceWorkers === null) failures.push("service-worker enumeration is unavailable");
   else if (state.serviceWorkers !== 0) failures.push(`${state.serviceWorkers} service workers are registered`);
+  if (state.originPrivateEntries.length !== 0) {
+    failures.push(`the origin-private file system has ${state.originPrivateEntries.length} entries`);
+  }
   if (contextCookies.length !== 0) failures.push(`the browser context has ${contextCookies.length} cookies`);
   if (failures.length > 0) throw new Error(`${label} retained browser state: ${failures.join("; ")}.`);
 }
