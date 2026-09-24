@@ -783,7 +783,7 @@ seedConsent.addEventListener("change", () => {
 
 seedButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !torrentPlan || !seedConsent.checked) throw new Error("Build the torrent and acknowledge swarm visibility first.");
-  if (seedController) throw new Error("WebTorrent is already starting.");
+  if (seedController || seedSession) throw new Error("WebTorrent is already starting or seeding.");
   const controller = new AbortController();
   seedController = controller;
   setStatus(publishStatus, "Joining the WebTorrent swarm…");
@@ -795,9 +795,12 @@ seedButton.addEventListener("click", () => guard(publishStatus, async () => {
     stopSeedButton.disabled = false;
     setStatus(publishStatus, `Seeding ${torrentPlan.infoHash}. Keep this tab open to remain a peer.`);
   } catch (error) {
-    if (seedController === controller) seedController = null;
-    stopSeedButton.disabled = true;
-    seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+    // A cancelled attempt must not reset controls that now belong to a newer one.
+    if (seedController === controller) {
+      seedController = null;
+      stopSeedButton.disabled = true;
+      seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+    }
     throw error;
   }
 }));
@@ -996,14 +999,20 @@ swarmConsent.addEventListener("change", () => {
 swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
   if (!resolved || !resolved.magnetUri || !swarmConsent.checked) throw new Error("Resolve a torrent event and acknowledge swarm visibility first.");
   if (downloadController) throw new Error("A download is already in progress.");
+  const selectedResolved = resolved;
+  const selectedProfile = profile();
+  const expectedRevision = resolutionRevision;
   if (downloadSession) {
     const previousSession = downloadSession;
     downloadSession = null;
     await confirmPeerStopped(previousSession);
+    // Consent, the event or another download may have changed during cleanup.
+    if (!swarmConsent.checked
+      || downloadController
+      || resolved !== selectedResolved
+      || resolutionRevision !== expectedRevision
+      || profile() !== selectedProfile) return;
   }
-  const selectedResolved = resolved;
-  const selectedProfile = profile();
-  const expectedRevision = resolutionRevision;
   const controller = new AbortController();
   downloadController = controller;
   downloadTransport = "swarm";
