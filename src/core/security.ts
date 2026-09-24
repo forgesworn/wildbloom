@@ -64,8 +64,8 @@ function requireSecureTransport(
     if (url.protocol === secureProtocol || url.protocol === localProtocol) return;
     throw new Error(`Tor-only endpoints must use ${secureProtocol} or ${localProtocol}.`);
   }
-  // A trailing root dot still names an onion service and must not reach DNS.
-  if (url.hostname.replace(/\.$/u, "").endsWith(".onion")) {
+  // Trailing root dots still name an onion service, which must not reach DNS.
+  if (url.hostname.replace(/\.+$/u, "").endsWith(".onion")) {
     throw new Error("Select Tor-only mode before using an onion service.");
   }
   if (url.protocol === secureProtocol) return;
@@ -134,8 +134,10 @@ export function parseEndpointList(value: string, parser: (entry: string) => stri
 export function sanitiseFileName(value: string): string {
   const leaf = value.split(/[\\/]/u).at(-1) ?? "";
   const cleaned = leaf
-    .normalize("NFC")
+    // Remove controls before NFC so a removed control cannot leave a newly
+    // composable sequence behind.
     .replace(/[\u0000-\u001f\u007f]/gu, "")
+    .normalize("NFC")
     .replace(/[<>:"|?*]/gu, "_")
     // Strip dots and whitespace together so a second pass cannot change the
     // result; readers require the stored name to be a fixed point.

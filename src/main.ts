@@ -116,6 +116,7 @@ let downloadController: AbortController | null = null;
 let seedController: AbortController | null = null;
 let resolved: ResolvedHybridEvent | null = null;
 let downloadTransport: "blossom" | "swarm" | null = null;
+let swarmCleanupPending = false;
 let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
@@ -390,7 +391,7 @@ function updateUploadButton(): void {
 function updateRetrievalButtons(): void {
   const busy = downloadController !== null;
   blossomFetchButton.disabled = busy || !resolved;
-  swarmFetchButton.disabled = busy || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
+  swarmFetchButton.disabled = busy || swarmCleanupPending || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
   cancelDownloadButton.disabled = !busy;
 }
 
@@ -795,11 +796,15 @@ seedButton.addEventListener("click", () => guard(publishStatus, async () => {
     stopSeedButton.disabled = false;
     setStatus(publishStatus, `Seeding ${torrentPlan.infoHash}. Keep this tab open to remain a peer.`);
   } catch (error) {
-    // A cancelled attempt must not reset controls that now belong to a newer one.
+    // A cancelled attempt must not reset controls or status that now belong to
+    // a newer one; cleanup failures are still reported.
     if (seedController === controller) {
       seedController = null;
       stopSeedButton.disabled = true;
       seedButton.disabled = !(seedConsent.checked && inspected && torrentPlan && profile() === "direct");
+    } else if ((seedController || seedSession) && controller.signal.aborted
+      && error instanceof Error && error.message === "WebTorrent seeding cancelled.") {
+      return;
     }
     throw error;
   }
@@ -1005,13 +1010,29 @@ swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () 
   if (downloadSession) {
     const previousSession = downloadSession;
     downloadSession = null;
-    await confirmPeerStopped(previousSession);
+    swarmCleanupPending = true;
+    updateRetrievalButtons();
+    setStatus(retrieveStatus, "Leaving the previous WebTorrent swarm session…");
+    try {
+      await confirmPeerStopped(previousSession);
+    } catch (error) {
+      swarmConsent.checked = false;
+      throw error;
+    } finally {
+      swarmCleanupPending = false;
+      updateRetrievalButtons();
+    }
     // Consent, the event or another download may have changed during cleanup.
     if (!swarmConsent.checked
       || downloadController
       || resolved !== selectedResolved
       || resolutionRevision !== expectedRevision
-      || profile() !== selectedProfile) return;
+      || profile() !== selectedProfile) {
+      if (!downloadController && resolutionRevision === expectedRevision) {
+        setStatus(retrieveStatus, "Previous swarm session stopped. No new swarm download was started.");
+      }
+      return;
+    }
   }
   const controller = new AbortController();
   downloadController = controller;
