@@ -292,6 +292,14 @@ security-header boundary before emitting a timestamped verification record.
 These specifications are draft/optional where they say so. Compatibility is
 therefore tested against the documented shapes, not promised forever.
 
+## Legal
+
+Drafts for the operator to check and adopt, not legal advice:
+
+- [Online Safety Act position](docs/legal/online-safety-position-draft.md)
+- [Privacy notice](docs/legal/privacy-notice-draft.md)
+- [Terms of use](docs/legal/terms-draft.md)
+
 ## Name
 
 Wildbloom is a working name and has not received legal trade mark clearance.
