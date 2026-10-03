@@ -1,12 +1,11 @@
 name: Deploy Cloudflare production
 
+# Every push to main is the reviewed source: it runs the full release gate,
+# deploys and verifies the live origin. Run it by hand to redeploy main.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      source_commit:
-        description: Exact reviewed main commit to deploy
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -31,13 +30,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Require the reviewed main source and custom production origin
+      - name: Require the main source and custom production origin
         env:
-          REQUESTED_SOURCE_COMMIT: ${{ inputs.source_commit }}
           PRODUCTION_ORIGIN: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN }}
         run: >-
           node scripts/assert-production-context.mjs
-          --source-commit "$REQUESTED_SOURCE_COMMIT"
+          --source-commit "$GITHUB_SHA"
           --workflow-ref "$GITHUB_REF"
           --origin "$PRODUCTION_ORIGIN"
       - name: Run the complete release gate

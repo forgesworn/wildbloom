@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: production-monitor
@@ -14,14 +15,29 @@ concurrency:
 
 jobs:
   verify:
-    if: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN != '' && vars.WILDBLOOM_PRODUCTION_COMMIT != '' }}
+    if: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The live origin should serve whatever the last successful production
+      # deployment shipped. A dashboard rollback or a half-finished deploy
+      # therefore fails this check until main is deployed again.
+      - name: Find the last successfully deployed commit
+        id: production
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          commit="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow cloudflare-production.yml \
+            --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // ""')"
+          if [ -z "$commit" ]; then
+            echo "No successful production deployment is recorded." >&2
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ vars.WILDBLOOM_PRODUCTION_COMMIT }}
+          ref: ${{ steps.production.outputs.commit }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
@@ -29,7 +45,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Require the recorded production source and custom origin
         env:
-          PRODUCTION_SOURCE_COMMIT: ${{ vars.WILDBLOOM_PRODUCTION_COMMIT }}
+          PRODUCTION_SOURCE_COMMIT: ${{ steps.production.outputs.commit }}
           PRODUCTION_ORIGIN: ${{ vars.WILDBLOOM_PRODUCTION_ORIGIN }}
         run: >-
           node scripts/assert-production-context.mjs
