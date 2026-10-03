@@ -189,6 +189,7 @@ footer p { margin: 0.45rem 0; }
 .diagram { margin: 2rem 0 0; padding: clamp(1rem, 3vw, 1.75rem); border: 1px solid var(--line); border-radius: 18px; background: rgba(16, 22, 18, 0.74); }
 .diagram svg { display: block; width: 100%; height: auto; }
 .diagram svg { max-width: 760px; margin: 0 auto; }
+.diagram svg.dg-tall { display: none; }
 .diagram figcaption { max-width: 640px; margin: 1.1rem auto 0; color: #c8d0c7; font-size: 1rem; line-height: 1.55; text-align: center; }
 .diagram-pair { display: grid; gap: 0; }
 .dg-box { fill: #101712; stroke: #41604a; stroke-width: 2; }
@@ -259,6 +260,8 @@ footer p { margin: 0.45rem 0; }
   button { width: 100%; }
   .inline-actions { width: 100%; }
   .diagram { padding: 0.75rem; border-radius: 12px; }
+  .diagram svg.dg-wide { display: none; }
+  .diagram svg.dg-tall { display: block; max-width: 420px; }
   .compare-table thead { display: none; }
   .compare-table tr { display: block; padding: 1rem 0; border-bottom: 1px solid var(--line); }
   .compare-table th, .compare-table td { display: block; width: auto; padding: 0.2rem 0; border: 0; }
