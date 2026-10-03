@@ -11,9 +11,12 @@ Create a `production` environment restricted to the `main` branch.  Configure:
   the Wildbloom account;
 - environment secret `CLOUDFLARE_ACCOUNT_ID`;
 - repository variable `WILDBLOOM_PRODUCTION_ORIGIN`, containing one custom
-  HTTPS origin with no path, query, fragment or credentials;
-- repository variable `WILDBLOOM_PRODUCTION_COMMIT`, containing the full
-  lowercase commit currently served at that origin.
+  HTTPS origin with no path, query, fragment or credentials.
+
+The environment has no required reviewer: merging to `main` is the review, and
+every push to `main` deploys.  The monitor finds the commit to check from the
+last successful `Deploy Cloudflare production` run, so no variable has to be
+updated by hand after a release.
 
 The deployment workflow refuses GitHub Pages and `pages.dev` preview hosts as
 production.  The Cloudflare token is not available to pull requests and no
@@ -29,16 +32,15 @@ clean install rather than being fetched by `npx` during deployment.
    Wildbloom itself has no analytics, account or application request logging,
    but the DNS, TLS and edge operators can still observe requests and IP
    metadata.
-3. Run the `Deploy Cloudflare production` workflow from `main`.  Enter the full
-   reviewed commit shown by GitHub, not a branch name or abbreviated hash.
+3. Merge to `main`, or run the `Deploy Cloudflare production` workflow by hand
+   to redeploy the current `main`.
 4. The workflow runs the complete release gate, records exact build evidence,
    adds only the reviewed Pages headers and health file, deploys that commit,
    then waits for the custom domain to serve the exact hashes and edge policy.
-5. After the workflow passes, set `WILDBLOOM_PRODUCTION_COMMIT` to that exact
-   commit and run `Verify production deployment` manually.  Its six-hour
-   schedule then rebuilds that recorded commit and checks the live origin.  The
-   scheduled job remains disabled until both production variables are present,
-   so a preview is never silently adopted as its baseline.
+   Concurrent pushes queue; only the newest waiting commit deploys.
+5. `Verify production deployment` runs every six hours.  It rebuilds the commit
+   of the last successful deployment and checks the live origin serves exactly
+   those bytes.  It stays disabled until `WILDBLOOM_PRODUCTION_ORIGIN` is set.
 6. Retain the production evidence artefact outside the web root.  Record the
    deployment run, DNS state, certificate state, Pages deployment identifier,
    operator, approval and current rollback target in the private release log.
@@ -53,9 +55,12 @@ Cloudflare Pages retains deployments and permits a previous production
 deployment to be rolled back from the dashboard.  Record the intended previous
 deployment before release.  If deployment or monitoring fails:
 
-1. stop further production runs;
+1. disable the `Deploy Cloudflare production` workflow so a push cannot
+   redeploy the fault;
 2. roll back to the last independently verified production deployment;
-3. restore `WILDBLOOM_PRODUCTION_COMMIT` to that deployment's exact source;
+3. revert the faulty change on `main`, re-enable the workflow and let it
+   deploy the revert (until then the monitor reports a mismatch, which is
+   expected);
 4. run `Verify production deployment` and retain its result;
 5. record the start, detection, rollback and verification times, affected
    origin, operators and known exposure without putting private user material
