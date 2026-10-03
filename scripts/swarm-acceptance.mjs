@@ -271,7 +271,7 @@ async function createAuditedPage(context, label, origin, allowedOrigins) {
     Object.defineProperty(window, "RTCPeerConnection", { configurable: false, value: AuditedPeerConnection });
   });
   await page.addInitScript(installBrowserPersistenceAudit);
-  await page.goto(origin, { waitUntil: "networkidle" });
+  await page.goto(`${origin}/#client`, { waitUntil: "networkidle" });
   const record = { label, page, errors, requests, webSockets, debugMessages };
   pages.push(record);
   return record;

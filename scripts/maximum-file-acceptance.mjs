@@ -305,7 +305,7 @@ try {
       await route.abort("blockedbyclient");
     }
   });
-  await page.goto(origin, { waitUntil: "networkidle" });
+  await page.goto(`${origin}/#client`, { waitUntil: "networkidle" });
   if (undeclaredRequests.length > 0) {
     throw new Error(`Maximum-file page made ambient requests: ${undeclaredRequests.join("; ")}`);
   }
@@ -376,7 +376,7 @@ try {
     throw new Error("Maximum recovery did not reproduce the exact 256 MiB source.");
   }
 
-  await page.goto(origin, { waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "networkidle" });
   await selectGeneratedFile(page, MAXIMUM_SOURCE_BYTES + 1, "too-large.bin");
   await page.click("#inspect-file");
   await page.locator("#publish-status.error").filter({ hasText: "limited to 256 MiB" }).waitFor({ timeout: 10_000 });

@@ -428,7 +428,7 @@ async function launchFirefox(firefox, appOrigin, allowedOrigins, ceremony) {
     process: processHandle,
     requests,
   };
-  await bidi.command("browsingContext.navigate", { context, url: appOrigin, wait: "complete" }, ACTION_TIMEOUT_MS);
+  await bidi.command("browsingContext.navigate", { context, url: `${appOrigin}/#client`, wait: "complete" }, ACTION_TIMEOUT_MS);
   const ready = await evaluate(record, `(() => ({
     marker: Boolean(document.querySelector("#inspect-file")),
     origin: location.origin,
@@ -520,7 +520,7 @@ async function launchSafari(safari, appOrigin, ceremony) {
     requests: [],
     webdriver,
   };
-  await webdriver.navigate(appOrigin, ACTION_TIMEOUT_MS);
+  await webdriver.navigate(`${appOrigin}/#client`, ACTION_TIMEOUT_MS);
   await evaluate(record, `(() => {
     window.__wildbloomFirefoxWebRtcUsed = false;
     window.__wildbloomPageErrors = [];

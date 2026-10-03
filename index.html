@@ -33,11 +33,12 @@
           <a href="#blossom">Blossom</a>
           <a href="#install">Install</a>
           <a href="#protocol">Protocol</a>
-          <a href="#use-wildbloom">Use it</a>
+          <a href="#client">Open the client</a>
           <a href="https://github.com/forgesworn/wildbloom" rel="noreferrer">GitHub</a>
         </div>
       </nav>
 
+      <div id="overview">
       <header id="top" class="masthead hero">
         <p class="eyebrow">ForgeSworn · open source · MIT</p>
         <h1>Wildbloom</h1>
@@ -49,7 +50,7 @@
           optional Tor.
         </p>
         <div class="hero-actions">
-          <a class="button-link" href="#use-wildbloom">Use Wildbloom</a>
+          <a class="button-link" href="#client">Open the client</a>
           <a class="button-link secondary" href="#install">Run a node</a>
         </div>
         <ul class="hero-facts" aria-label="Wildbloom principles">
@@ -367,8 +368,8 @@
           <article>
             <p class="platform">Any modern browser</p>
             <h3>Wildbloom</h3>
-            <p>The publishing tool runs here.  For onion endpoints, use Tor Browser and read the privacy boundary before connecting.</p>
-            <a href="#use-wildbloom">Open the publishing tool</a>
+            <p>The client runs in your browser and connects only to servers you name.  This site stores nothing.  For onion endpoints, use Tor Browser and read the privacy boundary before connecting.</p>
+            <a href="#client">Open the client</a>
           </article>
         </div>
       </section>
@@ -409,10 +410,20 @@
           WebRTC, STUN or TURN.
         </p>
       </section>
+      </div>
 
-      <header id="use-wildbloom" class="tool-intro">
-        <p class="section-kicker">Browser tool</p>
-        <h2>Publish or retrieve a file</h2>
+      <div id="client" hidden>
+      <header class="tool-intro">
+        <p class="section-kicker">Browser client</p>
+        <h2 id="client-heading" tabindex="-1">Publish or retrieve a file</h2>
+        <p class="byo-notice">
+          <strong>This site stores nothing.</strong>  The client runs entirely
+          in your browser and talks only to the servers you enter below.  There
+          is no Wildbloom server, no default relay and no default storage.  To
+          publish, you need a Blossom server: run
+          <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Wildbloom Node</a>
+          or use one you trust.
+        </p>
         <p class="boundary">
           Wildbloom encrypts file content locally by default and keeps signing
           keys in your chosen signer.  Use NIP-07 or hand exact event JSON to an
@@ -452,8 +463,9 @@
 
         <div class="grid three">
           <label>
-            Blossom server
-            <input id="blossom-server" type="url" placeholder="https://cdn.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
+            Your Blossom server
+            <input id="blossom-server" type="url" aria-describedby="blossom-help" placeholder="https://cdn.example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" />
+            <small id="blossom-help">Needed to publish.  Wildbloom provides none.</small>
           </label>
           <label>
             Nostr relays <small>one per line</small>
@@ -653,6 +665,8 @@
         <output id="retrieve-status" class="status" aria-live="polite">No event resolved.</output>
         <div id="retrieve-links" class="downloads"></div>
       </section>
+      <p class="text-links"><a href="#top">Back to the overview</a></p>
+      </div>
 
       <footer>
         <p>Privacy is a set of bounded controls, not a badge.  Verify the threat model before using sensitive material.</p>

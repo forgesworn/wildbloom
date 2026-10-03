@@ -461,7 +461,7 @@ async function navigateOnionPage(page, label, appOrigin) {
   while (Date.now() < deadline) {
     attempts += 1;
     try {
-      const response = await page.goto(appOrigin, { waitUntil: "load", timeout: 30_000 });
+      const response = await page.goto(`${appOrigin}/#client`, { waitUntil: "load", timeout: 30_000 });
       if (!response?.ok()) throw new Error(`onion document returned HTTP ${response?.status() ?? "no response"}`);
       if (new URL(page.url()).origin !== appOrigin) throw new Error(`onion document left ${appOrigin}`);
       await page.locator("#inspect-file").waitFor({ state: "visible", timeout: 5_000 });
@@ -728,7 +728,7 @@ async function launchBrandedTorBrowser(torBrowser, socksPort, appOrigin, allowed
   let lastNavigationError = "no navigation attempted";
   await waitFor(async () => {
     try {
-      await bidi.command("browsingContext.navigate", { context, url: appOrigin, wait: "complete" }, 30_000);
+      await bidi.command("browsingContext.navigate", { context, url: `${appOrigin}/#client`, wait: "complete" }, 30_000);
       const ready = await brandedEvaluate(record, `(() => ({
         marker: Boolean(document.querySelector("#inspect-file")),
         origin: location.origin,
@@ -1116,7 +1116,7 @@ try {
   const downloadedPath = await download.path();
   if (!downloadedPath || !readFileSync(downloadedPath).equals(SOURCE_BYTES)) throw new Error("Real-onion recovery did not reproduce the source bytes.");
   if (await retriever.page.evaluate(() => window.__wildbloomTorWebRtcUsed)) throw new Error("Tor-only retrieval created WebRTC state.");
-  if (retriever.page.url() !== `${appOrigin}/`) throw new Error("Retriever left the exact app onion origin.");
+  if (retriever.page.url() !== `${appOrigin}/#client`) throw new Error("Retriever left the exact app onion origin.");
   process.stdout.write("The saved onion payload matches the exact source bytes.\n");
 
   if (torBrowser) {

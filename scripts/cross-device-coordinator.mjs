@@ -560,7 +560,7 @@ persistEvidence();
 server.listen(options.port, LOOPBACK, () => {
   process.stdout.write([
     `Wildbloom cross-device coordinator listening on http://${LOOPBACK}:${options.port}`,
-    `Open on both devices: ${options.publicOrigin.origin}/`,
+    `Open on both devices: ${options.publicOrigin.origin}/#client`,
     `Publisher fixture: ${options.publicOrigin.origin}${fixturePath}`,
     `Blossom: ${options.publicOrigin.origin}`,
     `Relay: ${options.publicOrigin.origin.replace(/^https:/u, "wss:")}/relay`,
