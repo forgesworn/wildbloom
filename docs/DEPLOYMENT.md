@@ -42,12 +42,12 @@ The GitHub Pages workflow is a public hosted preview and fallback.  GitHub Pages
 does not apply Cloudflare `_headers`, so it is not the verified production edge
 and must not replace the Cloudflare deployment record.
 
-The manual Cloudflare production workflow uses the exact locked Wrangler
-version, accepts only a full commit checked out from the `main` workflow ref,
+The Cloudflare production workflow runs on every push to `main`.  It uses
+the exact locked Wrangler version, accepts only a full commit checked out from the `main` workflow ref,
 and refuses a preview host as the production origin.  It runs the complete
 release gate, deploys the fixed `wildbloom` project and retains the release and
 live verification records for 90 days.  The scheduled monitor rebuilds the
-commit in `WILDBLOOM_PRODUCTION_COMMIT` every six hours and checks its exact
+commit of the last successful deployment every six hours and checks its exact
 bytes and edge policy at `WILDBLOOM_PRODUCTION_ORIGIN`.  See
 [`OPERATIONS.md`](OPERATIONS.md) for required secrets, variables, rollout and
 rollback.
