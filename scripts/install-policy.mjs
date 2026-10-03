@@ -13,7 +13,7 @@ const EXPECTED_NPM_MAJOR = 11;
 const EXPECTED_NODE_VERSION = "24.19.0";
 const EXPECTED_INSTALL_COMMAND = "npm ci --ignore-scripts";
 const EXPECTED_WORKFLOW_INSTALLS = 12;
-const EXPECTED_WRANGLER_VERSION = "4.138.0";
+const EXPECTED_WRANGLER_VERSION = "4.147.0";
 const REVIEWED_WORKFLOW_ACTIONS = Object.freeze({
   "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
   "actions/download-artifact": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
