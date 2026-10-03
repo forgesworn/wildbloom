@@ -30,6 +30,7 @@
         <a class="wordmark" href="#top" aria-label="Wildbloom home">Wildbloom</a>
         <div>
           <a href="#what">What it is</a>
+          <a href="#blossom">Blossom</a>
           <a href="#install">Install</a>
           <a href="#protocol">Protocol</a>
           <a href="#use-wildbloom">Use it</a>
@@ -98,6 +99,239 @@
           <article>
             <h3>Redundancy must be visible</h3>
             <p>Wildbloom uses content hashes and standard Blossom mirroring.  A second node is a real second copy, not a green tick backed by the same provider.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="blossom" class="story-section" aria-labelledby="blossom-heading">
+        <p class="section-kicker">How it relates to Blossom</p>
+        <h2 id="blossom-heading">Blossom does the storing.  Wildbloom handles everything around it.</h2>
+        <p class="story-intro">
+          Blossom is the storage protocol: put bytes on a server, fetch them
+          back by their SHA-256.  Wildbloom uses it unchanged and talks to any
+          Blossom server, not only its own.  What it adds happens before the
+          upload and after the server is gone.
+        </p>
+
+        <figure class="diagram diagram-wide">
+          <svg class="dg-wide" viewBox="0 0 680 420" role="img" aria-labelledby="dg-fit-title dg-fit-desc">
+            <title id="dg-fit-title">How the pieces fit</title>
+            <desc id="dg-fit-desc">Your browser encrypts the file and you sign each step.  Encrypted bytes go to a Blossom server, a signed NIP-94 event goes to Nostr relays, and torrent peers are an optional extra lane.</desc>
+            <defs>
+              <marker id="dg-fit-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
+            </defs>
+            <rect class="dg-box dg-accent" x="20" y="20" width="220" height="380" rx="18" />
+            <g class="dg-icon" transform="translate(130 128)">
+              <rect x="-24" y="-6" width="48" height="38" rx="6" />
+              <path d="M-14 -6v-12a14 14 0 0 1 28 0v12" />
+            </g>
+            <text class="dg-label" x="130" y="212">Your browser</text>
+            <text class="dg-sub" x="130" y="250">encrypts the file</text>
+            <text class="dg-sub" x="130" y="278">you sign each step</text>
+
+            <rect class="dg-box" x="440" y="20" width="220" height="100" rx="18" />
+            <text class="dg-label" x="550" y="64">Blossom server</text>
+            <text class="dg-sub" x="550" y="96">stores ciphertext</text>
+            <rect class="dg-box" x="440" y="160" width="220" height="100" rx="18" />
+            <text class="dg-label" x="550" y="204">Nostr relays</text>
+            <text class="dg-sub" x="550" y="236">carry the pointer</text>
+            <rect class="dg-box dg-dashed" x="440" y="300" width="220" height="100" rx="18" />
+            <text class="dg-label" x="550" y="344">Torrent peers</text>
+            <text class="dg-sub" x="550" y="376">optional extra lane</text>
+
+            <path class="dg-arrow" d="M244 70H432" marker-end="url(#dg-fit-head)" />
+            <text class="dg-edge" x="338" y="56">encrypted bytes</text>
+            <path class="dg-arrow" d="M244 210H432" marker-end="url(#dg-fit-head)" />
+            <text class="dg-edge" x="338" y="196">NIP-94 event</text>
+            <path class="dg-arrow dg-dashed" d="M244 350H432" marker-end="url(#dg-fit-head)" />
+            <text class="dg-edge" x="338" y="336">if you choose</text>
+          </svg>
+          <svg class="dg-tall" viewBox="0 0 360 550" role="img" aria-labelledby="dg-fit-t-title dg-fit-t-desc">
+            <title id="dg-fit-t-title">How the pieces fit</title>
+            <desc id="dg-fit-t-desc">Your browser encrypts the file and you sign each step.  Encrypted bytes go to a Blossom server, a signed NIP-94 event goes to Nostr relays, and torrent peers are an optional extra lane.</desc>
+            <defs>
+              <marker id="dg-fit-t-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
+            </defs>
+            <rect class="dg-box dg-accent" x="10" y="10" width="340" height="130" rx="18" />
+            <g class="dg-icon" transform="translate(62 70)">
+              <rect x="-24" y="-6" width="48" height="38" rx="6" />
+              <path d="M-14 -6v-12a14 14 0 0 1 28 0v12" />
+            </g>
+            <text class="dg-label" x="215" y="62">Your browser</text>
+            <text class="dg-sub" x="215" y="94">encrypts the file</text>
+            <text class="dg-sub" x="215" y="122">you sign each step</text>
+
+            <path class="dg-arrow" d="M40 140V365" />
+            <path class="dg-arrow dg-dashed" d="M40 365V495" />
+            <path class="dg-arrow" d="M40 235H82" marker-end="url(#dg-fit-t-head)" />
+            <path class="dg-arrow" d="M40 365H82" marker-end="url(#dg-fit-t-head)" />
+            <path class="dg-arrow dg-dashed" d="M40 495H82" marker-end="url(#dg-fit-t-head)" />
+
+            <text class="dg-edge dg-start" x="90" y="180">encrypted bytes</text>
+            <rect class="dg-box" x="90" y="190" width="260" height="90" rx="18" />
+            <text class="dg-label" x="220" y="228">Blossom server</text>
+            <text class="dg-sub" x="220" y="260">stores ciphertext</text>
+            <text class="dg-edge dg-start" x="90" y="310">NIP-94 event</text>
+            <rect class="dg-box" x="90" y="320" width="260" height="90" rx="18" />
+            <text class="dg-label" x="220" y="358">Nostr relays</text>
+            <text class="dg-sub" x="220" y="390">carry the pointer</text>
+            <text class="dg-edge dg-start" x="90" y="440">if you choose</text>
+            <rect class="dg-box dg-dashed" x="90" y="450" width="260" height="90" rx="18" />
+            <text class="dg-label" x="220" y="488">Torrent peers</text>
+            <text class="dg-sub" x="220" y="520">optional extra lane</text>
+          </svg>
+          <figcaption>The file never touches Nostr.  Relays carry a signed pointer: where to fetch, what hash and size to expect.</figcaption>
+        </figure>
+
+        <div class="diagram-pair">
+          <figure class="diagram">
+            <svg class="dg-wide" viewBox="0 0 640 360" role="img" aria-labelledby="dg-sees-title dg-sees-desc">
+              <title id="dg-sees-title">What the server sees</title>
+              <desc id="dg-sees-desc">A typical upload shows the server a readable file called holiday.jpg, its type and its size.  A Wildbloom upload shows only an encrypted, padded blob identified by its hash, with no name and no type.</desc>
+              <defs>
+                <pattern id="dg-hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path class="dg-hatch-line" d="M0 0V12" /></pattern>
+              </defs>
+              <rect class="dg-box" x="10" y="10" width="300" height="340" rx="18" />
+              <text class="dg-label" x="160" y="54">Typical upload</text>
+              <path class="dg-doc" d="M115 78h66l29 29v101h-95z" />
+              <path class="dg-doc-fold" d="M181 78v29h29" />
+              <circle class="dg-sun" cx="140" cy="130" r="10" />
+              <path class="dg-hills" d="M122 192l28-34 18 20 14-12 22 26z" />
+              <text class="dg-sub dg-ink" x="160" y="252">holiday.jpg</text>
+              <text class="dg-sub" x="160" y="284">image/jpeg · 2.4 MB</text>
+              <text class="dg-sub dg-warn-text" x="160" y="316">contents readable</text>
+
+              <rect class="dg-box dg-accent" x="330" y="10" width="300" height="340" rx="18" />
+              <text class="dg-label" x="480" y="54">Wildbloom upload</text>
+              <rect class="dg-blob" x="430" y="78" width="100" height="130" rx="6" />
+              <rect class="dg-blob-hatch" x="430" y="78" width="100" height="130" rx="6" fill="url(#dg-hatch)" />
+              <g class="dg-icon dg-icon-solid" transform="translate(480 140)">
+                <rect x="-20" y="-4" width="40" height="32" rx="5" />
+                <path d="M-12 -4v-10a12 12 0 0 1 24 0v10" />
+              </g>
+              <text class="dg-sub dg-ink dg-mono" x="480" y="252">3f9a…c21</text>
+              <text class="dg-sub" x="480" y="284">padded size only</text>
+              <text class="dg-sub dg-ok-text" x="480" y="316">no name, no type</text>
+            </svg>
+            <svg class="dg-tall" viewBox="0 0 360 700" role="img" aria-labelledby="dg-sees-t-title dg-sees-t-desc">
+              <title id="dg-sees-t-title">What the server sees</title>
+              <desc id="dg-sees-t-desc">A typical upload shows the server a readable file called holiday.jpg, its type and its size.  A Wildbloom upload shows only an encrypted, padded blob identified by its hash, with no name and no type.</desc>
+              <defs>
+                <pattern id="dg-hatch-t" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path class="dg-hatch-line" d="M0 0V12" /></pattern>
+              </defs>
+              <rect class="dg-box" x="10" y="10" width="340" height="330" rx="18" />
+              <g transform="translate(20 0)">
+                <text class="dg-label" x="160" y="54">Typical upload</text>
+                <path class="dg-doc" d="M115 78h66l29 29v101h-95z" />
+                <path class="dg-doc-fold" d="M181 78v29h29" />
+                <circle class="dg-sun" cx="140" cy="130" r="10" />
+                <path class="dg-hills" d="M122 192l28-34 18 20 14-12 22 26z" />
+                <text class="dg-sub dg-ink" x="160" y="252">holiday.jpg</text>
+                <text class="dg-sub" x="160" y="284">image/jpeg · 2.4 MB</text>
+                <text class="dg-sub dg-warn-text" x="160" y="316">contents readable</text>
+              </g>
+              <rect class="dg-box dg-accent" x="10" y="360" width="340" height="330" rx="18" />
+              <g transform="translate(-300 350)">
+                <text class="dg-label" x="480" y="54">Wildbloom upload</text>
+                <rect class="dg-blob" x="430" y="78" width="100" height="130" rx="6" />
+                <rect class="dg-blob-hatch" x="430" y="78" width="100" height="130" rx="6" fill="url(#dg-hatch-t)" />
+                <g class="dg-icon dg-icon-solid" transform="translate(480 140)">
+                  <rect x="-20" y="-4" width="40" height="32" rx="5" />
+                  <path d="M-12 -4v-10a12 12 0 0 1 24 0v10" />
+                </g>
+                <text class="dg-sub dg-ink dg-mono" x="480" y="252">3f9a…c21</text>
+                <text class="dg-sub" x="480" y="284">padded size only</text>
+                <text class="dg-sub dg-ok-text" x="480" y="316">no name, no type</text>
+              </g>
+            </svg>
+            <figcaption>Encryption covers the content, the filename and the type.  The server still sees your connection and the blob's hash.</figcaption>
+          </figure>
+
+          <figure class="diagram">
+            <svg class="dg-wide" viewBox="0 0 640 360" role="img" aria-labelledby="dg-gone-title dg-gone-desc">
+              <title id="dg-gone-title">When a server goes</title>
+              <desc id="dg-gone-desc">The original server has been switched off.  A mirror copied the blob earlier using BUD-04.  Later, you fetch from the mirror with your saved event and recovery key; the size and hash are checked before the file is decrypted.</desc>
+              <defs>
+                <marker id="dg-gone-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
+              </defs>
+              <rect class="dg-box dg-warn dg-dashed" x="10" y="20" width="250" height="110" rx="18" />
+              <text class="dg-label dg-faded" x="135" y="66">Original server</text>
+              <text class="dg-sub dg-warn-text" x="135" y="100">switched off</text>
+              <path class="dg-arrow dg-dashed" d="M135 134V212" marker-end="url(#dg-gone-head)" />
+              <text class="dg-edge dg-start" x="152" y="180">copied earlier</text>
+              <rect class="dg-box" x="10" y="220" width="250" height="110" rx="18" />
+              <text class="dg-label" x="135" y="266">Mirror</text>
+              <text class="dg-sub" x="135" y="300">any Blossom server</text>
+
+              <path class="dg-arrow" d="M264 275H372" marker-end="url(#dg-gone-head)" />
+              <text class="dg-edge" x="318" y="261">fetch</text>
+              <rect class="dg-box dg-accent" x="380" y="150" width="250" height="180" rx="18" />
+              <text class="dg-label" x="505" y="194">You, later</text>
+              <text class="dg-sub" x="505" y="230">saved event</text>
+              <text class="dg-sub" x="505" y="258">+ recovery key</text>
+              <path class="dg-tick" d="M436 292l10 10 18-20" />
+              <text class="dg-sub dg-ok-text dg-start" x="474" y="302">hash checked</text>
+            </svg>
+            <svg class="dg-tall" viewBox="0 0 360 530" role="img" aria-labelledby="dg-gone-t-title dg-gone-t-desc">
+              <title id="dg-gone-t-title">When a server goes</title>
+              <desc id="dg-gone-t-desc">The original server has been switched off.  A mirror copied the blob earlier using BUD-04.  Later, you fetch from the mirror with your saved event and recovery key; the size and hash are checked before the file is decrypted.</desc>
+              <defs>
+                <marker id="dg-gone-t-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
+              </defs>
+              <rect class="dg-box dg-warn dg-dashed" x="30" y="10" width="300" height="100" rx="18" />
+              <text class="dg-label dg-faded" x="180" y="54">Original server</text>
+              <text class="dg-sub dg-warn-text" x="180" y="88">switched off</text>
+              <path class="dg-arrow dg-dashed" d="M180 114V172" marker-end="url(#dg-gone-t-head)" />
+              <text class="dg-edge dg-start" x="196" y="150">copied earlier</text>
+              <rect class="dg-box" x="30" y="180" width="300" height="100" rx="18" />
+              <text class="dg-label" x="180" y="224">Mirror</text>
+              <text class="dg-sub" x="180" y="258">any Blossom server</text>
+              <path class="dg-arrow" d="M180 284V342" marker-end="url(#dg-gone-t-head)" />
+              <text class="dg-edge dg-start" x="196" y="320">fetch</text>
+              <rect class="dg-box dg-accent" x="30" y="350" width="300" height="170" rx="18" />
+              <text class="dg-label" x="180" y="394">You, later</text>
+              <text class="dg-sub" x="180" y="430">saved event</text>
+              <text class="dg-sub" x="180" y="458">+ recovery key</text>
+              <path class="dg-tick" d="M112 488l10 10 18-20" />
+              <text class="dg-sub dg-ok-text dg-start" x="150" y="498">hash checked</text>
+            </svg>
+            <figcaption>A URL is a location, not a promise.  Keep the signed event and the key, and any copy will do.</figcaption>
+          </figure>
+        </div>
+
+        <table class="compare-table">
+          <caption>A typical Blossom upload compared with the same file sent through Wildbloom</caption>
+          <thead>
+            <tr><th scope="col">Question</th><th scope="col">Typical Blossom upload</th><th scope="col">Through Wildbloom</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">What can the server read?</th><td data-label="Typical upload">The file, its name and its type</td><td data-label="Wildbloom">An encrypted, padded blob and its hash</td></tr>
+            <tr><th scope="row">The server disappears</th><td data-label="Typical upload">The link stops working</td><td data-label="Wildbloom">Fetch any other copy using the saved event and key</td></tr>
+            <tr><th scope="row">How do others find it?</th><td data-label="Typical upload">A URL pasted into a note</td><td data-label="Wildbloom">A signed NIP-94 event with the hash and size</td></tr>
+            <tr><th scope="row">Hosting it at home</th><td data-label="Typical upload">Router rules, a tunnel or a rented server</td><td data-label="Wildbloom">Wildbloom Node over optional Tor, with no router changes</td></tr>
+            <tr><th scope="row">Delivery</th><td data-label="Typical upload">HTTP</td><td data-label="Wildbloom">HTTP, plus torrent peers if you choose</td></tr>
+          </tbody>
+        </table>
+        <p class="compare-note">
+          None of this is exclusive.  Other Blossom clients encrypt, other
+          servers mirror, and Wildbloom files are ordinary blobs any Blossom
+          server can hold.  The difference is that Wildbloom does all of it by
+          default and tells you where each guarantee stops.
+        </p>
+
+        <div class="story-grid two neighbours">
+          <article>
+            <h3>Other Blossom software worth knowing</h3>
+            <ul class="neighbour-list">
+              <li><a href="https://github.com/hzrd149/blossom-server" rel="noreferrer">blossom-server</a><span>The reference server, from the author of the Blossom specification.</span></li>
+              <li><a href="https://github.com/Letdown2491/hanami" rel="noreferrer">hanami</a><span>A members-only server with an encrypted drive, a redundancy target and private backup between your own instances.  The closest neighbour if you want a shared family drive.</span></li>
+              <li><a href="https://github.com/v0l/route96" rel="noreferrer">route96</a><span>A Rust server with quotas, Lightning payments and moderation, packaged for Umbrel.</span></li>
+              <li><a href="https://github.com/MonumentalSystems/blossom-rs" rel="noreferrer">blossom-rs</a><span>A Rust library and server with an iroh QUIC transport for hole-punched uploads.</span></li>
+            </ul>
+          </article>
+          <article>
+            <h3>When you do not need Wildbloom</h3>
+            <p>Posting a public picture in a note?  A hosted Blossom server is simpler, and encryption only gets in the way.  Wildbloom earns its keep when the host should not read the file, or when the file has to outlast the host.</p>
           </article>
         </div>
       </section>
