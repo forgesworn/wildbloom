@@ -312,6 +312,36 @@ async function assertAccessible(page, state) {
   throw new Error(`${state} has WCAG A/AA violations: ${summary}`);
 }
 
+async function assertOverviewOffersNoFileService(page) {
+  // The overview must not look like a hosted upload service: every file,
+  // upload and download control stays in the client view until a visitor
+  // explicitly opens it.
+  const exposed = await page.evaluate(() => [
+    ...document.querySelectorAll("input, textarea, button"),
+  ].filter((control) => control.checkVisibility()).map((control) => control.id || control.tagName));
+  if (exposed.length !== 0) throw new Error(`Overview exposed client controls: ${exposed.join(", ")}`);
+  if (!(await page.locator("#client").isHidden())) throw new Error("Client view was visible on the overview.");
+}
+
+async function assertClientViewShown(page) {
+  await page.locator("#client").waitFor({ state: "visible", timeout: 5_000 });
+  if (new URL(page.url()).hash !== "#client") throw new Error(`Opening the client did not select #client: ${page.url()}`);
+  if (!(await page.locator("#overview").isHidden())) throw new Error("Overview stayed visible in the client view.");
+  const notice = page.locator(".byo-notice");
+  if (!(await notice.isVisible()) || !(await notice.textContent())?.includes("This site stores nothing.")) {
+    throw new Error("Client view did not state that the site stores nothing.");
+  }
+  const noticeFirst = await page.evaluate(() => {
+    const notice = document.querySelector(".byo-notice");
+    const server = document.getElementById("blossom-server");
+    return Boolean(notice && server && notice.compareDocumentPosition(server) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  if (!noticeFirst) throw new Error("The bring-your-own-server notice did not precede the server field.");
+  if (!(await page.evaluate(() => document.activeElement?.id === "client-heading"))) {
+    throw new Error("Opening the client did not move focus to the client heading.");
+  }
+}
+
 async function assertKeyboardEntry(page, browserName) {
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -320,9 +350,9 @@ async function assertKeyboardEntry(page, browserName) {
   // macOS WebKit follows Safari's default Option-Tab traversal unless the
   // host has enabled full keyboard access. Playwright maps Alt to Option.
   const traversalKey = browserName === "webkit" ? "Alt+Tab" : "Tab";
-  // The product page now has marketing and documentation links before the
-  // publishing tool.  Keep the test bounded while traversing the whole public
-  // page rather than assuming the signer is among the first few controls.
+  // The client view keeps the site navigation and notice links before the
+  // signer.  Keep the test bounded while traversing the whole view rather
+  // than assuming the signer is among the first few controls.
   for (let index = 0; index < 64; index += 1) {
     await page.keyboard.press(traversalKey);
     if (await page.evaluate(() => document.activeElement?.id === "connect-signer")) {
@@ -600,6 +630,10 @@ try {
 
   await page.goto(ORIGIN, { waitUntil: "networkidle" });
   if (remoteRequests.length !== 0) throw new Error(`Page made ambient remote requests: ${remoteRequests.join(", ")}`);
+  await assertOverviewOffersNoFileService(page);
+  await assertAccessible(page, "Overview page");
+  await page.locator(".hero-actions").getByRole("link", { name: "Open the client" }).click();
+  await assertClientViewShown(page);
   const browserPolicy = await page.evaluate((deniedFeatures) => {
     const policy = document.permissionsPolicy ?? document.featurePolicy;
     const supported = typeof policy?.features === "function" ? new Set(policy.features()) : new Set();

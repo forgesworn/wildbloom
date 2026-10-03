@@ -29,6 +29,19 @@ operator of wildbloom.forgesworn.dev runs no relay, no Blossom server and no
 tracker, and receives no copy of any file, key or event: Cloudflare Pages
 serves only the static build.
 
+**How the site presents itself (3 October 2026).** The landing page explains
+the software and offers no file, upload or download controls.  The client is
+a separate view in the same static page, reached only by following an
+explicit "Open the client" link (`/#client`; the fragment never reaches the
+server).  Before any server field or upload control, the client states that
+the site stores nothing, that there is no Wildbloom server, default relay or
+default storage, and that publishing needs a Blossom server the visitor runs
+or chooses.  The browser acceptance test fails if the landing page exposes a
+file control or if that notice does not precede the server field.  Keeping
+the site from looking like a hosted upload service matters because how a
+service presents itself can shape how users, abuse reporters and a regulator
+characterise it.
+
 ## The Online Safety Act 2023 question
 
 The Online Safety Act 2023 regulates, among other things, "user-to-user
@@ -101,6 +114,8 @@ Re-open this document, and treat it as a live question rather than settled,
 if any of the following happen:
 
 - a default relay, default Blossom server or default tracker is shipped;
+- the client is shown on the landing page again, or the "this site stores
+  nothing" notice is removed or moved below the upload controls;
 - ForgeSworn runs a public relay, Blossom server, index, search feature or
   crawler that this app points at or that surfaces files published with it;
 - any feature is added that lets one visitor encounter another visitor's

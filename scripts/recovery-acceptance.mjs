@@ -124,7 +124,7 @@ async function pageAt(origin, allowed) {
       await route.abort();
     } else await route.continue();
   });
-  await page.goto(origin);
+  await page.goto(`${origin}/#client`);
   await page.locator("#inspect-file").waitFor();
   assert.ok(requests.every((url) => new URL(url).origin === origin), "No network action on load");
   assert.equal(sockets.length, 0);

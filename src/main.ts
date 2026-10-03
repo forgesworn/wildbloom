@@ -1162,3 +1162,25 @@ window.addEventListener("pageshow", (event) => {
 
 applyProfile();
 applySigningMethod();
+
+// The client is a separate view reached only by an explicit link, so the
+// overview never presents itself as an upload service. Fragments never reach
+// the server, so this needs no extra route.
+const overviewView = element<HTMLDivElement>("overview");
+const clientView = element<HTMLDivElement>("client");
+
+function showRequestedView(moveFocus: boolean): void {
+  const showClient = location.hash === "#client";
+  overviewView.hidden = showClient;
+  clientView.hidden = !showClient;
+  if (showClient) {
+    window.scrollTo(0, 0);
+    if (moveFocus) element<HTMLHeadingElement>("client-heading").focus();
+    return;
+  }
+  const target = location.hash.length > 1 ? document.getElementById(location.hash.slice(1)) : null;
+  if (target && overviewView.contains(target)) target.scrollIntoView();
+}
+
+window.addEventListener("hashchange", () => showRequestedView(true));
+showRequestedView(false);
