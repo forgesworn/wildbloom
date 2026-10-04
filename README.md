@@ -21,6 +21,11 @@ changing this browser protocol.
 
 ## Current status
 
+Paid storage is in development. The [implementation plan](docs/PAID-STORAGE.md)
+maps ForgeSworn payment libraries and direct payment to node operators. The
+Shelter Kit 0.5.0 prerelease implements protected allowances; checkout and
+payment methods remain unimplemented in this browser and the published Node.
+
 The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
 declared a production service.  It currently supports source files up to 256
