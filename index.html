@@ -339,25 +339,54 @@
       </section>
 
       <section id="storage" class="story-section" aria-labelledby="storage-heading">
-        <p class="section-kicker">Storage pools · preview</p>
-        <h2 id="storage-heading">Keep copies. Or split the file and keep a recovery margin.</h2>
-        <p class="story-intro">Encrypt first, then choose how your nodes share the storage. Every copy or shard is an ordinary Blossom blob. Your private signed receipt records where the pieces belong; your separate recovery key unlocks the file.</p>
+        <p class="section-kicker">Replication &amp; sharding · preview</p>
+        <h2 id="storage-heading">A failed disk should not take your only copy.</h2>
+        <p class="story-intro">A home node can go offline. A host can close. Replication and sharding let you spread encrypted storage across nodes you choose, so losing one does not have to mean losing the file. Choose how much storage to use, how much loss to tolerate, and whether each node receives a complete encrypted copy or just a part.</p>
         <div class="story-grid three-cards">
           <article>
-            <h3>Complete replicas</h3>
-            <p>Keep two or three complete encrypted copies on your chosen nodes. One verified surviving copy is enough to recover the file.</p>
+            <span class="card-number">ONE NODE</span>
+            <h3>Keep it simple</h3>
+            <p>Use one node when you already keep a separate backup, or can upload the file again. It uses the least storage, but that node going offline makes its copy unavailable.</p>
           </article>
           <article>
-            <h3>Recoverable shards</h3>
-            <p>A 2-of-4 layout recovers from any two verified parts and uses about twice the encrypted file size. A 4-of-6 layout also tolerates two missing parts, with about 1.5 times the storage.</p>
+            <span class="card-number">REPLICATION</span>
+            <h3>Keep complete copies</h3>
+            <p>Put two or three complete encrypted copies on separate nodes. Any one verified copy can restore the file. Choose this for straightforward recovery; two copies use twice the storage, three use three times.</p>
           </article>
           <article>
-            <h3>Repair after loss</h3>
-            <p>Restore missing parts in the browser, or run the owner repair service with the browser closed. It reconstructs encrypted bytes without the recovery key and writes only to destinations you approved.</p>
+            <span class="card-number">SHARDING + ERASURE CODING</span>
+            <h3>Share the storage</h3>
+            <p>Split the encrypted file into parts, with extra parts for recovery. Choose this to spread storage across trusted nodes and send each only its assigned part. You need a threshold of different parts to restore the file.</p>
           </article>
         </div>
-        <p class="compare-note">Shard loss and node loss are equivalent only when the parts have independent failure risks. Encryption protects the contents; splitting alone does not. Keep the receipt and recovery key backed up separately. Neither can be replaced by parity.</p>
-        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Automatic capacity discovery, draining and cluster-wide rebalancing are not available. Recovery requires enough surviving parts; repair needs an owner-controlled process and an external signer.</div>
+
+        <figure class="diagram storage-example" aria-labelledby="storage-example-heading">
+          <p class="section-kicker">A 4-of-6 example</p>
+          <h3 id="storage-example-heading">Six parts stored. Any four can bring the file back.</h3>
+          <ol class="storage-parts" aria-label="Six parts on separate nodes, with two nodes offline">
+            <li><span>Node 1</span><strong>Part 1</strong><span>Available</span></li>
+            <li class="part-offline"><span>Node 2</span><strong>Part 2</strong><span>Offline</span></li>
+            <li><span>Node 3</span><strong>Part 3</strong><span>Available</span></li>
+            <li><span>Node 4</span><strong>Part 4</strong><span>Available</span></li>
+            <li class="part-offline"><span>Node 5</span><strong>Part 5</strong><span>Offline</span></li>
+            <li><span>Node 6</span><strong>Part 6</strong><span>Available</span></li>
+          </ol>
+          <figcaption>The four available parts reconstruct the encrypted file; your recovery key unlocks it. A 4-of-6 layout uses about <strong>1.5× the encrypted file size</strong> in total and tolerates any two missing parts. Simply splitting a file without this extra redundancy would require every part back.</figcaption>
+        </figure>
+
+        <div class="story-grid two">
+          <article>
+            <h3>Spread the risk as well as the bytes</h3>
+            <p>Two nodes on the same disk, power supply or internet connection can fail together. Use independent machines and locations, and group nodes that share a failure risk. Wildbloom reads bytes back and verifies their hashes before counting a copy or part as stored.</p>
+          </article>
+          <article>
+            <h3>Repair before another node is lost</h3>
+            <p>After a loss, the remaining copies or parts leave less room for another failure. Restore redundancy in the browser, or configure the owner repair service to run while it is closed. Repair needs enough surviving parts, an external signer and available storage at approved destinations. It works on encrypted bytes without your recovery key.</p>
+          </article>
+        </div>
+        <p class="compare-note"><strong>Want each storage node to hold only a part?</strong> Choose sharding. Upload and repair send each node only its assigned part; reconstruction happens in your browser or on your separate owner repair machine. Encryption protects the contents. Splitting alone does not stop operators combining parts, or fetching other parts if they obtain your receipt.</p>
+        <p class="compare-note"><strong>Keep your route back to the file.</strong> Save the private signed receipt, which records where the parts belong, and back up the recovery key separately. Extra parts cannot replace either one. Keep an independent backup of irreplaceable files too.</p>
+        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Automatic capacity discovery, draining and cluster-wide rebalancing are not available.</div>
         <div class="text-links">
           <a href="#client">Choose a storage layout</a>
           <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>

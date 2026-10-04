@@ -196,6 +196,14 @@ footer p { margin: 0.45rem 0; }
 .diagram svg.dg-tall { display: none; }
 .diagram figcaption { max-width: 640px; margin: 1.1rem auto 0; color: #c8d0c7; font-size: 1rem; line-height: 1.55; text-align: center; }
 .diagram-pair { display: grid; gap: 0; }
+.storage-example h3 { margin: 0; font: 400 clamp(1.6rem, 3vw, 2.3rem)/1.2 Georgia, "Times New Roman", serif; }
+.storage-parts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.75rem; margin: 1.75rem 0; padding: 0; list-style: none; }
+.storage-parts li { display: grid; gap: 0.65rem; padding: 1rem 0.5rem; border: 1px solid var(--moss); border-radius: 12px; background: var(--moss-deep); text-align: center; }
+.storage-parts span { color: #c8d0c7; font-size: 0.82rem; }
+.storage-parts strong { color: var(--moss); font: 400 1.3rem Georgia, "Times New Roman", serif; }
+.storage-parts .part-offline { border-color: var(--rust); border-style: dashed; background: transparent; }
+.storage-parts .part-offline strong { color: var(--rust); }
+.storage-example figcaption { max-width: 780px; text-align: left; }
 .dg-box { fill: #101712; stroke: #41604a; stroke-width: 2; }
 .dg-accent { stroke: var(--moss); stroke-width: 2.5; }
 .dg-warn { stroke: var(--rust); }
@@ -237,6 +245,7 @@ footer p { margin: 0.45rem 0; }
 .neighbour-list a { color: var(--moss); font-weight: 600; }
 
 @media (max-width: 820px) {
+  .storage-parts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .story-grid.three-cards { grid-template-columns: 1fr; }
   .contrast .story-grid article + article { border-top: 1px solid #3b5543; border-left: 0; padding-top: 1.3rem; padding-left: 0; }
   .use-list { grid-template-columns: 1fr; }
@@ -250,7 +259,7 @@ footer p { margin: 0.45rem 0; }
   .shell { width: min(calc(100% - 1rem), 1120px); padding-top: 1rem; }
   .site-nav { align-items: flex-start; margin-bottom: 4rem; }
   .site-nav > div { gap: 0.7rem 1rem; }
-  .site-nav > div a:nth-child(-n + 3) { display: none; }
+  .site-nav > div a:nth-child(-n + 2) { display: none; }
   .masthead, .story-section { margin-bottom: 5rem; }
   .story-grid.two, .install-grid { grid-template-columns: 1fr; }
   .use-list li { grid-template-columns: 1fr; gap: 0.35rem; }
