@@ -381,7 +381,7 @@
           </article>
           <article>
             <h3>Repair before another node is lost</h3>
-            <p>After a loss, the remaining copies or parts leave less room for another failure. Restore redundancy in the browser, or configure the owner repair service to run while it is closed. Repair needs enough surviving parts, an external signer and available storage at approved destinations. It works on encrypted bytes without your recovery key.</p>
+            <p>After a loss, the remaining copies or parts leave less room for another failure. Restore redundancy in the browser, or import the signed receipt into Wildbloom Node and explicitly enable owner repair while the browser is closed. Repair needs enough surviving parts, an external signer and available storage at approved destinations. It works on encrypted bytes without your recovery key.</p>
           </article>
         </div>
         <p class="compare-note"><strong>Want each storage node to hold only a part?</strong> Choose sharding. Upload and repair send each node only its assigned part; reconstruction happens in your browser or on your separate owner repair machine. Encryption protects the contents. Splitting alone does not stop operators combining parts, or fetching other parts if they obtain your receipt.</p>
@@ -390,9 +390,9 @@
         <div class="text-links">
           <a href="#client">Choose a storage layout</a>
           <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>
-          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Run the owner repair service</a>
+          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md" rel="noreferrer">Use desktop pool controls</a>
         </div>
-        <p class="compare-note">Pool storage is a preview. Automated local-process checks do not establish independent physical custody or acceptance on every device. The owner repair command requires a current source build of Wildbloom Node; the older preview installers below do not include it.</p>
+        <p class="compare-note">Pool storage is a preview. Automated local-process checks do not establish independent physical custody or acceptance on every device. Wildbloom Node 0.3.0 preview includes desktop health checks and owner repair controls. Repair authority expires and must be approved again after restarting the app.</p>
       </section>
 
       <section id="uses" class="story-section" aria-labelledby="uses-heading">
@@ -419,8 +419,8 @@
           <article>
             <p class="platform">Windows · Linux · macOS</p>
             <h3>Wildbloom Node</h3>
-            <p>Preview 0.2.2 includes the shared storage fixes and a verified upstream Tor runtime.</p>
-            <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.2.2-preview.1" rel="noreferrer">Download preview installers</a>
+            <p>Preview 0.3.0 adds signed pool receipt import, per-part health checks and owner-controlled automatic repair, with a verified upstream Tor runtime.</p>
+            <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.0-preview.1" rel="noreferrer">Download preview installers</a>
             <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Build the desktop app from source</a>
           </article>
           <article>
