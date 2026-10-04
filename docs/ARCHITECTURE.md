@@ -85,6 +85,12 @@ retriever --verify event--> choose Blossom GET or swarm --> verify bytes
 
 ## Publication
 
+The publication journey below describes the **One node** layout. The selectable
+replicated and threshold-coded pool layouts instead save a private signed
+receipt and perform client-side placement, recovery and repair. They require
+encryption and do not publish to relays or swarms. Their versioned format and
+acceptance boundary are in [POOL-STORAGE.md](POOL-STORAGE.md).
+
 1. The browser validates and hashes the source locally.
 2. By default it creates a random key, encrypts the content and private
    metadata in authenticated chunks, pads the envelope, and hashes only that
