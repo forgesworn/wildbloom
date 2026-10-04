@@ -1,4 +1,5 @@
 import "./style.css";
+import { extendPool, fetchPool, parsePoolNodes, preparePool, preparePoolRepair, resolvePoolReceipt, signPool, uploadPool, type PoolReceipt, type PreparedPool, type PoolReport } from "./core/pool.js";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
 import { buildFileEvent, buildTorrentEvent, MAX_SIGNED_EVENT_JSON_BYTES, parseSignedEventJson, resolveFileEventJson, signEventExactly } from "./core/nostr.js";
@@ -37,6 +38,19 @@ function element<T extends HTMLElement>(id: string): T {
   if (!found) throw new Error(`Missing required element: ${id}`);
   return found as T;
 }
+
+const storageMode = element<HTMLSelectElement>("storage-mode");
+const poolNodes = element<HTMLTextAreaElement>("pool-nodes");
+const poolCopies = element<HTMLInputElement>("pool-copies");
+const poolRequired = element<HTMLInputElement>("pool-required");
+const poolTotal = element<HTMLInputElement>("pool-total");
+const repairPoolButton = element<HTMLButtonElement>("repair-pool");
+const repairPoolConsent = element<HTMLInputElement>("pool-repair-consent");
+const poolReplacements = element<HTMLTextAreaElement>("pool-replacements");
+let preparedPool: PreparedPool | null = null;
+let publishedPool: PoolReceipt | null = null;
+let resolvedPool: PoolReceipt | null = null;
+let poolUploadComplete = false;
 
 const blossomInput = element<HTMLInputElement>("blossom-server");
 const relayInput = element<HTMLTextAreaElement>("relay-urls");
@@ -323,6 +337,10 @@ const externalSigner: SignerPort = {
 
 function resetPublicationAfterInspection(): void {
   publicationRevision += 1;
+  if (resolvedPool && downloadController) {
+    downloadController.abort();
+    repairPoolConsent.checked = false;
+  }
   abandonExternalSigning();
   inspectionController?.abort();
   inspectionController = null;
@@ -332,6 +350,8 @@ function resetPublicationAfterInspection(): void {
   publishController = null;
   cancelUploadButton.disabled = true;
   descriptor = null;
+  publishedPool = null;
+  poolUploadComplete = false;
   torrentPlan = null;
   signedEvents = [];
   seedController?.abort();
@@ -355,6 +375,7 @@ function resetInspection(): void {
   inspectionController?.abort();
   inspectionController = null;
   resetPublicationAfterInspection();
+  preparedPool = null;
   sourceInspected = null;
   inspected = null;
   protectedEnvelope = null;
@@ -367,6 +388,7 @@ function resetInspection(): void {
 }
 
 function resetResolution(): void {
+  if (resolvedPool && downloadController) abandonExternalSigning("Pool recovery was superseded.");
   resolutionRevision += 1;
   lookupController?.abort();
   lookupController = null;
@@ -379,6 +401,12 @@ function resetResolution(): void {
   if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus, "retrieval");
   downloadSession = null;
   resolved = null;
+  resolvedPool = null;
+  repairPoolConsent.checked = false;
+  poolReplacements.value = "";
+  repairPoolButton.disabled = true;
+  element<HTMLElement>("pool-repair-panel").hidden = true;
+  replicaInput.disabled = false;
   swarmConsent.checked = false;
   recoveryKeyInput.value = "";
   recoveryKeyField.hidden = true;
@@ -411,7 +439,7 @@ function showResolvedEvent(nextResolved: ResolvedHybridEvent): void {
 
 function updateUploadButton(): void {
   const keyReady = !protectedEnvelope || keySavedConsent.checked;
-  uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady && !descriptor && !uploadController);
+  uploadButton.disabled = !(uploadConsent.checked && inspected && pubkey && keyReady && !descriptor && !poolUploadComplete && !uploadController && !downloadController);
 }
 
 function seedStartAllowed(): boolean {
@@ -421,12 +449,17 @@ function seedStartAllowed(): boolean {
 
 function updateRetrievalButtons(): void {
   const busy = downloadController !== null;
-  blossomFetchButton.disabled = busy || !resolved;
+  blossomFetchButton.disabled = busy || (!resolved && !resolvedPool);
+  repairPoolButton.disabled = busy || uploadController !== null || !resolvedPool || !repairPoolConsent.checked;
   swarmFetchButton.disabled = busy || pendingPeerStops.retrieval > 0 || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
   cancelDownloadButton.disabled = !busy;
 }
 
 function updateSigningCopy(): void {
+  if (storageMode.value !== "single") {
+    signEventCopy.textContent = "Pool receipts are signed during upload and saved privately. Relay publication and swarm seeding are unavailable for this layout.";
+    return;
+  }
   if (signingMethod() === "external") {
     signEventCopy.textContent = profile() === "tor"
       ? "External signing hands off one exact encrypted NIP-94 event without installing a Tor Browser add-on. The signer still learns the public event and identity."
@@ -467,6 +500,20 @@ function applyProfile(): void {
     replicaInput.placeholder = "https://replica.example.com";
     relayInput.placeholder = "wss://relay.example.com";
   }
+  const pool = storageMode.value !== "single";
+  element<HTMLElement>("pool-settings").hidden = !pool;
+  element<HTMLElement>("pool-copies-field").hidden = storageMode.value !== "replicas";
+  element<HTMLElement>("pool-required-field").hidden = storageMode.value !== "erasure";
+  element<HTMLElement>("pool-total-field").hidden = storageMode.value !== "erasure";
+  blossomInput.disabled = pool;
+  protectFile.disabled = pool;
+  trackerField.hidden = tor || pool;
+  seedGate.hidden = tor || pool;
+  if (pool) {
+    uploadConsentCopy.textContent = "I approve signing a private pool receipt, uploading the encrypted layout to its selected nodes and reading back each stored part for verification. I will save the receipt as well as the separate recovery key.";
+    signEventCopy.textContent = "Pool receipts are signed during upload and saved privately. Relay publication and swarm seeding are unavailable for this layout.";
+    return;
+  }
   updateSigningCopy();
   uploadConsentCopy.textContent = protectFile.checked
     ? "I understand this sends encrypted bytes and visible transfer metadata to the chosen Blossom server."
@@ -488,6 +535,7 @@ toggleRecoveryKey.addEventListener("click", () => {
 for (const input of document.querySelectorAll<HTMLInputElement>('input[name="network-profile"]')) {
   input.addEventListener("change", () => {
     profileRevision += 1;
+    if (storageMode.value !== "single") resetInspection();
     resetPublicationAfterInspection();
     resetResolution();
     pubkey = null;
@@ -506,6 +554,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="net
 
 for (const input of document.querySelectorAll<HTMLInputElement>('input[name="signing-method"]')) {
   input.addEventListener("change", () => {
+    if (resolvedPool && downloadController) downloadController.abort();
     resetPublicationAfterInspection();
     pubkey = null;
     externalPubkeyInput.value = "";
@@ -518,6 +567,7 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sig
 externalPubkeyInput.addEventListener("input", () => {
   if (pubkey === null && !descriptor && !externalSigningRequest) return;
   resetPublicationAfterInspection();
+  if (resolvedPool && downloadController) downloadController.abort();
   pubkey = null;
   signerStatus.textContent = "External signer public key not confirmed";
   setStatus(publishStatus, "External signer public key changed. Confirm it again before any upload authority is requested.");
@@ -534,6 +584,16 @@ torConsent.addEventListener("change", () => {
   setStatus(publishStatus, "Tor confirmation withdrawn. Active work was cancelled and every network consent was cleared.");
   setStatus(retrieveStatus, "Tor confirmation withdrawn. Resolve the signed event again before downloading.");
 });
+
+for (const input of [storageMode, poolNodes, poolCopies, poolRequired, poolTotal]) {
+  input.addEventListener("input", () => {
+    if (storageMode.value !== "single") protectFile.checked = true;
+    resetInspection();
+    resetResolution();
+    applyProfile();
+    setStatus(publishStatus, "Storage layout changed. Inspect again and renew consent before uploading.");
+  });
+}
 
 fileInput.addEventListener("change", () => {
   resetInspection();
@@ -589,7 +649,11 @@ verifySavedEventButton.addEventListener("click", () => guard(retrieveStatus, asy
   // The selected profile still constrains every endpoint in the signed event.
   resetResolution();
   const expectedId = eventIdInput.value.trim();
-  showResolvedEvent(resolveFileEventJson(savedEventInput.value, profile(), expectedId || undefined));
+  if (savedEventInput.value.length > MAX_SIGNED_EVENT_JSON_BYTES) throw new Error("Saved event is too large.");
+  const raw: unknown = JSON.parse(savedEventInput.value);
+  if (raw && typeof raw === "object" && "kind" in raw && raw.kind === 30078) {
+    showResolvedPool(resolvePoolReceipt(savedEventInput.value, profile(), expectedId || undefined));
+  } else showResolvedEvent(resolveFileEventJson(savedEventInput.value, profile(), expectedId || undefined));
 }));
 
 protectFile.addEventListener("change", () => {
@@ -611,13 +675,15 @@ acceptExternalSignatureButton.addEventListener("click", () => guard(publishStatu
   externalSigningRequest = null;
   clearExternalSigningPanel();
   pending.resolve(signed);
-  if (pending.template.kind === 24242) cancelUploadButton.focus();
+  if (pending.template.kind === 24242 && resolvedPool && downloadController) cancelDownloadButton.focus();
+  else if (pending.template.kind === 24242) cancelUploadButton.focus();
   else signButton.focus();
 }));
 
 cancelExternalSignatureButton.addEventListener("click", () => {
   if (!externalSigningRequest) return;
   uploadController?.abort();
+  if (resolvedPool) downloadController?.abort();
   abandonExternalSigning("External signing was cancelled.");
   setStatus(publishStatus, "External signing cancelled. Nothing was signed or sent by Wildbloom.");
 });
@@ -664,11 +730,19 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
       nextEnvelope = await encryptPrivacyEnvelope(file, controller.signal);
       nextInspected = await inspectFile(nextEnvelope.file, "transfer", controller.signal);
     }
+    let nextPool: PreparedPool | null = null;
+    if (storageMode.value !== "single") {
+      if (!nextEnvelope) throw new Error("Pool storage requires encryption.");
+      setStatus(publishStatus, "Preparing the encrypted pool layout locally…");
+      nextPool = await preparePool(nextEnvelope.file, storageMode.value === "erasure" ? "erasure" : "replicas",
+        parsePoolNodes(poolNodes.value, profile()), Number(poolRequired.value), Number(poolTotal.value), Number(poolCopies.value), profile(), controller.signal);
+    }
     if (controller.signal.aborted
       || inspectionController !== controller
       || publicationRevision !== expectedRevision
       || fileInput.files?.[0] !== file) return;
 
+    preparedPool = nextPool;
     sourceInspected = nextSource;
     protectedEnvelope = nextEnvelope;
     inspected = nextInspected;
@@ -698,6 +772,11 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
         ["SHA-256", nextInspected.sha256],
         ["Protection", "None - plaintext metadata and content will be public"],
       ]);
+    }
+    if (nextPool) {
+      element<HTMLElement>("pool-layout-help").textContent = nextPool.manifest.mode === "erasure"
+        ? `${nextPool.manifest.total} parts on separate failure groups; any ${nextPool.manifest.required} recover the ciphertext. Up to ${nextPool.manifest.total - nextPool.manifest.required} part losses are recoverable. Stored bytes: ${nextPool.manifest.parts.reduce((sum, part) => sum + part.size, 0)} before extra copies. Save both the receipt and the separate key.`
+        : `${nextPool.manifest.copies} complete encrypted copies on separate failure groups. Save the signed receipt and the separate key.`;
     }
     applyProfile();
     updateUploadButton();
@@ -730,7 +809,11 @@ uploadButton.addEventListener("click", () => guard(publishStatus, async () => {
   if (!inspected || !pubkey || !uploadConsent.checked) throw new Error("Prepare the file, connect a signer and acknowledge the upload first.");
   if (protectedEnvelope && !keySavedConsent.checked) throw new Error("Save and acknowledge the recovery key before upload.");
   assertTorReady();
-  if (uploadController) throw new Error("An upload is already in progress.");
+  if (uploadController || downloadController) throw new Error("A transfer is already in progress.");
+  if (storageMode.value !== "single") {
+    await uploadPreparedPool();
+    return;
+  }
   const expectedRevision = publicationRevision;
   const selectedInspected = inspected;
   const selectedPubkey = pubkey;
@@ -889,7 +972,7 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
   signedEvents = nextSignedEvents;
   clearDownloads(signedEventLinks);
   addFileEventDownload(signedEventLinks, fileEvent);
-  publishButton.disabled = !publishConsent.checked;
+  publishButton.disabled = !publishConsent.checked || storageMode.value !== "single";
   const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
   setStatus(
     publishStatus,
@@ -956,6 +1039,130 @@ resolveButton.addEventListener("click", () => guard(retrieveStatus, async () => 
   }
 }));
 
+function poolReportText(report: PoolReport): string {
+  const counts = report.verified.join(", ");
+  return report.protected
+    ? `Requested layout verified at ${new Date(report.observedAt).toISOString()}. Verified copies per part: ${counts}. Save the signed pool receipt and separate key. Future retention depends on the nodes.`
+    : `Storage deficit: verified copies per part ${counts}. ${report.recoverable ? "Enough parts were verified to recover now." : "The recovery threshold has not been verified."} Keep the receipt; retry upload or repair when nodes are available.`;
+}
+
+function savePoolReceipt(target: HTMLDivElement, receipt: PoolReceipt): void {
+  addDownload(target, new Blob([JSON.stringify(receipt.event, null, 2)], { type: "application/json" }),
+    `wildbloom-pool-${receipt.event.id}.json`, "Download private signed pool receipt");
+}
+
+function showResolvedPool(receipt: PoolReceipt): void {
+  resolvedPool = receipt;
+  const m = receipt.manifest;
+  showFacts(resolvedFacts, [
+    ["Receipt ID", receipt.event.id], ["Author", receipt.event.pubkey], ["Storage", m.mode],
+    ["Recovery", `${m.required} of ${m.total} parts; ${m.copies} configured copies per part`],
+    ["Ciphertext SHA-256", m.payload.sha256], ["Ciphertext bytes", String(m.payload.size)],
+    ["Approved nodes", m.parts.map((part) => `Part ${part.index + 1}: ${part.targets.map((node) => `${node.origin} (${node.failure_group})`).join(", ")}`).join("\n")],
+  ]);
+  savePoolReceipt(resolvedEventLinks, receipt);
+  recoveryKeyField.hidden = false;
+  replicaInput.disabled = true;
+  element<HTMLElement>("pool-repair-panel").hidden = false;
+  updateRetrievalButtons();
+  setStatus(retrieveStatus, "Pool receipt verified locally. Check the author and approved nodes above. Fetch will try those nodes only; enter the separate key to decrypt. A receipt is not evidence of current storage.");
+}
+
+async function uploadPreparedPool(): Promise<void> {
+  if (!preparedPool || !pubkey) throw new Error("Inspect the pool layout and connect its signer first.");
+  const prepared = preparedPool, owner = pubkey, selectedSigner = signer();
+  const revision = publicationRevision;
+  const controller = new AbortController();
+  uploadController = controller;
+  updateUploadButton();
+  updateRetrievalButtons();
+  cancelUploadButton.disabled = false;
+  try {
+    setStatus(publishStatus, "Sign the private recovery receipt before uploading any parts…");
+    const receipt = publishedPool ?? await signPool(prepared.manifest, selectedSigner, owner);
+    if (controller.signal.aborted || publicationRevision !== revision) return;
+    publishedPool = receipt;
+    clearDownloads(signedEventLinks);
+    savePoolReceipt(signedEventLinks, receipt);
+    const result = await uploadPool(prepared, receipt, selectedSigner, owner, {
+      profile: profile(), signal: controller.signal,
+      ...(signingMethod() === "external" ? { authorisationLifetimeSeconds: 300 } : {}),
+      progress: (message) => { if (!controller.signal.aborted) setStatus(publishStatus, `${message} The signed receipt is available to save below.`); },
+    });
+    if (controller.signal.aborted || publicationRevision !== revision) return;
+    poolUploadComplete = result.protected;
+    setStatus(publishStatus, poolReportText(result), !result.protected);
+  } finally {
+    if (uploadController === controller) {
+      uploadController = null;
+      cancelUploadButton.disabled = true;
+      updateUploadButton();
+      updateRetrievalButtons();
+    }
+  }
+}
+
+async function retrievePool(repair: boolean): Promise<void> {
+  if (!resolvedPool) throw new Error("Verify a pool receipt first.");
+  assertTorReady();
+  if (downloadController || uploadController) throw new Error("A transfer is already in progress.");
+  let receipt = resolvedPool;
+  const revision = resolutionRevision;
+  if (repair && (!repairPoolConsent.checked || pubkey !== receipt.event.pubkey)) throw new Error("Connect the receipt author’s signer and approve repair first.");
+  const key = recoveryKeyInput.value.trim();
+  if (!repair && !key) throw new Error("Enter the separately received recovery key.");
+  const controller = new AbortController();
+  downloadController = controller;
+  downloadTransport = "blossom";
+  updateRetrievalButtons();
+  updateUploadButton();
+  clearDownloads(retrieveLinks);
+  const options = { profile: profile(), signal: controller.signal,
+    progress: (message: string) => { if (!controller.signal.aborted) setStatus(retrieveStatus, message); },
+    ...(signingMethod() === "external" ? { authorisationLifetimeSeconds: 300 } : {}),
+  };
+  try {
+    if (repair) {
+      if (poolReplacements.value.trim()) {
+        const next = extendPool(receipt.manifest, poolReplacements.value);
+        receipt = await signPool(next, signer(), receipt.event.pubkey);
+        controller.signal.throwIfAborted();
+        if (resolutionRevision !== revision) return;
+        clearDownloads(resolvedEventLinks);
+        showResolvedPool(receipt);
+        poolReplacements.value = "";
+      }
+      const prepared = await preparePoolRepair(receipt, options);
+      controller.signal.throwIfAborted();
+      const result = await uploadPool(prepared, receipt, signer(), receipt.event.pubkey, options);
+      if (!controller.signal.aborted && resolutionRevision === revision) setStatus(retrieveStatus, poolReportText(result), !result.protected);
+    } else {
+      const ciphertext = await fetchPool(receipt, options);
+      const file = await decryptPrivacyEnvelope(ciphertext, key, controller.signal);
+      if (controller.signal.aborted || resolutionRevision !== revision) return;
+      recoveryKeyInput.value = "";
+      addDownload(retrieveLinks, file, file.name, `Save verified ${file.name}`);
+      setStatus(retrieveStatus, "Pool parts, reconstructed ciphertext and AES-GCM authentication verified. Save the locally decrypted file.");
+    }
+  } finally {
+    if (downloadController === controller) { downloadController = null; downloadTransport = null; }
+    updateRetrievalButtons();
+    updateUploadButton();
+  }
+}
+
+repairPoolConsent.addEventListener("change", () => {
+  if (!repairPoolConsent.checked) { downloadController?.abort(); abandonExternalSigning("Repair consent was withdrawn."); }
+  updateRetrievalButtons();
+});
+poolReplacements.addEventListener("input", () => {
+  downloadController?.abort();
+  abandonExternalSigning("Replacement destinations changed.");
+  repairPoolConsent.checked = false;
+  updateRetrievalButtons();
+});
+repairPoolButton.addEventListener("click", () => guard(retrieveStatus, () => retrievePool(true)));
+
 async function revealPayload(blob: Blob, event: ResolvedHybridEvent, signal: AbortSignal): Promise<File | Blob> {
   if (!event.encryption) return blob;
   const key = recoveryKeyInput.value.trim();
@@ -967,6 +1174,10 @@ async function revealPayload(blob: Blob, event: ResolvedHybridEvent, signal: Abo
 }
 
 blossomFetchButton.addEventListener("click", () => guard(retrieveStatus, async () => {
+  if (resolvedPool) {
+    await retrievePool(false);
+    return;
+  }
   if (!resolved) throw new Error("Resolve a signed event first.");
   assertTorReady();
   if (downloadController) throw new Error("A download is already in progress.");
@@ -1119,6 +1330,7 @@ swarmFetchButton.addEventListener("click", () => guard(retrieveStatus, async () 
 cancelDownloadButton.addEventListener("click", () => {
   if (!downloadController) return;
   downloadController.abort();
+  if (resolvedPool) abandonExternalSigning("Pool recovery or repair was cancelled.");
   cancelDownloadButton.disabled = true;
   setStatus(retrieveStatus, "Cancelling the active download…");
 });
@@ -1134,6 +1346,7 @@ function endPageSession(): void {
   resetResolution();
   pubkey = null;
   fileInput.value = "";
+  poolNodes.value = "";
   blossomInput.value = "";
   replicaInput.value = "";
   relayInput.value = "";

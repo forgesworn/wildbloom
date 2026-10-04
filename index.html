@@ -16,7 +16,7 @@
     <meta property="og:title" content="Wildbloom · Files that outlive their host" />
     <meta
       property="og:description"
-      content="Publish encrypted files, run your own storage node and keep control of the replicas."
+      content="Encrypt your files, keep complete replicas or recover from a threshold of shards, and repair storage on nodes you choose."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://wildbloom.forgesworn.dev/" />
@@ -31,6 +31,7 @@
         <div>
           <a href="#what">What it is</a>
           <a href="#blossom">Blossom</a>
+          <a href="#storage">Storage pools</a>
           <a href="#install">Install</a>
           <a href="#protocol">Protocol</a>
           <a href="#client">Open the client</a>
@@ -99,7 +100,7 @@
           </article>
           <article>
             <h3>Redundancy must be visible</h3>
-            <p>Wildbloom uses content hashes and standard Blossom mirroring.  A second node is a real second copy, not a green tick backed by the same provider.</p>
+            <p>Choose complete encrypted copies or recoverable shards. Wildbloom reads bytes back and verifies their hashes before counting them as stored. Choose nodes with independent failure risks.</p>
           </article>
         </div>
       </section>
@@ -317,7 +318,7 @@
           None of this is exclusive.  Other Blossom clients encrypt, other
           servers mirror, and Wildbloom files are ordinary blobs any Blossom
           server can hold.  The difference is that Wildbloom does all of it by
-          default and tells you where each guarantee stops.
+          in one explicit workflow and tells you where each guarantee stops.
         </p>
 
         <div class="story-grid two neighbours">
@@ -335,6 +336,34 @@
             <p>Posting a public picture in a note?  A hosted Blossom server is simpler, and encryption only gets in the way.  Wildbloom earns its keep when the host should not read the file, or when the file has to outlast the host.</p>
           </article>
         </div>
+      </section>
+
+      <section id="storage" class="story-section" aria-labelledby="storage-heading">
+        <p class="section-kicker">Storage pools · preview</p>
+        <h2 id="storage-heading">Keep copies. Or split the file and keep a recovery margin.</h2>
+        <p class="story-intro">Encrypt first, then choose how your nodes share the storage. Every copy or shard is an ordinary Blossom blob. Your private signed receipt records where the pieces belong; your separate recovery key unlocks the file.</p>
+        <div class="story-grid three-cards">
+          <article>
+            <h3>Complete replicas</h3>
+            <p>Keep two or three complete encrypted copies on your chosen nodes. One verified surviving copy is enough to recover the file.</p>
+          </article>
+          <article>
+            <h3>Recoverable shards</h3>
+            <p>A 2-of-4 layout recovers from any two verified parts and uses about twice the encrypted file size. A 4-of-6 layout also tolerates two missing parts, with about 1.5 times the storage.</p>
+          </article>
+          <article>
+            <h3>Repair after loss</h3>
+            <p>Restore missing parts in the browser, or run the owner repair service with the browser closed. It reconstructs encrypted bytes without the recovery key and writes only to destinations you approved.</p>
+          </article>
+        </div>
+        <p class="compare-note">Shard loss and node loss are equivalent only when the parts have independent failure risks. Encryption protects the contents; splitting alone does not. Keep the receipt and recovery key backed up separately. Neither can be replaced by parity.</p>
+        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Automatic capacity discovery, draining and cluster-wide rebalancing are not available. Recovery requires enough surviving parts; repair needs an owner-controlled process and an external signer.</div>
+        <div class="text-links">
+          <a href="#client">Choose a storage layout</a>
+          <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>
+          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Run the owner repair service</a>
+        </div>
+        <p class="compare-note">Pool storage is a preview. Automated local-process checks do not establish independent physical custody or acceptance on every device. The owner repair command requires a current source build of Wildbloom Node; the older preview installers below do not include it.</p>
       </section>
 
       <section id="uses" class="story-section" aria-labelledby="uses-heading">
@@ -381,14 +410,14 @@
           <li><span>1</span><div><strong>Prepare</strong><p>The browser encrypts content, filename and MIME type locally, then calculates the payload's SHA-256.</p></div></li>
           <li><span>2</span><div><strong>Authorise</strong><p>Your signer approves a short-lived BUD-11 action for one hash and one Blossom host.  Wildbloom never asks for an nsec.</p></div></li>
           <li><span>3</span><div><strong>Store and replicate</strong><p>BUD-02 uploads the exact bytes.  BUD-04 lets another authorised node mirror them, and each node verifies the content hash.</p></div></li>
-          <li><span>4</span><div><strong>Discover</strong><p>A signed NIP-94 event tells readers where to fetch the payload and what hash and size to expect.</p></div></li>
+          <li><span>4</span><div><strong>Keep the recovery record</strong><p>Single-file publishing uses a signed NIP-94 event. Pools use a private signed receipt saved to your device, without relay publication or torrent discovery.</p></div></li>
           <li><span>5</span><div><strong>Verify</strong><p>Retrieval is not complete until the byte count and SHA-256 match the signed event.  Decryption happens locally.</p></div></li>
         </ol>
         <div class="boundary protocol-boundary">
           <strong>The blunt bit.</strong>  Wildbloom is interoperable storage and
-          client-driven replication, not a new autonomous storage network.
+          owner-directed replication and shard repair.
           Nodes do not discover strangers, promise permanent custody or create
-          replicas without somebody explicitly asking them to.  Two nodes mean
+          replicas without somebody explicitly asking them to. An explicitly configured owner service can keep repairing while your browser is closed. Two nodes mean
           two copies only after mirroring succeeds and both hashes verify.
         </div>
         <div class="text-links">
@@ -460,6 +489,27 @@
           disables WebRTC, but a NIP-07 add-on or reused Nostr key can still
           fingerprint or identify you.
         </p>
+
+        <label>
+          Storage layout
+          <select id="storage-mode">
+            <option value="single">One node — existing Blossom publishing</option>
+            <option value="replicas">Replicated pool — complete encrypted copies</option>
+            <option value="erasure">Split pool — recover from a threshold of parts</option>
+          </select>
+        </label>
+        <div id="pool-settings" hidden>
+          <p class="privacy-boundary">Pool files are always encrypted. Split mode sends each node only one coded part; reconstruction and repair happen in your browser or an explicitly configured owner repair service. Operators may collude or fetch other parts if they learn their addresses. Encryption protects the contents. Keep the signed pool receipt privately alongside a separate recovery key; pool receipts are not published to relays or swarms.</p>
+          <label>Pool nodes <small>One URL, failure group and optional capacity weight per line. Nodes at the same site should share a group. Weights are relative allocations, not measured free space.</small>
+            <textarea id="pool-nodes" rows="5" maxlength="8192" placeholder="https://a.example site-a 1&#10;https://b.example site-b 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+          </label>
+          <div class="grid three">
+            <label id="pool-copies-field">Complete copies <input id="pool-copies" type="number" min="2" max="3" value="2" /></label>
+            <label id="pool-required-field">Parts needed to recover <input id="pool-required" type="number" min="2" max="15" value="2" /></label>
+            <label id="pool-total-field">Total coded parts <input id="pool-total" type="number" min="3" max="16" value="4" /></label>
+          </div>
+          <p id="pool-layout-help" class="hint">Inspect the file to validate placement. Extra failure groups provide spare destinations. A signed receipt describes intended placement; only verified reads count as stored parts. Keep the receipt even if an upload is interrupted.</p>
+        </div>
 
         <div class="grid three">
           <label>
@@ -643,7 +693,7 @@
             <input id="saved-event-file" type="file" accept="application/json,.json" />
           </label>
           <label>
-            Complete signed file event JSON
+            Complete signed file event or pool receipt JSON
             <textarea id="saved-event-json" rows="6" maxlength="131072" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
           </label>
           <div class="actions">
@@ -652,6 +702,14 @@
         </details>
         <dl id="resolved-facts" class="facts" aria-live="polite"></dl>
         <div id="resolved-event-links" class="downloads"></div>
+        <div id="pool-repair-panel" class="gate" hidden>
+          <p>Repair reconstructs ciphertext locally without a recovery key, then uploads only the intended parts to their approved nodes. Connect the receipt author’s signer first. The browser must remain open.</p>
+          <label>Replacement nodes (optional) <small>One part number (starting at 1), URL, failure group and optional weight per line. Adding nodes requires a new signed receipt; save it before closing the page. Existing nodes cannot be reassigned to a different part.</small>
+            <textarea id="pool-replacements" rows="3" maxlength="8192" placeholder="1 https://replacement.example new-site 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+          </label>
+          <label class="check"><input id="pool-repair-consent" type="checkbox" /><span>I approve reading this receipt’s nodes, reconstructing ciphertext here, and signing uploads to restore its storage layout.</span></label>
+          <button id="repair-pool" type="button" disabled>Verify and repair pool</button>
+        </div>
 
         <div class="actions split">
           <button id="fetch-blossom" type="button" disabled>Fetch and verify from Blossom</button>
