@@ -99,7 +99,7 @@ exact dependencies when implementing; these hashes are an evidence snapshot.
 | [toll-booth](https://github.com/forgesworn/toll-booth) | `53dc0f5` | TypeScript Lightning, Cashu and LNURLcash adapters; useful operator-side integration and behaviour reference. Generic request credits are not the storage entitlement model. |
 | [toll-booth-rs](https://github.com/forgesworn/toll-booth-rs) | `acd8b14` | Rust payment middleware foundation. Current rail implementation is Lightning; Cashu and LNURLcash parity is work, not an existing capability. |
 | [payment-methods](https://github.com/forgesworn/payment-methods) | `50ba1a4` | Proposed payment methods, schemas and interoperability references; not final IETF/IANA standards. |
-| [Shelter Kit](https://github.com/forgesworn/shelter-kit) | Node currently pins `v0.4.1` | Shared claims, quota and admission core. Paid retention and durable entitlements belong here; operator payment adapters belong outside it. |
+| [Shelter Kit](https://github.com/forgesworn/shelter-kit) | Initial Node inspection: `v0.4.1` | Shared claims, quota and admission core. Paid retention and durable entitlements belong here; operator payment adapters belong outside it. |
 
 Bitcoin on-chain and Monero need separate operator-owned settlement adapters.
 No suitable ForgeSworn adapter for those two methods was established in this
