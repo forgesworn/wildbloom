@@ -35,7 +35,7 @@ ciphertext, and verifies the returned descriptor.
 authority and a hash-addressed source URL, fetches it through the selected Tor
 or public-HTTPS transport, reserves
 quota before reading the body, and independently checks its length and SHA-256.
-Each replica stores the complete blob today. This is closer to deliberate
+Each mirror stores its complete addressed blob. A pool part is a separate encrypted blob. This is closer to deliberate
 Blossom pinning than BitTorrent chunk swarming.
 
 Native macOS acceptance has exercised two independent node processes: node B
@@ -50,6 +50,25 @@ That proves the tested replica survived its source loss and the unsigned Linux
 and Windows previews ran in those hosted environments.  It does not prove
 future custody, automatic replica discovery, trusted installer signing,
 updating, reboot behaviour or physical retail-machine support.
+
+## Pool storage and owner repair
+
+The browser can keep whole encrypted copies or encode the ciphertext into
+threshold-recoverable parts assigned to approved nodes. The signed private
+receipt records the layout and destinations; the recovery key remains separate.
+See [pool storage](POOL-STORAGE.md) for the recovery and trust boundaries.
+
+The [0.3.0 desktop preview](https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.0-preview.1)
+imports and validates receipts locally. It offers an explicit read-only check,
+per-part observations and owner-side automatic repair with a separate external
+signer, bounded resources and expiring authority. Repair reconstructs ciphertext
+on the owner machine without the recovery key. Keep that machine separate from
+storage nodes intended to hold only one part. Reopening the app does not restart
+repair authority.
+
+The [desktop guide](https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md)
+explains setup and limits. The [physical recovery checklist](https://github.com/forgesworn/wildbloom-node/blob/main/docs/PHYSICAL-POOL-ACCEPTANCE.md)
+is prepared but has not been performed across independent devices.
 
 ## Why it still needs Nostr
 
