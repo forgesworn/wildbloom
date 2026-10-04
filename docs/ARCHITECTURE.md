@@ -162,6 +162,12 @@ event recovery. This retains discovery data, not a replica of the file.
 
 ## Deliberate omissions
 
+The [paid storage implementation plan](PAID-STORAGE.md) adds direct-to-operator
+checkout using ForgeSworn libraries. Protected allowances are implemented in
+the Shelter Kit 0.5.0 prerelease; checkout and browser payment
+flows remain unimplemented. The browser remains a static client, and ForgeSworn
+does not collect payments for node operators.
+
 - No server defaults, analytics, accounts, local persistence or service worker.
 - No raw key input or app-held signing key.
 - No multi-file torrents.
