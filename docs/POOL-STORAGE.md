@@ -163,6 +163,47 @@ and `[16,17,18,41]`.
 
 ## Validation
 
+For a quick, fully automatic node-loss and repair check, build the browser once
+and point it at a reviewed daemon binary:
+
+```sh
+npm run build
+WILDBLOOM_NODE_BIN=/absolute/path/to/wildbloomd \
+WILDBLOOM_POOL_EVIDENCE=/tmp/quick-pool-recovery.json \
+  npm run acceptance:pool:quick
+```
+
+This uses six disposable loopback node processes and a real browser, with a
+1 MiB synthetic file and a 2-of-4 layout. It stops both data nodes, verifies exact
+file recovery from parity in a fresh browser, closes the browser contexts, and
+starts the owner service with bounded authority and no decryption key. The
+service restores the missing parts onto approved spares. The test then replaces
+both parity stores with empty disposable directories, verifies that the same
+running service restores them, stops the data spares, and recovers the exact file
+using only regenerated parity. Finally, fewer than two surviving parts must
+make a repair attempt refuse reconstruction with zero uploads. Every restored part is checked
+by independent GET, length and SHA-256, beyond the service's own report.
+
+No existing node data is touched. Processes and temporary stores are cleaned up
+after success or failure. The optional JSON evidence records outcomes, binary
+and production-build hashes, browser version and elapsed recovery time; it omits
+receipts, keys and endpoints. A nonzero command exit means failure even if no
+evidence was written (for example, if initial upload failed). The timer starts
+after setup/upload. `WILDBLOOM_BROWSER=chromium|firefox|webkit` chooses an installed
+Playwright engine; otherwise system Chrome is used. Run again with the same
+command for a new isolated fixture. `--maximum` and `--tor` require the full suite.
+The existing pool CI matrix also runs this check and saves its JSON as an artifact.
+
+These tests automate the recovery mechanics of the
+[physical checklist](https://github.com/forgesworn/wildbloom-node/blob/main/docs/PHYSICAL-POOL-ACCEPTANCE.md).
+They do not establish independent power, disks or networks, or desktop GUI,
+installer, reboot or physical mobile acceptance.
+
+On 5 October 2026 this quick journey passed locally on macOS in system Chrome,
+Playwright Firefox and Playwright WebKit, taking approximately 9–10 seconds per
+run after setup/upload. The full pool journey and `npm run ci` (187 tests) also
+passed. The new quick CI step has not yet run on hosted runners.
+
 Run `npm run check` and, with a built current Node binary:
 
 ```sh

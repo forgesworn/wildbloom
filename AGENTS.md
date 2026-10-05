@@ -17,6 +17,7 @@ delivery. It is interoperability work, not a new storage network.
 - `npm run smoke:browser:webkit`: the production journey in installed Playwright WebKit
 - `npm run smoke:swarm`: two isolated Chromium contexts transferring through a controlled TLS WebSocket tracker
 - `npm run acceptance:recovery`: fresh-browser recovery from a restarted real Node replica after the original node stops; requires `WILDBLOOM_NODE_BIN`
+- `npm run acceptance:pool:quick`: disposable local nodes, threshold recovery and repeated automatic owner repair; requires a production build and `WILDBLOOM_NODE_BIN`
 - `npm run dev`: local Vite development server
 - `npm run serve:production`: loopback static server with production response headers
 

@@ -54,6 +54,23 @@ jobs:
       - run: npm exec --offline -- playwright-core install --with-deps ${{ matrix.browser }}
       - run: cargo +1.94.1 build --locked --manifest-path .artifacts/wildbloom-node/Cargo.toml -p wildbloomd
       - run: npm run build
+      - name: Quick node-loss and automatic repair check
+        shell: bash
+        env:
+          WILDBLOOM_BROWSER: ${{ matrix.browser }}
+          WILDBLOOM_POOL_EVIDENCE: quick-pool-recovery.json
+        run: |
+          suffix=""
+          if [ "$RUNNER_OS" = "Windows" ]; then suffix=".exe"; fi
+          export WILDBLOOM_NODE_BIN="$GITHUB_WORKSPACE/.artifacts/wildbloom-node/target/debug/wildbloomd$suffix"
+          npm run acceptance:pool:quick
+      - name: Save quick recovery evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: quick-pool-recovery-${{ matrix.os }}-${{ matrix.browser }}
+          path: quick-pool-recovery.json
+          if-no-files-found: warn
       - name: Browser and unattended native repair acceptance
         shell: bash
         env:
