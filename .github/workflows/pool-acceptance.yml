@@ -7,7 +7,7 @@ on:
       node_commit:
         description: Full reviewed wildbloom-node commit SHA containing pool-repair
         required: false
-        default: "b821624a0cfd2392a5fabc685a73c50022f68b0b"
+        default: "f345a1d38f4705309ddcbccbf9bfbb0001770798"
         type: string
       maximum:
         description: Also exercise the 256 MiB source limit in Chromium
@@ -37,13 +37,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require an immutable daemon revision
         env:
-          NODE_COMMIT: ${{ inputs.node_commit || 'b821624a0cfd2392a5fabc685a73c50022f68b0b' }}
+          NODE_COMMIT: ${{ inputs.node_commit || 'f345a1d38f4705309ddcbccbf9bfbb0001770798' }}
         shell: bash
         run: '[[ "$NODE_COMMIT" =~ ^[a-f0-9]{40}$ ]]'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/wildbloom-node
-          ref: ${{ inputs.node_commit || 'b821624a0cfd2392a5fabc685a73c50022f68b0b' }}
+          ref: ${{ inputs.node_commit || 'f345a1d38f4705309ddcbccbf9bfbb0001770798' }}
           path: .artifacts/wildbloom-node
       - run: rustup toolchain install 1.94.1 --profile minimal
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
