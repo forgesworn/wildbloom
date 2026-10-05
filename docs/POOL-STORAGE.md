@@ -202,7 +202,8 @@ installer, reboot or physical mobile acceptance.
 On 5 October 2026 this quick journey passed locally on macOS in system Chrome,
 Playwright Firefox and Playwright WebKit, taking approximately 9–10 seconds per
 run after setup/upload. The full pool journey and `npm run ci` (187 tests) also
-passed. The new quick CI step has not yet run on hosted runners.
+passed. Hosted-runner results and JSON artifacts are recorded separately by the
+**Pool storage acceptance** workflow.
 
 Run `npm run check` and, with a built current Node binary:
 
