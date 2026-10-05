@@ -293,7 +293,7 @@ process.stdout.write(JSON.stringify(finalizeEvent(request, new Uint8Array(32).fi
     assert.notEqual(refused.code, 0); assert.equal(refused.stdout, "");
   }
   const changed = await native([...repairArgs, "--once", "--signer-arg=--change", `--signer-arg=${repairReceiptPath}`]);
-  assert.notEqual(changed.code, 0); assert.match(changed.stderr, /Changed/u);
+  assert.notEqual(changed.code, 0); assert.match(changed.stderr, /policy changed during the maintenance pass/u);
   assert.equal(changed.stdout, "", "Changed receipt cannot complete an authorised pass");
   writeFileSync(repairReceiptPath, replacementReceiptBytes, { mode: 0o600 });
   const wrong = await native([...repairArgs, "--once", "--signer-arg=--wrong"]);
@@ -322,7 +322,7 @@ process.stdout.write(JSON.stringify(finalizeEvent(request, new Uint8Array(32).fi
   });
   resident.stdout.resume();
   const locked = await native([...repairArgs, "--once"]);
-  assert.notEqual(locked.code, 0); assert.match(locked.stderr, /State\(Locked\)/u);
+  assert.notEqual(locked.code, 0); assert.match(locked.stderr, /another coordinator already owns this replica state directory/u);
   for (let i = 0; i < replacements.length; i++) {
     const node = replacements[i]; await stop(node.child);
     node.child = launch(binary, ["--no-tor", "--bind", new URL(node.origin).host, "--public-url", node.origin,
