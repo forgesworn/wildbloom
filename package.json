@@ -45,7 +45,8 @@
     "check": "npm run install:policy && npm run encryption:vector && npm run encryption:semantic-vectors && npm run acceptance:cross-device:self-test && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run secrets",
     "ci": "npm run check && npm run audit",
     "acceptance:recovery": "node scripts/recovery-acceptance.mjs",
-    "acceptance:pool": "node scripts/pool-acceptance.mjs"
+    "acceptance:pool": "node scripts/pool-acceptance.mjs",
+    "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",

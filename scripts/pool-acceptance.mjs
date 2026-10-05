@@ -16,6 +16,10 @@ const secret = new Uint8Array(32).fill(37);
 const owner = getPublicKey(secret);
 const binary = process.env.WILDBLOOM_NODE_BIN;
 if (!binary) throw new Error("Set WILDBLOOM_NODE_BIN to the reviewed daemon binary.");
+const quick = process.argv.includes("--quick");
+if (quick && (process.argv.includes("--maximum") || process.argv.includes("--tor"))) {
+  throw new Error("Quick recovery is a small loopback test; use the full suite for --maximum or --tor.");
+}
 const root = mkdtempSync(join(tmpdir(), "wildbloom-pool-"));
 const children = [];
 const contexts = [];
@@ -159,6 +163,12 @@ try {
     assert.deepEqual(policy.blobs, [{ sha256: manifest.parts[i].sha256, size: manifest.parts[i].size }]);
   }
   for (const node of nodes) assert.equal((await fetch(`${node.origin}/${manifest.payload.sha256}`)).status, 404, "No node may hold the whole ciphertext");
+  if (quick) {
+    const { acceptQuickPoolRecovery } = await import("./pool-quick-acceptance.mjs");
+    await acceptQuickPoolRecovery({ root, binary, nodes, origin, allowed, publisher, browser,
+      browserName, source, key, receiptBytes, receiptPath, event, manifest, owner,
+      children, errors, launch, stop, ready, pageAt, status, hash });
+  } else {
   // Lose both systematic data parts: recovery now requires both parity parts.
   for (const part of manifest.parts.slice(0, 2)) await stop(nodes.find((node) => `${node.origin}/` === part.targets[0].origin).child);
   await assertNoBrowserPersistence(p, publisher.context, "pool publisher");
@@ -355,6 +365,7 @@ process.stdout.write(JSON.stringify(finalizeEvent(request, new Uint8Array(32).fi
   assert.deepEqual(errors, []);
   process.stdout.write(`Browser ${browserName}; source ${source.length} bytes; native owner repair, exact signer refusal, restart, exclusive lock, repeated unattended loss/repair and expiry passed.\n`);
   process.stdout.write("Pool acceptance passed: six real local nodes plus two replacements, 2-of-4 erasure layout, external signatures, private receipt, no whole ciphertext on an initial node, fresh-browser parity-only recovery, wrong-key rejection, client repair to spares, signed replacement destinations and recovery after every original node stops, two-copy replicated UI mode, native receipt import, no relay/swarm/persistence, accessibility. The browser journey uses local processes; optional real-Tor owner-process results are reported separately. This does not establish independent physical custody.\n");
+  }
 } finally {
   for (const context of contexts) await context.close().catch(() => {});
   await browser?.close();
