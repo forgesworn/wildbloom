@@ -58,13 +58,14 @@ threshold-recoverable parts assigned to approved nodes. The signed private
 receipt records the layout and destinations; the recovery key remains separate.
 See [pool storage](POOL-STORAGE.md) for the recovery and trust boundaries.
 
-The [0.3.0 desktop preview](https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.0-preview.1)
+The [0.3.1 desktop preview](https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.1-preview.1)
 imports and validates receipts locally. It offers an explicit read-only check,
 per-part observations and owner-side automatic repair with a separate external
 signer, bounded resources and expiring authority. Repair reconstructs ciphertext
 on the owner machine without the recovery key. Keep that machine separate from
 storage nodes intended to hold only one part. Reopening the app does not restart
-repair authority.
+repair authority. Local disk errors stop repair; a hard crash preserves temporary
+files for explicit review before restart.
 
 The [desktop guide](https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md)
 explains setup and limits. The [physical recovery checklist](https://github.com/forgesworn/wildbloom-node/blob/main/docs/PHYSICAL-POOL-ACCEPTANCE.md)
