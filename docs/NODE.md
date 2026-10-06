@@ -78,6 +78,14 @@ The [desktop guide](https://github.com/forgesworn/wildbloom-node/blob/main/docs/
 explains setup and limits. The [physical recovery checklist](https://github.com/forgesworn/wildbloom-node/blob/main/docs/PHYSICAL-POOL-ACCEPTANCE.md)
 is prepared but has not been performed across independent devices.
 
+The [signed Mac preview.2](https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.3-preview.2)
+contains the same 0.3.3 application binaries with Developer ID signatures,
+Apple notarisation and stapled tickets for Apple Silicon and Intel. Checksums
+and signing evidence accompany the downloads. Gatekeeper and package checks
+passed on the development Mac; clean-machine install/upgrade and native Intel
+execution remain unverified. These are manual installs, not automatic updates.
+Windows and Linux packages remain in preview.1; Windows signing is outstanding.
+
 ## Why it still needs Nostr
 
 Nostr is useful for signed discovery, server lists and private storage offers.

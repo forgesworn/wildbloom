@@ -71,5 +71,10 @@
     "vitest": "4.1.11",
     "wrangler": "4.147.0",
     "ws": "8.21.3"
+  },
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5"
+    }
   }
 }
