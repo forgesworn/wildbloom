@@ -21,8 +21,8 @@ record. Freeze both source commits with the reviewer before work starts. Any
 later Windows permission or release-verification changes require an explicitly
 recorded scope update and independent review; a passing maintainer test is not
 a retest by the reviewer. The prepared follow-up is
-[Node PR 41](https://github.com/forgesworn/wildbloom-node/pull/41), initially
-`88385f703a749f677dd0442bfe04c2c315325584`; record its final source and disposition
+[Node PR 41](https://github.com/forgesworn/wildbloom-node/pull/41), source
+`09bb17e54562b447bc500fd020829dcb272f6fb5`; record its final source and disposition
 when freezing the review. Documentation-only changes do not change runtime code.
 
 ## Independence and disclosure

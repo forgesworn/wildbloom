@@ -28,6 +28,19 @@ Before commissioning, record:
 | Disclosure | Private reporting channel, disclosure window, public report rights | Agree before work |
 | Retest | Exact remediation commits and independent outcome | Not started |
 
+## Routes checked on 6 October 2026
+
+| Route | Published service | Next decision |
+| --- | --- | --- |
+| [OTF Security Lab](https://www.opentech.fund/labs/security-lab/) | Funded security audits for internet-freedom projects | Establish mission fit and eligibility; funding is not assumed |
+| [OSTIF](https://ostif.org/get-an-audit/) | Scope development, independent reviewer sourcing and possible funding/sponsor assistance | Submit the bounded scope once owner authorises contact |
+| [Least Authority](https://leastauthority.com/security-consulting/) | Commercial review of cryptographic protocols and distributed systems | Request a scoped quote including native/browser expertise and retest |
+
+These are candidates, not endorsements or booked engagements. My assessment is
+that a funded route is worth exploring before approving commercial expenditure;
+none has confirmed eligibility, availability or a Wildbloom price. The existing
+issue also lists other commercial candidates for comparison.
+
 ## Reproducible source and tests
 
 Clone the public `forgesworn/wildbloom` and `forgesworn/wildbloom-node`
