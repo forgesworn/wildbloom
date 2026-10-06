@@ -185,6 +185,10 @@ if the package exclusions, Wildbloom's exact import or the browser-bundle
 contents change. Vite also rejects that Node code from the actual production
 module graph. Every other advisory still fails CI.
 
+Miniflare's Sharp dependency is overridden to patched `0.35.5` for
+[GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w).
+Remove the override once the pinned Cloudflare tooling includes the fix.
+
 Each Windows, Linux and macOS verification job also emits bounded release
 evidence for its own build. A separate job validates those records against the
 checked-out source commit and requires identical package locks, Node/npm
