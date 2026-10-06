@@ -44,7 +44,7 @@ identity recovery words do not reconstruct a lost file key.
 
 | Gate | Required evidence |
 | --- | --- |
-| Independent security review | Reviewer independent of design/implementation, agreed funded scope, report, remediation and independent retest per `SECURITY-REVIEW-BRIEF.md`; issue 28 remains open |
+| Independent security review | Updated [seven-package brief](SECURITY-REVIEW-BRIEF.md) and [commissioning handoff](SECURITY-REVIEW-HANDOFF.md) cover browser, pools, Node, desktop and release trust. Reviewer independent of design/implementation, agreed funded scope, report, remediation and independent retest per `SECURITY-REVIEW-BRIEF.md`; issue 28 remains open |
 | Two physical browser devices | Complete `CROSS-DEVICE-ACCEPTANCE.md` and obtain a reviewed, redacted passing record; zero Blossom blob bytes, exact peer recovery and teardown; issue 26 |
 | Human browser/signing review | Tor Browser chrome/security-level/new-identity/cancellation journey and intended external signer/transfer medium |
 | Accessibility | VoiceOver/Safari, NVDA, actual zoom/forced-colours and independent keyboard review per `ACCESSIBILITY.md` |
