@@ -1,7 +1,13 @@
 # Live paid-storage acceptance
 
-**Prepared, not performed.** The shipped synthetic journey proves the controlled
-integration. This ceremony checks one actual operator and receiving service,
+This checklist separates controlled integration tests from live acceptance.
+A one-Mac LNURLcash run on 7 October 2026 activated a paid allowance, survived
+a daemon restart and recovered all 39,936 original bytes from encrypted storage.
+The full audit remains unverified; the subsequent retry stopped at signer
+connection. This is not a completed live acceptance ceremony or a hosted
+operator acceptance result. Sensitive evidence is retained privately.
+
+This ceremony checks one actual operator and receiving service,
 one payment rail at a time. A Lightning pass does not establish LNURLcash
 acceptance. Physical pool recovery is a separate test.
 
@@ -89,6 +95,13 @@ private directory with appropriate ACLs. Failed checks produce no passing record
    recovery material. Compare recovered bytes and SHA-256 with the original.
    Run a fresh full storage audit and save its private result. A successful audit
    proves retrieval at that moment, not continuous or independent custody.
+   The audit displays when HTTP-auth approval (kind 27235) is pending. Failed
+   targets include a safe stage and reason on screen and in the private report's
+   `failures` array; `failed` retains the origin list for existing consumers.
+   Signer rejection or expiry is not evidence of lost storage. Reconnect/approve
+   and retry that audit before considering repair. HTTP, invalid challenge,
+   independent retrieval and digest failures remain distinct. Do not publish
+   the report or add a new payment to resolve an audit failure.
 8. Stop the test node cleanly. Make a consistent offline backup of its paired
    checkout and storage directories, including SQLite WAL where present. Retain
    the original backup unchanged. Restore copies into an isolated operator test

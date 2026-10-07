@@ -128,6 +128,27 @@ describe("private service transport", () => {
       "Service action failed; check the same order before attempting another payment.",
     );
   });
+  it("reports signer failure without leaking signer text or sending a request", async () => {
+    const fetchImpl = vi.fn();
+    const onPhase = vi.fn();
+    const rejecting = { ...buyer, signer: { ...buyer.signer, signEvent: async () => {
+      throw new Error("Service secret https://private.example/token");
+    } } };
+    await expect(requestJson(origin, "/storage/v1/proof", {}, rejecting, { fetchImpl, onPhase }))
+      .rejects.toMatchObject({ code: "signer", message: "Signer approval failed or the returned signature was invalid. Check your signer and retry." });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(onPhase.mock.calls).toEqual([["signing"]]);
+  });
+  it("distinguishes audit HTTP and network failures without payment advice or remote error text", async () => {
+    const onPhase = vi.fn();
+    await expect(requestJson(origin, "/storage/v1/proof", {}, buyer, {
+      onPhase, fetchImpl: async () => new Response("private server details", { status: 403 }),
+    })).rejects.toMatchObject({ code: "http", status: 403, message: "Service request failed (HTTP 403); the storage audit was not verified." });
+    expect(onPhase.mock.calls).toEqual([["signing"], ["request"]]);
+    await expect(requestJson(origin, "/storage/v1/proof", {}, buyer, {
+      fetchImpl: async () => { throw new Error("Service private backend token"); },
+    })).rejects.toMatchObject({ code: "network", message: "Storage audit request failed; check node connectivity and browser access." });
+  });
   it("never sends a cancelled or stale signature", async () => {
     const controller = new AbortController();
     const fetchImpl = vi.fn();

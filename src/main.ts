@@ -701,6 +701,7 @@ connectSignerButton.addEventListener("click", () => guard(publishStatus, async (
   const expectedPublicationRevision = publicationRevision;
   const selectedSigningMethod = signingMethod();
   const selectedSigner = signer();
+  setStatus(publishStatus, "Waiting for the signer connection…");
   const candidate = assertHex64(await selectedSigner.getPublicKey(), "Signer public key");
   if (profileRevision !== expectedProfileRevision
     || publicationRevision !== expectedPublicationRevision
@@ -964,27 +965,33 @@ signButton.addEventListener("click", () => guard(publishStatus, async () => {
     ...(selectedTorrentPlan ? { torrent: selectedTorrentPlan } : {}),
     ...(protectedEnvelope ? { encryption: protectedEnvelope.scheme } : {}),
   };
-  const fileEvent = await signEventExactly(buildFileEvent(publication), selectedSigner, selectedPubkey);
-  if (publicationRevision !== expectedRevision || profile() !== selectedProfile) return;
-  const nextSignedEvents = [fileEvent];
-  if (selectedTorrentPlan) {
-    const torrentEvent = await signEventExactly(
-      buildTorrentEvent(selectedInspected, selectedTorrentPlan),
-      selectedSigner,
-      selectedPubkey,
-    );
+  signButton.disabled = true;
+  setStatus(publishStatus, "Waiting for approval of the file-recovery record in your signer…");
+  try {
+    const fileEvent = await signEventExactly(buildFileEvent(publication), selectedSigner, selectedPubkey);
     if (publicationRevision !== expectedRevision || profile() !== selectedProfile) return;
-    nextSignedEvents.push(torrentEvent);
+    const nextSignedEvents = [fileEvent];
+    if (selectedTorrentPlan) {
+      const torrentEvent = await signEventExactly(
+        buildTorrentEvent(selectedInspected, selectedTorrentPlan),
+        selectedSigner,
+        selectedPubkey,
+      );
+      if (publicationRevision !== expectedRevision || profile() !== selectedProfile) return;
+      nextSignedEvents.push(torrentEvent);
+    }
+    signedEvents = nextSignedEvents;
+    clearDownloads(signedEventLinks);
+    addFileEventDownload(signedEventLinks, fileEvent);
+    publishButton.disabled = !publishConsent.checked || storageMode.value !== "single";
+    const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
+    setStatus(
+      publishStatus,
+      `${selectedSigningMethod === "external" ? "Exact external signatures accepted" : "Signed locally through NIP-07"}.\n${identifiers}\nNo relay publication yet.`,
+    );
+  } finally {
+    if (publicationRevision === expectedRevision) signButton.disabled = false;
   }
-  signedEvents = nextSignedEvents;
-  clearDownloads(signedEventLinks);
-  addFileEventDownload(signedEventLinks, fileEvent);
-  publishButton.disabled = !publishConsent.checked || storageMode.value !== "single";
-  const identifiers = signedEvents.map((event) => `${event.kind}: ${event.id}`).join("\n");
-  setStatus(
-    publishStatus,
-    `${selectedSigningMethod === "external" ? "Exact external signatures accepted" : "Signed locally through NIP-07"}.\n${identifiers}\nNo relay publication yet.`,
-  );
 }));
 
 publishConsent.addEventListener("change", () => {

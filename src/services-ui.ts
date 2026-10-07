@@ -11,7 +11,7 @@ import {
 import { buildServerList, discoverNodes } from "./core/discovery.js";
 import { signEventExactly } from "./core/nostr.js";
 import { publishToRelays } from "./core/relay.js";
-import { auditStoredBlob, type StorageAudit } from "./core/storage-proof.js";
+import { auditFailure, auditStoredBlob, type StorageAudit } from "./core/storage-proof.js";
 import type { Buyer } from "./core/services-http.js";
 import type { PoolReceipt } from "./core/pool.js";
 import type { NetworkProfile, ResolvedHybridEvent } from "./core/types.js";
@@ -392,17 +392,28 @@ export function mountNodeServices(context: Context): { reset(): void } {
       : [{ file: file!, origin: new URL(file!.url).origin }];
     const proofs: StorageAudit[] = [];
     const failed: string[] = [];
+    const failures: { origin: string; sha256: string; stage: string; reason: string }[] = [];
     output("storage-audit-results", "");
     for (const job of jobs) {
       current();
       status.textContent = `Verifying ${proofs.length + failed.length + 1}/${jobs.length} storage targets…`;
       try {
         proofs.push(
-          await auditStoredBlob(job.file, job.origin, buyer, options),
+          await auditStoredBlob(job.file, job.origin, buyer, {
+            ...options,
+            onPhase: (phase) => {
+              current();
+              const target = `${proofs.length + failed.length + 1}/${jobs.length}`;
+              status.textContent = phase === "signing"
+                ? `Target ${target}: waiting for HTTP-auth approval (kind 27235) in your signer…`
+                : `Target ${target}: requesting and independently verifying the storage proof…`;
+            },
+          }),
         );
-      } catch {
+      } catch (error) {
         current();
         failed.push(job.origin);
+        failures.push({ origin: job.origin, sha256: job.file.sha256, ...auditFailure(error) });
       }
     }
     current();
@@ -410,15 +421,21 @@ export function mountNodeServices(context: Context): { reset(): void } {
       "storage-audit-results",
       `${proofs.length}/${jobs.length} targets verified. ${failed.length} failed or unavailable. Evidence is private and proves current retrievability only. `,
     );
+    for (const failure of failures) {
+      const line = document.createElement("p");
+      line.textContent = `${failure.origin} (${failure.sha256.slice(0, 12)}…): ${failure.reason}`;
+      el("storage-audit-results").append(line);
+    }
     download("storage-audit-results", "wildbloom-storage-audit.json", {
       version: 1,
       proofs,
       failed,
+      failures,
       scope:
         "full-read retrievability; no continuous-retention or dedicated-copy claim",
     });
     status.textContent = failed.length
-      ? "Some targets could not be verified. Check pool health and repair redundancy."
+      ? "Some targets could not be verified. Review the per-target reasons below before retrying or repairing."
       : "All selected targets passed a fresh full-read audit.";
   });
   return { reset };
