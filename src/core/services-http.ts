@@ -3,7 +3,17 @@ import { signEventExactly } from "./nostr.js";
 import { assertHex64, normaliseBlossomServer } from "./security.js";
 import type { EventTemplate, NetworkProfile, SignerPort } from "./types.js";
 
+export type ServicePhase = "signing" | "request";
+export type ServiceFailureCode = "signer" | "expired" | "cancelled" | "http" | "response" | "network";
+export class ServiceRequestError extends Error {
+  constructor(readonly code: ServiceFailureCode, message: string, readonly status?: number) {
+    super(message);
+    this.name = "ServiceRequestError";
+  }
+}
+
 export interface ServiceOptions {
+  onPhase?: (phase: ServicePhase) => void;
   profile?: NetworkProfile;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
@@ -82,12 +92,16 @@ export async function requestJson(
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) abort();
   const timer = setTimeout(abort, timeout);
+  const audit = path === "/storage/v1/proof";
+  let phase: ServicePhase = "request";
   try {
     controller.signal.throwIfAborted();
     const method = body === undefined ? "GET" : "POST";
     const headers: Record<string, string> = { Accept: "application/json" };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (buyer) {
+      phase = "signing";
+      options.onPhase?.(phase);
       const template = await httpTemplate(url, method, encoded);
       const event = await signEventExactly(
         template,
@@ -96,10 +110,12 @@ export async function requestJson(
       );
       controller.signal.throwIfAborted();
       if (Math.floor(Date.now() / 1000) > template.created_at + 55)
-        throw new Error("Signature expired; repeat this action.");
+        throw new ServiceRequestError("expired", "Signature expired; repeat this action and approve promptly.");
       headers.Authorization = `Nostr ${btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(event))))}`;
     }
     controller.signal.throwIfAborted();
+    phase = "request";
+    options.onPhase?.(phase);
     const response = await (options.fetchImpl ?? fetch)(url, {
       method,
       headers,
@@ -119,8 +135,12 @@ export async function requestJson(
         .startsWith("application/json")
     ) {
       await response.body?.cancel();
-      throw new Error(
-        `Service request failed (${response.status}); no payment outcome can be inferred.`,
+      throw new ServiceRequestError(
+        "http",
+        audit
+          ? `Service request failed (HTTP ${response.status}); the storage audit was not verified.`
+          : `Service request failed (${response.status}); no payment outcome can be inferred.`,
+        response.status,
       );
     }
     const reader = response.body.getReader();
@@ -132,7 +152,7 @@ export async function requestJson(
         const { done, value } = await reader.read();
         if (done) break;
         length += value.length;
-        if (length > 65536) throw new Error("Service response is too large.");
+        if (length > 65536) throw new ServiceRequestError("response", "Service response is too large.");
         chunks.push(value);
       }
     } finally {
@@ -151,21 +171,28 @@ export async function requestJson(
         new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       ) as unknown;
     } catch {
-      throw new Error("Invalid service JSON response.");
+      throw new ServiceRequestError("response", "Invalid service JSON response.");
     }
   } catch (error) {
     if (controller.signal.aborted)
-      throw new Error(
-        "Service action cancelled or timed out. A pending payment may still need reconciliation.",
+      throw new ServiceRequestError(
+        "cancelled",
+        audit
+          ? "Storage audit cancelled or timed out; retry when the signer and node are ready."
+          : "Service action cancelled or timed out. A pending payment may still need reconciliation.",
       );
-    // Fetch failures can contain a backend URL. Never expose arbitrary network errors.
-    if (
-      error instanceof Error &&
-      /^(?:Service |Invalid service |Signature expired)/u.test(error.message)
-    )
-      throw error;
-    throw new Error(
-      "Service action failed; check the same order before attempting another payment.",
+    // Only our own typed failures are safe to display. Signers and fetch may
+    // include URLs, tokens or arbitrary remote content in their exceptions.
+    if (error instanceof ServiceRequestError) throw error;
+    if (phase === "signing")
+      throw new ServiceRequestError(
+        "signer", "Signer approval failed or the returned signature was invalid. Check your signer and retry.",
+      );
+    throw new ServiceRequestError(
+      "network",
+      audit
+        ? "Storage audit request failed; check node connectivity and browser access."
+        : "Service action failed; check the same order before attempting another payment.",
     );
   } finally {
     clearTimeout(timer);

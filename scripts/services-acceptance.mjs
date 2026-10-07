@@ -15,6 +15,7 @@ import {
   installBrowserPersistenceAudit,
 } from "./browser-persistence.mjs";
 import { inspectProductionBuild } from "./production-build.mjs";
+import { runPreflight } from "./checkout-preflight.mjs";
 
 // Public synthetic keys stay in this harness, never enter application code.
 const key = new Uint8Array(32).fill(42),
@@ -198,6 +199,11 @@ try {
   ];
   let node = launch(binary, args);
   await ready(node, nodeOrigin);
+  const checkoutReadiness = await runPreflight({
+    node: nodeOrigin, app: appOrigin, offer: "small", rail: "lightning", maxSats: 10,
+  });
+  assert.equal(checkoutReadiness.status, "preflight-passed");
+  assert.equal(checkoutReadiness.paymentAttempted, false);
   const unpaid = Buffer.from("unpaid synthetic upload");
   const denied = await fetch(nodeOrigin + "/upload", {
     method: "PUT",
@@ -349,6 +355,8 @@ try {
     .filter({ hasText: "Blossom metadata is staged" })
     .waitFor();
   await page.click("#sign-events");
+  assert.equal(await page.locator("#sign-events").isDisabled(), true);
+  assert.match(await page.locator("#publish-status").textContent(), /waiting for an external signature/);
   const fileEvent = await sign(page, 1063);
   await page
     .locator("#publish-status")
@@ -360,7 +368,9 @@ try {
   await page.fill("#saved-event-json", JSON.stringify(fileEvent));
   await page.click("#verify-saved-event");
   await page.check("#proof-consent");
-  await action(page, "#storage-audit");
+  await page.click("#storage-audit");
+  await wait(page, "waiting for HTTP-auth approval");
+  await sign(page, 27235);
   await wait(page, "All selected targets passed");
   const audit = JSON.parse(
     (await download(page, "#storage-audit-results a")).toString(),
@@ -373,6 +383,11 @@ try {
   writeFileSync(blobPath, Buffer.alloc(original.length));
   await action(page, "#storage-audit");
   await wait(page, "Some targets could not be verified");
+  const failedAudit = JSON.parse((await download(page, "#storage-audit-results a")).toString());
+  assert.equal(failedAudit.failures.length, 1);
+  assert.equal(failedAudit.failures[0].sha256, blobHash);
+  assert.ok(["http", "retrieval"].includes(failedAudit.failures[0].stage));
+  assert.ok((await page.locator("#storage-audit-results").textContent()).includes(failedAudit.failures[0].reason));
   writeFileSync(blobPath, original);
   await page.click("#checkout-offers");
   await wait(page, "Offers loaded");

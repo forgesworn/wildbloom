@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { describe, expect, it } from "vitest";
-import { auditStoredBlob, challengeDigest } from "../src/core/storage-proof.js";
+import { auditFailure, auditStoredBlob, challengeDigest, StorageAuditError } from "../src/core/storage-proof.js";
+import { ServiceRequestError } from "../src/core/services-http.js";
 import type { ResolvedHybridEvent } from "../src/core/types.js";
 const secret = new Uint8Array(32).fill(42);
 const buyer = {
@@ -37,6 +38,11 @@ function independent(nonce: string): string {
     .digest("hex");
 }
 describe("private full-read storage audits", () => {
+  it("exports only sanitised failure details", () => {
+    expect(auditFailure(new Error("secret token"))).toEqual({ stage: "unknown", reason: "Storage audit could not be completed." });
+    expect(auditFailure(new ServiceRequestError("signer", "Signer approval failed."))).toEqual({ stage: "signer", reason: "Signer approval failed." });
+    expect(auditFailure(new StorageAuditError("retrieval", "Bytes could not be verified."))).toEqual({ stage: "retrieval", reason: "Bytes could not be verified." });
+  });
   it("matches an independent byte-level domain-separated vector", async () => {
     expect(await challengeDigest(new Blob([content]), "00".repeat(32))).toBe(
       independent("00".repeat(32)),
@@ -103,7 +109,7 @@ describe("private full-read storage audits", () => {
       };
       await expect(
         auditStoredBlob(file, "https://node.example", buyer, { fetchImpl }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ stage: mode === "stale" ? "response" : mode === "corrupt" ? "retrieval" : "digest" });
       expect(gets).toBe(mode === "stale" ? 0 : 1);
     },
   );
