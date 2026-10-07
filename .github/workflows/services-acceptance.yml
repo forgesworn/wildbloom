@@ -1,11 +1,13 @@
 name: Node services acceptance
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       node_commit:
         description: Full reviewed wildbloom-node commit containing checkout and storage proofs
         required: true
+        default: "623fd96b8cd3c0b33cedd4332d5208f913398560"
         type: string
 
 permissions:
@@ -25,18 +27,16 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Validate the explicit Node revision
         env:
-          NODE_COMMIT: ${{ inputs.node_commit }}
+          NODE_COMMIT: ${{ inputs.node_commit || '623fd96b8cd3c0b33cedd4332d5208f913398560' }}
         run: |
           [[ "$NODE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/wildbloom-node
-          ref: ${{ inputs.node_commit }}
+          ref: ${{ inputs.node_commit || '623fd96b8cd3c0b33cedd4332d5208f913398560' }}
           path: .artifacts/services-node
-      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
-        with:
-          toolchain: 1.94.1
-      - run: cargo build --locked --manifest-path .artifacts/services-node/Cargo.toml -p wildbloomd -p wildbloom-checkout --bin wildbloomd --example checkout_fixture
+      - run: rustup toolchain install 1.94.1 --profile minimal
+      - run: cargo +1.94.1 build --locked --manifest-path .artifacts/services-node/Cargo.toml -p wildbloomd -p wildbloom-checkout --bin wildbloomd --example checkout_fixture
       - run: npm run build
       - name: Exercise the real daemon through the production browser
         run: |
