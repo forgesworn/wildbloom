@@ -3,9 +3,13 @@
 This checklist separates controlled integration tests from live acceptance.
 A one-Mac LNURLcash run on 7 October 2026 activated a paid allowance, survived
 a daemon restart and recovered all 39,936 original bytes from encrypted storage.
-The full audit remains unverified; the subsequent retry stopped at signer
-connection. This is not a completed live acceptance ceremony or a hosted
-operator acceptance result. Sensitive evidence is retained privately.
+A fresh full-read audit subsequently passed with one target verified and zero
+failures, with its digest independently recomputed over all 65,608 ciphertext
+bytes. Only Bark 1.3.13 was enabled for that passing run. The earlier connection
+failures remain part of the private evidence; the passing result does not
+establish that the separately patched unpacked extension works with this pairing.
+This is not a completed live acceptance ceremony or a hosted operator acceptance
+result. Sensitive evidence is retained privately.
 
 This ceremony checks one actual operator and receiving service,
 one payment rail at a time. A Lightning pass does not establish LNURLcash
@@ -120,6 +124,60 @@ never export the replacement spend or secret. An uncertain rotation must be
 reconciled using its saved journal. Do not re-submit another note to resolve it.
 
 ## Evidence and remaining physical gate
+
+### One-Mac observations, 7 October 2026
+
+These observations concern a loopback development daemon built from Node source
+`ce4bceaea65b3a2992933ecaa38aa7545a79e044`, a real Moneyer LNURLcash purchase and
+the existing external signer. They do not establish hosted operator readiness,
+Phoenixd acceptance or independent physical storage.
+
+| Check | Observed result |
+| --- | --- |
+| Paid allowance and daemon restart | Passed: the original order and receipt survived restart; one order and settlement were retained. |
+| Fresh-browser encrypted recovery | Passed: all 39,936 plaintext bytes matched the source. |
+| Fresh full-read audit before backup | Passed: 1/1 targets, zero failures; a fresh nonce and independently recomputed digest over 65,608 ciphertext bytes. |
+| Offline backup after upload | Passed: both stores were copied with the daemon stopped; SQLite integrity and copied-file hashes matched. The earlier pre-upload backup was retained separately. |
+| Restore into separate directories | Passed: only the restored copy was started, on the original loopback origin. The original stores were preserved. The active order, receipt, allowance limits/deadlines, paid sale and file claim matched. |
+| Fresh-browser recovery from restored storage | Passed: AES-GCM verification succeeded and the downloaded plaintext matched all 39,936 source bytes exactly. |
+| Signed order recovery and fresh audit after restore | Blocked: the fresh signer connection timed out, including a retry after the signer was reported ready. Bark remained reconnecting; no post-restore audit started. Local ledger comparison is separate evidence, not a signed HTTP order-recovery pass. |
+| Return to original stores | Passed: the restored daemon was stopped, payment state and the unchanged backup were checked, and the original daemon was restarted alone. |
+| Operator refund procedure | Not exercised. |
+| Independent physical node loss and repair | Not exercised: only one Mac was available. |
+
+No additional purchase, note submission or payment was made during restoration.
+Private evidence retains the backup manifest, logical database comparisons,
+download comparison and individual signer/audit attempts. Do not publish the
+stores, order references, raw audit reports or recovery material.
+
+### Repeating the paired restore safely
+
+1. Record the exact daemon build, matching configuration, original order and
+   expected plaintext/ciphertext hashes privately. Keep the file recovery key
+   separately from the operator backup.
+2. Stop the designated daemon and verify that its listener and store handles
+   have closed. Copy **both** checkout and storage directories, including any
+   SQLite sidecars, into a new private backup directory. Check database
+   integrity and record file hashes. Never overwrite an earlier backup.
+3. Restore into another new private directory. Verify its files against the
+   backup before starting it. Use the same binary and configuration, changing
+   only the checkout/storage paths. On a single Mac, reuse the original
+   loopback bind and public origin while the original daemon remains stopped;
+   this preserves the signed URL and checkout origin bindings.
+4. Recover the original order using its original signer, retrieve/decrypt the
+   saved file in a fresh browser session, compare the downloaded bytes, and run
+   a fresh storage audit. Compare the order, receipt, allowance and settlement
+   state; do not create a quote or submit a payment during this check.
+5. Stop the restored daemon before returning to the original. Compare the
+   payment state before deciding which store is authoritative. If a payment,
+   note rotation or other financial mutation occurred, do not blindly restart
+   the older ledger: preserve both offline and reconcile first. If only the
+   read-only checks occurred and payment state is unchanged, restart the
+   original daemon and leave the backup and restored copy offline.
+
+At no point may two copies of the spendable-note ledger run concurrently.
+An intact backup and an authenticated file download do not replace the signed
+order-recovery and fresh-audit checks. Record any blocked step separately.
 
 For each numbered row record date, exact builds, expected result, observed result
 and **pass / fail / blocked**. Preserve failed attempts; a later pass does not
