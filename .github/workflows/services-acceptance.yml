@@ -7,7 +7,7 @@ on:
       node_commit:
         description: Full reviewed wildbloom-node commit containing checkout and storage proofs
         required: true
-        default: "623fd96b8cd3c0b33cedd4332d5208f913398560"
+        default: "ce4bceaea65b3a2992933ecaa38aa7545a79e044"
         type: string
 
 permissions:
@@ -27,13 +27,13 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Validate the explicit Node revision
         env:
-          NODE_COMMIT: ${{ inputs.node_commit || '623fd96b8cd3c0b33cedd4332d5208f913398560' }}
+          NODE_COMMIT: ${{ inputs.node_commit || 'ce4bceaea65b3a2992933ecaa38aa7545a79e044' }}
         run: |
           [[ "$NODE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/wildbloom-node
-          ref: ${{ inputs.node_commit || '623fd96b8cd3c0b33cedd4332d5208f913398560' }}
+          ref: ${{ inputs.node_commit || 'ce4bceaea65b3a2992933ecaa38aa7545a79e044' }}
           path: .artifacts/services-node
       - run: rustup toolchain install 1.94.1 --profile minimal
       - run: cargo +1.94.1 build --locked --manifest-path .artifacts/services-node/Cargo.toml -p wildbloomd -p wildbloom-checkout --bin wildbloomd --example checkout_fixture
