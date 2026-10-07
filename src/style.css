@@ -296,3 +296,9 @@ footer p { margin: 0.45rem 0; }
   .dg-label, .dg-sub, .dg-edge, .dg-head, .dg-doc, .dg-sun, .dg-hills { fill: CanvasText; }
   .dg-arrow, .dg-icon rect, .dg-icon path, .dg-tick, .dg-hatch-line, .dg-doc-fold { stroke: CanvasText; }
 }
+/* Contract terms remain readable without exposing raw protocol JSON. */
+#checkout-offer-details, #checkout-quote-details, #checkout-payment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-block: 1rem;
+}

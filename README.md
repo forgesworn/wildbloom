@@ -21,10 +21,12 @@ changing this browser protocol.
 
 ## Current status
 
-Paid storage is in development. The [implementation plan](docs/PAID-STORAGE.md)
-maps ForgeSworn payment libraries and direct payment to node operators. The
-Shelter Kit 0.5.0 prerelease implements protected allowances; checkout and
-payment methods remain unimplemented in this browser and the published Node.
+This source includes [direct operator checkout, trusted node discovery and private
+storage audits](docs/NODE-SERVICES.md). Lightning and LNURLcash purchase a protected
+allowance on one explicitly chosen node. Signed Blossom server lists suggest
+nodes without contacting them; full-read audits verify current retrievability.
+No payment or audit data is published with file events. These source changes do
+not imply that the deployed site or published Node installers have been upgraded.
 
 The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet

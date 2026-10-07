@@ -57,6 +57,9 @@ delivery. It is interoperability work, not a new storage network.
 - NIP-94 kind `1063` for the primary hybrid file event.
 - NIP-35 kind `2003` for torrent indexing.
 - BUD-01/02/10/11 for Blossom retrieval, upload, references and authorisation.
+- BUD-03 kind `10063` for explicitly requested trusted server-list discovery.
+- NIP-98 kind `27235` for private exact-URL/method/body checkout and audit requests.
+  Never publish these authorisations or payment/audit records to relays.
 - The documented `encryption` tag value
   `forgesworn-aes-256-gcm-chunked-v2` is the current shared envelope extension;
   `wildbloom-aes-256-gcm-chunked-v1` remains a historical read extension.

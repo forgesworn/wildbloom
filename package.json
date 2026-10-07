@@ -46,11 +46,13 @@
     "ci": "npm run check && npm run audit",
     "acceptance:recovery": "node scripts/recovery-acceptance.mjs",
     "acceptance:pool": "node scripts/pool-acceptance.mjs",
-    "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick"
+    "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick",
+    "acceptance:services": "node scripts/services-acceptance.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "create-torrent": "6.1.3",
+    "farrier-kit": "1.1.3",
     "nostr-tools": "2.25.2",
     "parse-torrent": "11.0.24",
     "path-browserify": "1.0.1",
