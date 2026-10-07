@@ -25,8 +25,11 @@ This source includes [direct operator checkout, trusted node discovery and priva
 storage audits](docs/NODE-SERVICES.md). Lightning and LNURLcash purchase a protected
 allowance on one explicitly chosen node. Signed Blossom server lists suggest
 nodes without contacting them; full-read audits verify current retrievability.
-No payment or audit data is published with file events. These source changes do
-not imply that the deployed site or published Node installers have been upgraded.
+No payment or audit data is published with file events. The browser features are
+[deployed and byte-verified](https://github.com/forgesworn/wildbloom/actions/runs/37600723199).
+The [signed Mac 0.3.5 preview](https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.5-preview.1)
+includes the opt-in daemon services; Windows and Linux downloads remain at 0.3.3.
+Live wallet/issuer acceptance and physical multi-device custody remain separate.
 
 The hardened production-candidate build is deployed at
 [wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet

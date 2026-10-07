@@ -118,6 +118,11 @@ invoice across checks, restart/order recovery, paid encrypted upload, fresh audi
 corrupt-data refusal, LNURLcash renewal, no payment/proof relay publication, no
 browser persistence and accessibility checks on expanded service controls.
 
+The same journey also passed in [hosted acceptance](https://github.com/forgesworn/wildbloom/actions/runs/37596366685)
+against Node source `ce4bceaea65b3a2992933ecaa38aa7545a79e044`.
+The browser release was [deployed and verified](https://github.com/forgesworn/wildbloom/actions/runs/37600723199)
+from `24e8f0b064e5c4f22e6aaf142bd6cfc3116d85ea`.
+
 This is one-host synthetic acceptance. Real Phoenixd/issuer acceptance, deployed
 credentials, refunds and paired backup/restore remain separate. It is not evidence
 of a production payment deployment, physical multi-device custody or independent
