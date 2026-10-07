@@ -1,0 +1,129 @@
+# Live paid-storage acceptance
+
+**Prepared, not performed.** The shipped synthetic journey proves the controlled
+integration. This ceremony checks one actual operator and receiving service,
+one payment rail at a time. A Lightning pass does not establish LNURLcash
+acceptance. Physical pool recovery is a separate test.
+
+## Required inputs
+
+- An operator-controlled node URL with checkout and storage proofs enabled,
+  exact browser-origin CORS, and a reviewed TLS proxy configuration.
+- The operator's real receiving service: Phoenixd with its limited-access
+  password, or a configured LNURLcash issuer with pinned endpoints and key.
+  Provision credentials privately on the operator machine, never in this repo,
+  chat, command arguments, browser storage or test reports.
+- A low-cost, short-term test offer and an agreed maximum spend in sats. Include
+  wallet routing fees in the separately approved total budget. The preflight
+  ceiling checks the advertised storage price only; it does not authorise a
+  purchase or enforce a future invoice/fee limit.
+- A dedicated test signer via NIP-07 or the existing external-signing handoff,
+  a wallet controlled by the tester and a disposable non-sensitive source file.
+- An operator who can stop/restart the **designated test node**, find an original
+  invoice, retain consistent checkout/storage backups and resolve a refund.
+  Test the operator's refund and backup/restore procedures before public sales.
+
+Record exact browser/daemon/installer source versions and the receiving
+service version. Keep operational details and evidence in a private directory.
+Do not use the public synthetic harness signer for a funded live identity.
+
+## Read-only preflight
+
+Run from this checkout with its supported Node version. Substitute the chosen
+operator, offer, browser origin and test ceiling:
+
+```sh
+npm run preflight:checkout -- \
+  --node https://storage.example \
+  --app https://wildbloom.forgesworn.dev \
+  --offer small-test --rail lightning --max-sats 10 \
+  --output /absolute/private/path/checkout-preflight.json
+```
+
+This makes only `GET /checkout/v1/offers` and
+`OPTIONS /checkout/v1/orders`. It creates no order, invoice or payment and
+contacts no wallet, issuer or relay. The chosen node sees the tester's address,
+browser origin and request timing. Normal system DNS/TLS routing applies;
+this is a direct-mode operator tool, not the daemon's pinned receiving transport.
+An explicit `--allow-loopback-http` exception accepts only numeric loopback HTTP
+addresses for local testing. Onion checkout is refused.
+
+The check requires HTTPS, exact node-origin binding, JSON with `no-store`, the
+chosen available rail, one matching offer within the price ceiling and exact
+browser-origin CORS for authorisation and JSON POSTs. Responses have a ten-second
+deadline and 64 KiB body cap; redirects are refused. It checks deployment
+readiness, not every contract field or issuer signature. The browser and daemon
+still validate the actual quote and payment independently.
+
+A successful record is **`preflight-passed`**, with
+`livePaymentAccepted: false`. It contains hashes of origins, selected offer and
+response, price, capacity and time; no raw origin, policies, invoice, keys or
+assets. Hashes can still correlate known origins. Keep it private. Output is
+created exclusively (never overwritten), with Unix mode 0600; on Windows use a
+private directory with appropriate ACLs. Failed checks produce no passing record.
+
+## One live purchase and restart recovery
+
+1. Open the exact deployed browser version, explicitly choose direct mode and
+   select the approved node. Load its offers. Review capacity, expiry, grace,
+   price, delivery and refund terms. Delivery is operator-managed, not metered.
+2. Request one private quote. Verify the chosen rail and offer. Save its order
+   reference privately **before** requesting a payment. Check that the actual
+   quote remains within the agreed test spend; the preflight is a snapshot.
+3. Request one invoice, or submit one exact-value note from the configured
+   issuer. For Lightning, independently check amount/network/expiry and wallet
+   fees, then pay once. Never paste a note or invoice into a report or chat.
+4. Explicitly check the **same** order until its observed state is `active`.
+   Record settlement in the operator's receiving service independently. A wallet
+   saying paid is not sufficient to prove allowance activation. If uncertain,
+   retain the original reference and reconcile it; do not pay again or create a
+   replacement invoice. `refund_required` needs the operator's direct resolution.
+5. Stop and restart the designated test daemon using the same private stores.
+   Reload the browser, reconnect the original signer, recover the saved order
+   reference and check it. Require the same quote digest, allowance ID and
+   deadlines, and only one settlement in the receiving service.
+6. Upload the small file encrypted using the activated allowance. Save the
+   recovery material separately. No file event needs to be published publicly
+   for this test. Record source/ciphertext sizes and hashes privately.
+7. In a fresh browser session, recover the encrypted file with the saved
+   recovery material. Compare recovered bytes and SHA-256 with the original.
+   Run a fresh full storage audit and save its private result. A successful audit
+   proves retrieval at that moment, not continuous or independent custody.
+8. Stop the test node cleanly. Make a consistent offline backup of its paired
+   checkout and storage directories, including SQLite WAL where present. Retain
+   the original backup unchanged. Restore copies into an isolated operator test
+   environment using the documented matching configuration, with the original
+   node stopped. Never run two copies of a spendable-note ledger concurrently.
+   Repeat original-order recovery and file/audit verification. Never replace a
+   live store to simulate a failure. Treat this row as blocked if a safe isolated
+   restore environment is unavailable.
+9. Record fulfilment/refund resolution and the test-data retention decision.
+   Stop test services. Do not delete wallets, pending journals or private order
+   references as generic test cleanup.
+
+For LNURLcash, repeat with a fresh test purchase and an exact-value note. Verify
+the operator's replacement certificate/settlement through its private tools;
+never export the replacement spend or secret. An uncertain rotation must be
+reconciled using its saved journal. Do not re-submit another note to resolve it.
+
+## Evidence and remaining physical gate
+
+For each numbered row record date, exact builds, expected result, observed result
+and **pass / fail / blocked**. Preserve failed attempts; a later pass does not
+erase them. Keep order references, invoices, notes, authorisations, signer and
+recovery material out of public evidence. Record service version, price, rail,
+redacted outcome, file-hash comparison and audit outcome separately from the
+preflight. The automation cannot attest that a human made these observations.
+
+Physical node-loss recovery still needs independent storage machines/sites.
+Follow the [physical pool checklist](https://github.com/forgesworn/wildbloom-node/blob/main/docs/PHYSICAL-POOL-ACCEPTANCE.md):
+for a 2-of-4 layout, verify four parts, take two destinations offline, recover
+from the remaining two in a fresh browser, then exercise approved owner repair
+and verify restored parts by read-back. Keep the owner's repair host separate.
+With only this Mac, that row remains blocked; local processes and hosted runners
+cannot establish independent power, network or storage failure domains.
+
+The existing `npm run acceptance:pool:quick` remains the fast local regression
+test; `npm run acceptance:services` exercises this preflight against the real
+daemon and synthetic receiving services. Neither spends real money or completes
+this live/physical ceremony.

@@ -15,6 +15,7 @@ import {
   installBrowserPersistenceAudit,
 } from "./browser-persistence.mjs";
 import { inspectProductionBuild } from "./production-build.mjs";
+import { runPreflight } from "./checkout-preflight.mjs";
 
 // Public synthetic keys stay in this harness, never enter application code.
 const key = new Uint8Array(32).fill(42),
@@ -198,6 +199,11 @@ try {
   ];
   let node = launch(binary, args);
   await ready(node, nodeOrigin);
+  const checkoutReadiness = await runPreflight({
+    node: nodeOrigin, app: appOrigin, offer: "small", rail: "lightning", maxSats: 10,
+  });
+  assert.equal(checkoutReadiness.status, "preflight-passed");
+  assert.equal(checkoutReadiness.paymentAttempted, false);
   const unpaid = Buffer.from("unpaid synthetic upload");
   const denied = await fetch(nodeOrigin + "/upload", {
     method: "PUT",

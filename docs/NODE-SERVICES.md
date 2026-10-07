@@ -64,9 +64,13 @@ the operator's original-invoice recovery tool. `refund_required` means the
 operator received payment but must resolve fulfilment or refund directly; it is
 not an automatic refund. Save the reference before changing file/profile.
 
+Use the [live acceptance runbook](LIVE-CHECKOUT-ACCEPTANCE.md) and read-only
+`npm run preflight:checkout` before an agreed real-money test. A passing preflight
+does not claim payment acceptance.
+
 Checkout is direct-mode only. It refuses Tor-only checkout without a clearnet
 fallback; wallets have their own network behaviour. Storage itself still works
-over Tor. See [Node configuration and recovery](https://github.com/forgesworn/wildbloom-node/blob/feature/checkout-discovery-proofs/docs/CHECKOUT.md).
+over Tor. See [Node configuration and recovery](https://github.com/forgesworn/wildbloom-node/blob/main/docs/CHECKOUT.md).
 
 ## Verify storage
 
@@ -93,7 +97,7 @@ audits are explicit actions and do not install another background task.
 Full-read traffic scales with all checked copies. Nodes allow one concurrent
 audit and six challenges per minute, with a five-minute scan deadline. Requester
 identity, hash, size and timing remain metadata visible to the node. Evidence is
-not a server-signed attestation. The [wire contract](https://github.com/forgesworn/wildbloom-node/blob/feature/checkout-discovery-proofs/docs/STORAGE-AUDITS.md)
+not a server-signed attestation. The [wire contract](https://github.com/forgesworn/wildbloom-node/blob/main/docs/STORAGE-AUDITS.md)
 includes the byte-level digest and precise limits.
 
 ## Validation
