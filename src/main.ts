@@ -1,4 +1,5 @@
 import "./style.css";
+import { mountNodeServices } from "./services-ui.js";
 import { extendPool, fetchPool, parsePoolNodes, preparePool, preparePoolRepair, resolvePoolReceipt, signPool, uploadPool, type PoolReceipt, type PreparedPool, type PoolReport } from "./core/pool.js";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
@@ -136,6 +137,7 @@ let publicationRevision = 0;
 let resolutionRevision = 0;
 let profileRevision = 0;
 let pageSessionEnded = false;
+let nodeServices: ReturnType<typeof mountNodeServices> | undefined;
 const objectUrls = new Set<string>();
 const SAFE_DOWNLOAD_MIME_TYPE = "application/octet-stream";
 type SigningMethod = "nip07" | "external";
@@ -277,6 +279,8 @@ function addFileEventDownload(target: HTMLDivElement, event: SignedNostrEvent): 
 
 function externalSigningLabel(template: EventTemplate): string {
   if (template.kind === 24242) return "Blossom upload authorisation";
+  if (template.kind === 27235) return "Private HTTP request authorisation (do not publish to relays)";
+  if (template.kind === 10063) return "Public Blossom server-list replacement";
   if (template.kind === 1063) return "NIP-94 file event";
   if (template.kind === 2003) return "NIP-35 torrent index";
   return `Nostr kind ${template.kind} event`;
@@ -302,7 +306,7 @@ function requestExternalSignature(template: EventTemplate): Promise<SignedNostrE
   const expectedPubkey = assertHex64(externalPubkeyInput.value.trim(), "External signer public key");
   const label = externalSigningLabel(template);
   const unsignedJson = `${JSON.stringify(template, null, 2)}\n`;
-  externalSigningPurpose.textContent = `${label}. Transfer only this public unsigned event to the signer, then return its complete signed-event JSON.`;
+  externalSigningPurpose.textContent = `${label}. Transfer only this unsigned event to the signer, then return its complete signed-event JSON.`;
   externalUnsignedEvent.value = unsignedJson;
   externalSignedEvent.value = "";
   acceptExternalSignatureButton.textContent = template.kind === 24242
@@ -336,6 +340,7 @@ const externalSigner: SignerPort = {
 };
 
 function resetPublicationAfterInspection(): void {
+  nodeServices?.reset();
   publicationRevision += 1;
   if (resolvedPool && downloadController) {
     downloadController.abort();
@@ -388,6 +393,7 @@ function resetInspection(): void {
 }
 
 function resetResolution(): void {
+  nodeServices?.reset();
   if (resolvedPool && downloadController) abandonExternalSigning("Pool recovery was superseded.");
   resolutionRevision += 1;
   lookupController?.abort();
@@ -677,6 +683,7 @@ acceptExternalSignatureButton.addEventListener("click", () => guard(publishStatu
   pending.resolve(signed);
   if (pending.template.kind === 24242 && resolvedPool && downloadController) cancelDownloadButton.focus();
   else if (pending.template.kind === 24242) cancelUploadButton.focus();
+  else if (pending.template.kind === 27235 || pending.template.kind === 10063) element<HTMLButtonElement>("cancel-node-service").focus();
   else signButton.focus();
 }));
 
@@ -1367,6 +1374,14 @@ function endPageSession(): void {
 }
 
 window.addEventListener("pagehide", endPageSession);
+nodeServices = mountNodeServices({
+  profile, ready: assertTorReady, relays,
+  buyer: () => { if (!pubkey || pageSessionEnded) throw new Error("Connect your signer first."); return { signer: signer(), pubkey }; },
+  origin: () => blossomInput.value,
+  selectOrigin: (origin) => { blossomInput.value = origin; blossomInput.dispatchEvent(new Event("input", { bubbles: true })); },
+  resolved: () => resolved, pool: () => resolvedPool,
+  cancelSigning: () => abandonExternalSigning("Service action cancelled."),
+});
 window.addEventListener("pageshow", (event) => {
   // A restored page would otherwise keep the old JavaScript heap. Recreate the
   // document after clearing it so a BFCache return always starts a new session.

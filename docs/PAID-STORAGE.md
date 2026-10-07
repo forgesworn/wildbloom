@@ -1,10 +1,10 @@
 # Paid storage design and implementation plan
 
-Status: implementation in progress, 4 October 2026. Shelter Kit 0.5.0
-implements the storage foundation described below. No checkout or
-payment method is enabled in this browser application or the published Node.
-This plan does not establish a legal exemption, production readiness or library
-audit.
+Status: source integration implemented, 7 October 2026. The browser and opt-in
+Node checkout now support Lightning and exact-value LNURLcash with durable quotes,
+private recovery references and paid encrypted uploads. See the current
+[service guide and evidence](NODE-SERVICES.md). Synthetic acceptance is not live
+wallet/mint acceptance, deployed sales, legal classification or a library audit.
 
 ## Implementation evidence
 
@@ -33,10 +33,11 @@ formatting/lint, the browser production build and fresh-browser recovery from a
 restarted Node replica. The real-Tor test was not run. Browser recovery validates
 the existing file journey against the changed core, not payment checkout.
 
-Step 2 is next:
-operator-owned durable checkout and settlement, with Lightning and LNURLcash
-first-class integrations. Cashu, on-chain Bitcoin, Monero and the browser
-checkout journey are not implemented by these storage changes.
+The operator checkout and browser journey are now implemented. Cashu, on-chain
+Bitcoin and Monero remain future rails. Automated bandwidth metering is absent:
+delivery terms are operator-managed. Live receiving credentials, actual-service
+acceptance, paired backup/restore and direct refund operations remain operator
+launch gates.
 
 ## Product decision
 

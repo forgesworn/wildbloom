@@ -168,11 +168,11 @@ event recovery. This retains discovery data, not a replica of the file.
 
 ## Deliberate omissions
 
-The [paid storage implementation plan](PAID-STORAGE.md) adds direct-to-operator
-checkout using ForgeSworn libraries. Protected allowances are implemented in
-the Shelter Kit 0.5.0 prerelease; checkout and browser payment
-flows remain unimplemented. The browser remains a static client, and ForgeSworn
-does not collect payments for node operators.
+The [node services](NODE-SERVICES.md) use separate explicit HTTP/relay actions:
+NIP-98 private authorisation for checkout/audits, BUD-03 kind 10063 for trusted
+server-list discovery, and existing BUD-11 for later uploads. The browser stays
+static; operators receive payment directly. Delivery metering, stronger
+replication/time proofs and live payment deployment are outside this increment.
 
 - No server defaults, analytics, accounts, local persistence or service worker.
 - No raw key input or app-held signing key.

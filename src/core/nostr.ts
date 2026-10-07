@@ -265,7 +265,10 @@ export function validateBlobDescriptor(
   if (!Number.isSafeInteger(size) || size !== expected.size) throw new Error("Blossom returned the wrong blob size.");
   const type = String(candidate.type ?? "").toLowerCase();
   if (!type || type.length > 255 || /[\u0000-\u001f\u007f]/u.test(type)) throw new Error("Blossom returned an invalid MIME type.");
-  if (expected.type && type !== expected.type.toLowerCase()) throw new Error("Blossom returned the wrong MIME type.");
+  // Non-owner Shelter claims are deliberately served as opaque bytes. The
+  // signed file MIME remains the locally inspected type; an opaque transport
+  // descriptor cannot replace it or relax the exact size/hash requirements.
+  if (expected.type && type !== expected.type.toLowerCase() && type !== "application/octet-stream") throw new Error("Blossom returned the wrong MIME type.");
   const uploaded = Number(candidate.uploaded);
   if (!Number.isSafeInteger(uploaded) || uploaded < 0) throw new Error("Blossom returned an invalid upload timestamp.");
   const url = normaliseBlossomUrl(String(candidate.url ?? ""), sha256, profile);

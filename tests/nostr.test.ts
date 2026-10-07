@@ -303,6 +303,13 @@ describe("hybrid Nostr events", () => {
 });
 
 describe("Blossom descriptors", () => {
+  it("accepts opaque paid storage without changing locally signed MIME metadata", () => {
+    const opaque = { ...publication.descriptor, type: "application/octet-stream" };
+    expect(validateBlobDescriptor(opaque, publication.inspected)).toEqual(opaque);
+    const signed = buildFileEvent({ ...publication, descriptor: opaque });
+    expect(signed.tags).toContainEqual(["m", publication.inspected.type]);
+    expect(() => validateBlobDescriptor({ ...opaque, size: 6 }, publication.inspected)).toThrow(/size/u);
+  });
   it("accepts only the expected hash and size", () => {
     expect(validateBlobDescriptor(publication.descriptor, { sha256, size: 5 })).toEqual(publication.descriptor);
     expect(() => validateBlobDescriptor({ ...publication.descriptor, sha256: "00".repeat(32) }, { sha256, size: 5 }))

@@ -386,7 +386,7 @@
         </div>
         <p class="compare-note"><strong>Want each storage node to hold only a part?</strong> Choose sharding. Upload and repair send each node only its assigned part; reconstruction happens in your browser or on your separate owner repair machine. Encryption protects the contents. Splitting alone does not stop operators combining parts, or fetching other parts if they obtain your receipt.</p>
         <p class="compare-note"><strong>Keep your route back to the file.</strong> Save the private signed receipt, which records where the parts belong, and back up the recovery key separately. Extra parts cannot replace either one. Keep an independent backup of irreplaceable files too.</p>
-        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Automatic capacity discovery, draining and cluster-wide rebalancing are not available.</div>
+        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Trusted signed server lists can suggest nodes. Capacity discovery, draining and cluster-wide rebalancing are not available.</div>
         <div class="text-links">
           <a href="#client">Choose a storage layout</a>
           <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>
@@ -590,6 +590,44 @@
           <button id="connect-signer" type="button">Connect NIP-07 signer</button>
           <output id="signer-status" class="quiet">Signer not connected</output>
         </div>
+      </section>
+
+      <section class="panel" aria-labelledby="node-services-heading">
+        <div class="panel-heading"><span>+</span><div><h2 id="node-services-heading">Find nodes, buy storage and verify storage</h2><p>Each action is separate. Discovery is a recommendation, payment buys an allowance, and a storage check verifies current retrievability.</p></div></div>
+        <details><summary>Discover recommended nodes</summary>
+          <label>Trusted public keys <small>One 64-character public key per line. Your chosen relays learn which server lists you request.</small><textarea id="discovery-keys" rows="3" maxlength="1100" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea></label>
+          <div class="actions"><button id="discover-nodes" type="button">Find nodes on my relays</button></div>
+          <div id="discovery-results"></div>
+          <p>Results come from signed Blossom server lists published within 30 days. A recommendation does not prove ownership, capacity or independent failure domains. Nodes are contacted only after you choose an action.</p>
+          <label class="consent"><input id="list-public-consent" type="checkbox" /><span>I want to replace my public Blossom server list with the selected node. This permanently links its address to my public key.</span></label>
+          <button id="publish-server-list" type="button">Sign and publish my server list</button>
+        </details>
+        <details><summary>Buy storage directly from this node</summary>
+          <p>Uses the Blossom server selected above. Lightning and LNURLcash are paid directly to its operator. Checkout is currently available in direct mode only; external wallets have their own network behaviour.</p>
+          <button id="checkout-offers" type="button">Load this node’s offers</button>
+          <label>Storage plan<select id="checkout-plan" aria-label="Storage plan"></select></label>
+          <label>Payment method<select id="checkout-rail"><option value="lightning">Lightning</option><option value="lnurlcash">LNURLcash</option></select></label>
+          <label>LNURLcash issuer<select id="checkout-issuer" aria-label="LNURLcash issuer"></select></label>
+          <label>Renew allowance (optional)<input id="checkout-renews" maxlength="128" autocomplete="off" spellcheck="false" /></label>
+          <div id="checkout-offer-details"></div>
+          <button id="checkout-quote" type="button">Request a private quote</button>
+          <div id="checkout-quote-details"></div>
+          <div id="checkout-receipt-links"></div>
+          <label class="consent"><input id="checkout-consent" type="checkbox" /><span>I reviewed this operator, exact price, storage term, delivery and refund terms, and saved my order reference. Payment does not start an upload.</span></label>
+          <label>LNURLcash note (only for LNURLcash)<input id="checkout-note" type="password" maxlength="12000" autocomplete="off" autocapitalize="off" spellcheck="false" /></label>
+          <div class="actions"><button id="checkout-pay" type="button">Create invoice / submit note</button><button id="checkout-check" type="button">Check this payment once</button></div>
+          <div id="checkout-payment"></div>
+          <p>After a timeout or cancellation, check the same order. Do not pay a second time. An activated allowance is not proof that a file was uploaded or replicated.</p>
+          <label>Saved private order reference<textarea id="checkout-reference" rows="3" maxlength="4096" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea></label>
+          <button id="checkout-recover" type="button">Recover order with its original signer</button>
+        </details>
+        <details><summary>Verify storage with a fresh challenge</summary>
+          <p>First resolve a signed file event or private pool receipt below. This reads every selected encrypted byte and independently downloads it for verification. It needs no decryption key. Large checks use bandwidth. Passing proves current retrievability, not continuous retention or a dedicated physical copy.</p>
+          <label class="consent"><input id="proof-consent" type="checkbox" /><span>Challenge the resolved file’s node, or each node in its pool receipt, and download every checked file or shard.</span></label>
+          <button id="storage-audit" type="button">Run full storage audit</button>
+          <div id="storage-audit-results"></div>
+        </details>
+        <div class="actions"><button id="cancel-node-service" type="button">Cancel current service action</button><output id="node-service-status" class="quiet" aria-live="polite">No service contacted</output></div>
       </section>
 
       <section class="panel" aria-labelledby="publish-heading">
