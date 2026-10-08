@@ -84,7 +84,7 @@
         </section>
 
         <section id="storage" class="marketing-section storage-section" aria-labelledby="storage-heading">
-          <div class="storage-intro"><p class="section-kicker">02 / Make room for failure</p><h2 id="storage-heading">One node goes away.<br /><em>Your file needn’t.</em></h2><p>Replication keeps complete encrypted copies. Sharding with erasure coding creates parts that can rebuild the file—even when some are missing.</p><p>Try taking nodes offline in this example. Any two of the four parts are enough to recover.</p><a class="text-arrow" href="#install">Build your own storage pool <span aria-hidden="true">↗</span></a></div>
+          <div class="storage-intro"><p class="section-kicker">02 / Make room for failure</p><h2 id="storage-heading">One node goes away.<br /><em>Your file needn’t.</em></h2><p>Replication keeps complete encrypted copies. Sharding with erasure coding creates parts that can rebuild the file, even when some are missing.</p><p>Try taking nodes offline in this example. Any two of the four parts are enough to recover.</p><a class="text-arrow" href="#install">Build your own storage pool <span aria-hidden="true">↗</span></a></div>
           <div class="recovery-demo" aria-labelledby="demo-heading">
             <div class="demo-topline"><h3 id="demo-heading">A little room for the unexpected</h3><span>Interactive example</span></div>
             <div class="demo-count"><strong>2 <span>of</span> 4</strong><p>parts needed<br />to recover</p></div>
@@ -111,7 +111,7 @@
           <ol class="journey-list">
             <li><span>01</span><div><h3>Prepare it locally</h3><p>Choose your file and storage layout. The browser encrypts it. Save your recovery key somewhere safe.</p></div></li>
             <li><span>02</span><div><h3>Choose where it lives</h3><p>Approve uploads with your signer. Encrypted bytes go to your chosen Blossom nodes, with hashes checked on read-back for pools.</p></div></li>
-            <li><span>03</span><div><h3>Keep your route home</h3><p>Save the signed file event or private pool receipt. Keep the recovery key separately—you need both to recover.</p></div></li>
+            <li><span>03</span><div><h3>Keep your route home</h3><p>Save the signed file event or private pool receipt. Keep the recovery key separately. You need both to recover.</p></div></li>
             <li><span>04</span><div><h3>Recover. Verify. Repair.</h3><p>Retrieve and decrypt locally. Restore lost redundancy in the browser, or explicitly enable the separate owner repair service.</p></div></li>
           </ol>
           <div class="protocol-note" id="blossom"><strong>Built on open protocols.</strong><p>Blossom stores the bytes. Nostr carries signed file pointers when you choose to publish them. Pool receipts stay private. Optional WebTorrent offers another delivery path.</p><a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/PROTOCOL.md" rel="noreferrer">Read the protocol ↗</a></div>
@@ -209,9 +209,9 @@
         <label>
           Storage layout
           <select id="storage-mode" aria-describedby="storage-layout-summary">
-            <option value="single">One node — existing Blossom publishing</option>
-            <option value="replicas">Replicated pool — complete encrypted copies</option>
-            <option value="erasure">Split pool — recover from a threshold of parts</option>
+            <option value="single">One node: existing Blossom publishing</option>
+            <option value="replicas">Replicated pool: complete encrypted copies</option>
+            <option value="erasure">Split pool: recover from a threshold of parts</option>
           </select>
         </label>
         <p id="storage-layout-summary" class="layout-summary" aria-live="polite">One node holds the encrypted file. Keep a separate backup: this layout has no redundancy.</p>

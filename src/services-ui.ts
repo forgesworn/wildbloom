@@ -79,7 +79,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     if (!order) return;
     output(
       "checkout-quote-details",
-      `${order.quote.seller_name} — ${order.quote.node_origin}\n${terms(order.quote.offer)}\nQuote expires: ${new Date(order.quote.expires_at * 1000).toISOString()}\nState: ${order.state}` +
+      `${order.quote.seller_name}\n${order.quote.node_origin}\n${terms(order.quote.offer)}\nQuote expires: ${new Date(order.quote.expires_at * 1000).toISOString()}\nState: ${order.state}` +
         (order.receipt
           ? `\nAllowance: ${order.receipt.allowance_id}; writes until ${new Date(order.receipt.writes_until * 1000).toISOString()}`
           : ""),
@@ -125,7 +125,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     output(
       "checkout-offer-details",
       selected
-        ? `${offers!.seller_name} (${offers!.seller_id}) — ${offers!.node_origin}\n${terms(selected)}`
+        ? `${offers!.seller_name} (${offers!.seller_id})\n${offers!.node_origin}\n${terms(selected)}`
         : "",
     );
   };
@@ -253,7 +253,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     output("discovery-results", "");
     for (const node of results) {
       const row = document.createElement("p");
-      row.textContent = `${node.origin} — recommended by ${node.recommendedBy.join(", ")}. `;
+      row.textContent = `${node.origin}, recommended by ${node.recommendedBy.join(", ")}. `;
       const choose = document.createElement("button");
       choose.type = "button";
       choose.textContent = "Use this node";
