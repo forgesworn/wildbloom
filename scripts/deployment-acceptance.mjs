@@ -269,7 +269,7 @@ function expectSecurityHeaders(response, label) {
     "font-src 'none'",
     "frame-src 'none'",
     "manifest-src 'none'",
-    "media-src 'none'",
+    "media-src 'self'",
     "script-src 'self'",
     "connect-src 'self' https: wss:",
     "trusted-types 'none'",
@@ -325,7 +325,7 @@ expectReleaseEvidenceCli(evidence);
 expectProductionServerCli();
 expectRejectedBuild(
   (build) => writeFileSync(join(build, "assets", "source.js.map"), "private source"),
-  "not a hashed JavaScript or CSS file",
+  "not a supported hashed asset",
 );
 expectRejectedBuild(
   (build) => writeFileSync(join(build, "operator-notes.txt"), "must not be published"),
@@ -381,6 +381,29 @@ try {
     expect(head.status === 200 && head.body.length === 0, `HEAD returned asset bytes: ${file.path}`);
     expect(head.headers["content-length"] === String(file.bytes), `HEAD asset length drifted: ${file.path}`);
   }
+
+  const film = evidence.files.find((file) => file.path.endsWith(".mp4"));
+  expect(film, "The release omitted the explainer film.");
+  const filmBytes = expectedFiles.get(film.path);
+  for (const [range, first, last] of [["bytes=0-1", 0, 1], ["bytes=-32", film.bytes - 32, film.bytes - 1], [`bytes=${film.bytes - 64}-`, film.bytes - 64, film.bytes - 1], [`bytes=8-${film.bytes + 10}`, 8, film.bytes - 1]]) {
+    const partial = await exchange(port, { path: `/${film.path}`, headers: { Range: range } });
+    expect(partial.status === 206 && partial.body.equals(filmBytes.subarray(first, last + 1)), `Film range returned wrong bytes: ${range}`);
+    expect(partial.headers["content-range"] === `bytes ${first}-${last}/${film.bytes}`, "Film range bounds drifted.");
+    expect(partial.headers["content-length"] === String(last - first + 1), "Film range length drifted.");
+    expect(partial.headers["content-type"] === "video/mp4", "Film MIME type drifted.");
+    expectSecurityHeaders(partial, "Film range");
+  }
+  for (const range of [`bytes=${film.bytes}-`, "bytes=8-2", "bytes=-0"]) {
+    const invalid = await exchange(port, { path: `/${film.path}`, headers: { Range: range } });
+    expect(invalid.status === 416 && invalid.headers["content-range"] === `bytes */${film.bytes}`, "Unsatisfiable film range was accepted.");
+    expectSecurityHeaders(invalid, "Unsatisfiable film range");
+  }
+  for (const headers of [{ Range: "bytes=0-1,4-5" }, { Range: "bytes=bad" }, { Range: "bytes=0-1", "If-Range": '"unknown"' }]) {
+    const full = await exchange(port, { path: `/${film.path}`, headers });
+    expect(full.status === 200 && full.body.equals(filmBytes), "Ignored film range did not return the full snapshot.");
+  }
+  const filmHead = await exchange(port, { method: "HEAD", path: `/${film.path}`, headers: { Range: "bytes=0-1" } });
+  expect(filmHead.status === 200 && filmHead.body.length === 0 && filmHead.headers["content-length"] === String(film.bytes), "HEAD incorrectly applied a film range.");
 
   writeFileSync(join(deploymentRoot, "dist", "index.html"), "tampered after startup");
   for (const file of evidence.files.filter((item) => item.path !== "index.html")) {

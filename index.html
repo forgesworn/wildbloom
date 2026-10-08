@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; font-src 'none'; frame-src 'none'; manifest-src 'none'; media-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion; worker-src 'self' blob:; trusted-types 'none'; require-trusted-types-for 'script'"
+      content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; font-src 'none'; frame-src 'none'; manifest-src 'none'; media-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion; worker-src 'self' blob:; trusted-types 'none'; require-trusted-types-for 'script'"
     />
     <meta name="referrer" content="no-referrer" />
     <meta
@@ -41,7 +41,7 @@
             <p class="hero-copy">Encrypt in your browser. Keep copies on nodes you trust, or split a file into recoverable parts. Stay in control when a host goes offline.</p>
             <div class="hero-actions">
               <a class="button-link" href="#client">Open the client <span aria-hidden="true">↗</span></a>
-              <a class="hero-secondary" href="#storage">See how recovery works <span aria-hidden="true">↓</span></a>
+              <a class="hero-secondary" href="#film">Watch the 32-second story <span aria-hidden="true">↓</span></a>
             </div>
             <p class="hero-note">Public preview · Bring your own storage and signer</p>
           </div>
@@ -81,6 +81,26 @@
             <article><span class="benefit-icon" aria-hidden="true">02 / RESILIENT</span><h3>Give your file<br />another way back.</h3><p>Keep complete copies or recoverable parts on separate nodes. Choose a layout that can survive losing a host.</p></article>
             <article><span class="benefit-icon" aria-hidden="true">03 / YOURS</span><h3>Choose the people.<br />Choose the places.</h3><p>Use your own machines or storage from trusted operators. Your signer approves actions; Wildbloom never asks for your private signing key.</p></article>
           </div>
+        </section>
+
+        <section id="film" class="marketing-section film-section" aria-labelledby="film-heading">
+          <div class="film-intro"><p class="section-kicker">A file’s way home</p><h2 id="film-heading">A little room for<br /><em>the unexpected.</em></h2><p>See how encryption and recoverable parts give a file more than one way home.</p></div>
+          <figure class="film-player">
+            <video id="recovery-film" playsinline preload="none" width="1280" height="720" poster="/src/assets/film/poster.png" aria-label="A file’s way home: illustrated recovery explainer" aria-describedby="film-caption" tabindex="0"></video>
+            <figcaption id="film-caption">32 seconds · Silent, with on-screen text · Illustrated 2-of-4 recovery</figcaption>
+            <button id="play-recovery-film" class="film-play" type="button" aria-controls="recovery-film">Play the story <span aria-hidden="true">▷</span></button>
+            <p id="film-status" role="status"></p>
+          </figure>
+          <details class="film-transcript"><summary>Read the story instead</summary>
+            <ol>
+              <li><strong>Your files. More than one way home.</strong> An encrypted file sits among four storage nodes. A little room for the unexpected.</li>
+              <li><strong>Private before it leaves.</strong> Your browser encrypts the file. Storage nodes receive encrypted bytes. Your key stays with you.</li>
+              <li><strong>Spread the parts. Keep your options.</strong> Choose nodes you trust. In this illustrated 2-of-4 layout, each of four nodes receives a different part. Any two parts can rebuild the encrypted file.</li>
+              <li><strong>Two nodes offline. Still a way back.</strong> Nodes 2 and 4 go offline. The parts on nodes 1 and 3 remain available. Recover from those parts with your saved receipt and recovery key, then verify the result.</li>
+              <li><strong>Keep your key. Keep your way home.</strong> Save the signed recovery receipt. Keep the recovery key separately. Wildbloom is a public preview. Bring your own storage.</li>
+            </ol>
+            <p>This film illustrates recovery; it is not a live storage test. Choose independent nodes and keep your receipt and key safe. The example below lets you try the same recovery threshold.</p>
+          </details>
         </section>
 
         <section id="storage" class="marketing-section storage-section" aria-labelledby="storage-heading">

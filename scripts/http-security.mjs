@@ -7,7 +7,7 @@ export const CONTENT_SECURITY_POLICY = [
   "font-src 'none'",
   "frame-src 'none'",
   "manifest-src 'none'",
-  "media-src 'none'",
+  "media-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
   "img-src 'self' data: blob:",
@@ -39,7 +39,6 @@ export const DENIED_PERMISSION_FEATURES = Object.freeze([
   "direct-sockets",
   "display-capture",
   "encrypted-media",
-  "fullscreen",
   "gamepad",
   "geolocation",
   "gyroscope",
@@ -71,7 +70,7 @@ export const DENIED_PERMISSION_FEATURES = Object.freeze([
 
 export const PERMISSIONS_POLICY = DENIED_PERMISSION_FEATURES
   .map((feature) => `${feature}=()`)
-  .join(", ");
+  .join(", ") + ", fullscreen=(self)";
 
 export const SECURITY_HEADERS = Object.freeze({
   "Content-Security-Policy": CONTENT_SECURITY_POLICY,

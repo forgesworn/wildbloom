@@ -16,3 +16,33 @@ for (const node of demoNodes) {
     if (description) description.textContent = `${available} ${available === 1 ? "part" : "parts"} available. ${available >= 2 ? "Enough to recover." : `Bring ${2 - available} ${available === 1 ? "node" : "nodes"} back online.`}`;
   });
 }
+
+// No video URL is attached until a visitor explicitly asks to play it.
+// The same-origin film uses no embedded player, analytics or external requests.
+const film = document.querySelector<HTMLVideoElement>("#recovery-film");
+const playFilm = document.querySelector<HTMLButtonElement>("#play-recovery-film");
+const filmStatus = document.getElementById("film-status");
+if (film && playFilm && filmStatus) {
+  playFilm.addEventListener("click", async () => {
+    if (!film.src) film.src = new URL("./assets/film/wildbloom-a-files-way-home.mp4", import.meta.url).href;
+    film.controls = true;
+    filmStatus.textContent = "";
+    try {
+      await film.play();
+      playFilm.hidden = true;
+      film.focus();
+    } catch {
+      filmStatus.textContent = "The film could not start. Try again, or read the story below.";
+    }
+  });
+  film.addEventListener("error", () => {
+    filmStatus.textContent = "The film could not load. Try again, or read the story below.";
+    playFilm.hidden = false;
+    film.removeAttribute("src");
+    film.load();
+  });
+  const pauseWhenLeaving = () => {
+    if (document.hidden) film.pause();
+  };
+  document.addEventListener("visibilitychange", pauseWhenLeaving);
+}
