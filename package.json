@@ -49,6 +49,7 @@
     "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick",
     "acceptance:services": "node scripts/services-acceptance.mjs",
     "preflight:checkout": "node scripts/checkout-preflight.mjs",
+    "verify:storage-audits": "node scripts/verify-storage-audits.mjs",
     "test:checkout-preflight": "node --test scripts/test-checkout-preflight.mjs"
   },
   "dependencies": {

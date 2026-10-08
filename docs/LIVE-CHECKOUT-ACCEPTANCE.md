@@ -218,6 +218,10 @@ HTTP authorisation and full-read audit, save the private report, and independent
 recompute its digest. An old success message or an unchanged public key is not a
 new signing result. Allow normal popup startup time before judging a failure.
 
+Use the [evening signer test sheet](SIGNER-SOAK.md) to record each cycle and
+check saved successful reports with the offline digest verifier. That command
+does not run requests or establish that a live signing cycle took place.
+
 1. Record a baseline audit, close the popup, leave the signer idle for at least
    three minutes, then audit again without first opening the popup.
 2. Close and reopen Bark's popup, allow it to connect, close it again, and audit.

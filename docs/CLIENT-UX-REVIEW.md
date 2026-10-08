@@ -38,3 +38,19 @@ speech/rotor behaviour, physical mobile interaction and independently confirmed
 browser-chrome zoom remain manual acceptance tasks. The text-resize stress test
 must not be presented as those tests having passed. Bark/Heartwood soak testing
 remains a separate task.
+
+## Native Safari follow-up
+
+On 8 October the live release from source `045e35a` was opened in Safari on
+this Mac. Safari's own Page Menu confirmed **200%** page zoom. Screenshots of
+the client introduction and recovery heading, instructions and first two
+fields showed readable wrapping without visible clipping. Opening the recovery
+URL expanded the saved-record controls in the accessibility tree. Safari's
+Page Menu subsequently confirmed restoration to **100%**, and the temporary
+review tab was closed.
+
+This is a limited visual spot check. An initial blank render cleared after a
+reload. Intermittent native-control failures prevented completion of the
+keyboard/form interaction review. Neither 400% zoom nor spoken VoiceOver was
+verified. Chrome's attempted zoom shortcut did not change the observed viewport
+or device-pixel ratio and does not count as a real zoom result.
