@@ -10,6 +10,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
+import { assertMarketingReflow, assertMarketingInteractionColours } from "./marketing-accessibility.mjs";
 import {
   CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
@@ -342,6 +343,8 @@ async function assertMarketingJourney(page, browserName) {
   const brokenAnchors = await page.locator('#overview a[href^="#"]').evaluateAll((links) => links.filter((link) => !document.getElementById(link.hash.slice(1))).map((link) => link.hash));
   if (brokenAnchors.length) throw new Error(`Broken marketing destinations: ${brokenAnchors.join(", ")}`);
   try {
+    await assertMarketingReflow(page);
+    await assertMarketingInteractionColours(page, assertAccessible);
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 850 });
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Marketing overflow at ${width}px.`);
