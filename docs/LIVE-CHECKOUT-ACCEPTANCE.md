@@ -177,6 +177,20 @@ independent physical failure test or sustained signer reliability result.
 
 ### Signer reliability follow-up
 
+On 8 October, two fresh live audits passed 324 seconds apart. A page reload,
+reconnection to the same signer and another fresh audit also passed. All three
+nonce-bound proof digests were independently recomputed. Popup state during the
+gap was not confirmed, so this is an inter-request gap and page-reload result,
+not proof of a closed-popup idle cycle or a Chrome process restart.
+
+Bark's existing `e2e/reconnect-lifecycle.spec.js` also passed all four tests from
+source `d980954` in an isolated checkout: delayed handshake/concurrent callers,
+refusal without retry storms, lost relay sockets with the original pairing, and
+signing after a 45-second idle gap plus explicit reconnect. These use disposable
+Chromium profiles and a synthetic local signer. The sandbox initially prevented
+Chromium from launching; the authorised run outside it passed. Physical popup,
+Chrome-restart and Heartwood-offline cycles remain unobserved.
+
 Keep the original pairing and paid order. For each cycle, obtain a fresh signed
 HTTP authorisation and full-read audit, save the private report, and independently
 recompute its digest. An old success message or an unchanged public key is not a
