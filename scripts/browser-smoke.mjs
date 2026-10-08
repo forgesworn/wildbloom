@@ -10,7 +10,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { chromium, firefox, webkit } from "playwright-core";
 import { WebSocketServer } from "ws";
 import { assertNoBrowserPersistence, installBrowserPersistenceAudit } from "./browser-persistence.mjs";
-import { assertMarketingReflow, assertMarketingInteractionColours } from "./marketing-accessibility.mjs";
+import { assertContentReflow, assertMarketingInteractionColours } from "./marketing-accessibility.mjs";
 import {
   CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
@@ -343,7 +343,7 @@ async function assertMarketingJourney(page, browserName) {
   const brokenAnchors = await page.locator('#overview a[href^="#"]').evaluateAll((links) => links.filter((link) => !document.getElementById(link.hash.slice(1))).map((link) => link.hash));
   if (brokenAnchors.length) throw new Error(`Broken marketing destinations: ${brokenAnchors.join(", ")}`);
   try {
-    await assertMarketingReflow(page);
+    await assertContentReflow(page);
     await assertMarketingInteractionColours(page, assertAccessible);
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 850 });
@@ -413,7 +413,11 @@ async function assertKeyboardEntry(page, browserName) {
 
 async function assertAdaptivePresentation(page, browserName) {
   const originalViewport = page.viewportSize();
+  const disclosures = await page.locator("#client details").evaluateAll((items) => items.map((item) => item.open));
   try {
+    await page.locator("#client details").evaluateAll((items) => items.forEach((item) => { item.open = true; }));
+    await assertAccessible(page, "Expanded client controls");
+    await assertContentReflow(page, "Client controls");
     await page.setViewportSize({ width: 320, height: 800 });
     const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     if (horizontalOverflow) throw new Error("The production page overflowed horizontally at a 320 CSS-pixel viewport.");
@@ -435,6 +439,7 @@ async function assertAdaptivePresentation(page, browserName) {
       await assertAccessible(page, "Forced-colours production page");
     }
   } finally {
+    await page.locator("#client details").evaluateAll((items, states) => items.forEach((item, index) => { item.open = states[index]; }), disclosures);
     if (browserName === "system-chromium" || browserName === "chromium") {
       await page.emulateMedia({ forcedColors: "none" });
     }
@@ -1210,7 +1215,7 @@ try {
   // Local discovery cannot depend on a configured relay or trigger fetching.
   await page.fill("#relay-urls", "");
   await page.fill("#event-id", "");
-  await page.getByText("Use a saved signed event without a relay", { exact: true }).click();
+  await page.getByText("Use a saved file event or pool receipt", { exact: true }).click();
   const requestsBeforeSavedEvent = remoteRequests.length;
   const socketsBeforeSavedEvent = browserSockets.length;
   await page.setInputFiles("#saved-event-file", { name: "oversized.json", mimeType: "application/json", buffer: Buffer.alloc(128 * 1024 + 1) });

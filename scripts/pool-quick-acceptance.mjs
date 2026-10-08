@@ -42,7 +42,7 @@ export async function acceptQuickPoolRecovery(h) {
   async function recover(label) {
     const fresh = await pageAt(origin, allowed), page = fresh.page;
     try {
-      await page.getByText("Use a saved signed event without a relay", { exact: true }).click();
+      await page.getByText("Use a saved file event or pool receipt", { exact: true }).click();
       await page.fill("#saved-event-json", receiptBytes.toString());
       await page.click("#verify-saved-event");
       await status(page, "#retrieve-status", "Pool receipt verified locally");

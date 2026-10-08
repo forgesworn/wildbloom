@@ -271,7 +271,7 @@ try {
   assert.equal(await l.inputValue("#relay-urls"), "");
   assert.equal(await l.inputValue("#tracker-urls"), "");
   await l.fill("#replica-server", replica.origin);
-  await l.getByText("Use a saved signed event without a relay", { exact: true }).click();
+  await l.getByText("Use a saved file event or pool receipt", { exact: true }).click();
   const beforeLocalImport = local.requests.length;
   await l.setInputFiles("#saved-event-file", { name: savedEventDownload.suggestedFilename(), mimeType: "application/json", buffer: savedEventBytes });
   await status(l, "#retrieve-status", "Saved event loaded locally");
