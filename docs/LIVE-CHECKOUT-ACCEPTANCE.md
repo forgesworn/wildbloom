@@ -190,13 +190,28 @@ independently recomputed over all 65,608 ciphertext bytes. The agent did not ope
 Bark's popup before that connection. This establishes one successful process
 restart, not sustained reliability across repeated restarts or device outages.
 
+A subsequent physical Heartwood outage/reconnection cycle also passed. After the
+user confirmed the device was off, one audit ended with zero verified targets
+and one failure, observed within 49 seconds. The audit button became usable again,
+and a separate read-back confirmed the stored ciphertext remained available with
+the expected hash. The earlier browser build showed a generic audit failure;
+that message alone does not identify the failing stage or prove storage loss.
+After the user brought Heartwood online, retrying the audit succeeded, observed
+within 13 seconds. Its fresh nonce-bound proof was independently recomputed over
+all 65,608 ciphertext bytes. No popup opening, manual reset, re-pairing, policy
+change or additional payment was needed. Both the failed and recovered attempts
+are retained privately. These elapsed times are observation bounds, not precise
+request durations or latency guarantees.
+
 Bark's existing `e2e/reconnect-lifecycle.spec.js` also passed all four tests from
 source `d980954` in an isolated checkout: delayed handshake/concurrent callers,
 refusal without retry storms, lost relay sockets with the original pairing, and
 signing after a 45-second idle gap plus explicit reconnect. These use disposable
 Chromium profiles and a synthetic local signer. The sandbox initially prevented
 Chromium from launching; the authorised run outside it passed. A separately
-observed popup close/reopen cycle and Heartwood-offline cycle remain unverified.
+observed popup close/reopen cycle and longer repeated reliability testing remain
+unverified; the physical Chrome restart and Heartwood outage cycles above each
+establish one successful recovery.
 
 Keep the original pairing and paid order. For each cycle, obtain a fresh signed
 HTTP authorisation and full-read audit, save the private report, and independently
