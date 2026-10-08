@@ -1,4 +1,6 @@
 import "./style.css";
+import "./marketing.css";
+import "./marketing.js";
 import { mountNodeServices } from "./services-ui.js";
 import { extendPool, fetchPool, parsePoolNodes, preparePool, preparePoolRepair, resolvePoolReceipt, signPool, uploadPool, type PoolReceipt, type PreparedPool, type PoolReport } from "./core/pool.js";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";

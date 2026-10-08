@@ -309,7 +309,7 @@ async function assertAccessible(page, state) {
     const targets = violation.nodes.slice(0, 3).map((node) => JSON.stringify(node.target)).join(", ");
     return `${violation.id} (${violation.impact ?? "unknown"}): ${targets}`;
   }).join("; ");
-  throw new Error(`${state} has WCAG A/AA violations: ${summary}`);
+  throw new Error(`${state} has WCAG A/AA violations: ${summary}\n${result.violations.flatMap((violation) => violation.nodes.map((node) => node.failureSummary)).join("\n")}`);
 }
 
 async function assertOverviewOffersNoFileService(page) {
@@ -317,10 +317,48 @@ async function assertOverviewOffersNoFileService(page) {
   // upload and download control stays in the client view until a visitor
   // explicitly opens it.
   const exposed = await page.evaluate(() => [
-    ...document.querySelectorAll("input, textarea, button"),
+    ...document.querySelectorAll("input, textarea, button:not([data-demo-node])"),
   ].filter((control) => control.checkVisibility()).map((control) => control.id || control.tagName));
   if (exposed.length !== 0) throw new Error(`Overview exposed client controls: ${exposed.join(", ")}`);
   if (!(await page.locator("#client").isHidden())) throw new Error("Client view was visible on the overview.");
+}
+
+async function assertMarketingJourney(page, browserName) {
+  const initialViewport = page.viewportSize();
+  const nodes = page.locator("[data-demo-node]");
+  if (await nodes.count() !== 4) throw new Error("Recovery illustration lost its four example nodes.");
+  // Exercise the real threshold boundary with keyboard input, then return to the initial state.
+  await nodes.nth(0).focus();
+  await page.keyboard.press("Space");
+  if (!(await page.locator("#demo-result").textContent()).includes("Not enough parts")) throw new Error("Demo claims recovery below its threshold.");
+  await nodes.nth(2).click();
+  if (!(await page.locator("#demo-result").textContent()).includes("0 parts available")) throw new Error("Demo mishandled total node loss.");
+  await assertAccessible(page, "Marketing recovery unavailable");
+  await nodes.nth(0).click();
+  await nodes.nth(2).click();
+  if (!(await page.locator("#demo-result").textContent()).includes("Enough to recover")) throw new Error("Demo did not recover at the threshold.");
+  for (const summary of await page.locator(".faq-list summary").all()) await summary.click();
+  await assertAccessible(page, "Marketing expanded questions");
+  const brokenAnchors = await page.locator('#overview a[href^="#"]').evaluateAll((links) => links.filter((link) => !document.getElementById(link.hash.slice(1))).map((link) => link.hash));
+  if (brokenAnchors.length) throw new Error(`Broken marketing destinations: ${brokenAnchors.join(", ")}`);
+  try {
+    for (const width of [320, 390, 768]) {
+      await page.setViewportSize({ width, height: 850 });
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Marketing overflow at ${width}px.`);
+      await assertAccessible(page, `Marketing ${width}px`);
+    }
+    if (browserName === "system-chromium") {
+      await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+      const distinguishable = await nodes.nth(0).evaluate((node) => getComputedStyle(node).outlineStyle !== "none");
+      if (!distinguishable) throw new Error("Forced colours hid the demo's online state.");
+    }
+  } finally {
+    await page.emulateMedia({ forcedColors: "none", reducedMotion: "no-preference" });
+    if (initialViewport) await page.setViewportSize(initialViewport);
+    while (await page.locator(".faq-list details[open]").count()) {
+      await page.locator(".faq-list details[open] summary").first().click();
+    }
+  }
 }
 
 async function assertClientViewShown(page) {
@@ -632,6 +670,8 @@ try {
   if (remoteRequests.length !== 0) throw new Error(`Page made ambient remote requests: ${remoteRequests.join(", ")}`);
   await assertOverviewOffersNoFileService(page);
   await assertAccessible(page, "Overview page");
+  await assertMarketingJourney(page, browserName);
+  if (remoteRequests.length || browserSockets.length || nip07PublicKeyCalls || nip07SignatureCalls) throw new Error("Marketing interaction contacted a remote service or signer.");
   await page.locator(".hero-actions").getByRole("link", { name: "Open the client" }).click();
   await assertClientViewShown(page);
   // Task links are local navigation, keep entered setup and move keyboard focus.
