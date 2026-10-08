@@ -1423,6 +1423,7 @@ function showRequestedView(moveFocus: boolean): void {
   overviewView.hidden = showClient;
   clientView.hidden = !showClient;
   if (showClient) {
+    document.querySelector<HTMLVideoElement>("#recovery-film")?.pause();
     document.querySelectorAll<HTMLAnchorElement>(".workspace-nav a").forEach((link) => {
       if (link.hash === location.hash) link.setAttribute("aria-current", "location");
       else link.removeAttribute("aria-current");

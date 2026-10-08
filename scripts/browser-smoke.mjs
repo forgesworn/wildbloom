@@ -318,7 +318,7 @@ async function assertOverviewOffersNoFileService(page) {
   // upload and download control stays in the client view until a visitor
   // explicitly opens it.
   const exposed = await page.evaluate(() => [
-    ...document.querySelectorAll("input, textarea, button:not([data-demo-node])"),
+    ...document.querySelectorAll("input, textarea, button:not([data-demo-node]):not(#play-recovery-film)"),
   ].filter((control) => control.checkVisibility()).map((control) => control.id || control.tagName));
   if (exposed.length !== 0) throw new Error(`Overview exposed client controls: ${exposed.join(", ")}`);
   if (!(await page.locator("#client").isHidden())) throw new Error("Client view was visible on the overview.");
@@ -326,6 +326,10 @@ async function assertOverviewOffersNoFileService(page) {
 
 async function assertMarketingJourney(page, browserName) {
   const initialViewport = page.viewportSize();
+  const film = page.locator("#recovery-film");
+  if (await film.getAttribute("src")) throw new Error("The marketing film was attached before playback consent.");
+  if (await page.evaluate(() => performance.getEntriesByType("resource").some((entry) => new URL(entry.name).pathname.endsWith(".mp4")))) throw new Error("The marketing film downloaded before playback consent.");
+  await page.locator(".film-transcript summary").click();
   const nodes = page.locator("[data-demo-node]");
   if (await nodes.count() !== 4) throw new Error("Recovery illustration lost its four example nodes.");
   // Exercise the real threshold boundary with keyboard input, then return to the initial state.
@@ -362,6 +366,26 @@ async function assertMarketingJourney(page, browserName) {
       await page.locator(".faq-list details[open] summary").first().click();
     }
   }
+  await page.locator(".film-transcript summary").click();
+  // Use actual user activation under the production autoplay policy.
+  await page.locator("#play-recovery-film").focus();
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => {
+    const film = document.getElementById("recovery-film");
+    return film instanceof HTMLVideoElement && !film.paused && film.currentTime > 0;
+  }, undefined, { timeout: 15_000 });
+  if (!(await film.evaluate((video) => video.videoWidth === 1280 && video.videoHeight === 720 && Math.abs(video.duration - 32) < 0.1))) throw new Error("The explainer did not decode at its expected dimensions and duration.");
+  await film.evaluate((video) => { video.currentTime = 20; });
+  await page.waitForFunction(() => {
+    const film = document.getElementById("recovery-film");
+    return film instanceof HTMLVideoElement && !film.seeking && film.currentTime >= 20;
+  });
+  await page.locator(".nav-client").click();
+  await page.locator("#client").waitFor({ state: "visible" });
+  if (!(await film.evaluate((video) => video.paused))) throw new Error("The film kept playing behind the client.");
+  await page.locator(".wordmark").click();
+  await page.locator("#overview").waitFor({ state: "visible" });
+  if (!(await film.evaluate((video) => video.paused))) throw new Error("The film resumed without a new playback action.");
 }
 
 async function assertClientViewShown(page) {

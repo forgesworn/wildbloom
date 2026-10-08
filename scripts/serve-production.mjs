@@ -55,6 +55,8 @@ const contentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
   [".js", "text/javascript; charset=utf-8"],
+  [".mp4", "video/mp4"],
+  [".png", "image/png"],
 ]);
 
 function hostAllowed(request) {
@@ -151,12 +153,31 @@ const server = createServer({
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
-  response.writeHead(200, {
+  // A bounded, immutable in-memory film snapshot supports native seeking.
+  // Ignore multipart or malformed syntax, and all HEAD/conditional ranges.
+  const isFilm = relative.endsWith(".mp4");
+  const headers = {
     ...SECURITY_HEADERS,
     "Cache-Control": relative === "index.html" ? "no-store" : "public, max-age=31536000, immutable",
     "Content-Length": String(file.bytes),
     "Content-Type": contentTypes.get(extname(relative)) ?? "application/octet-stream",
-  });
+    ...(isFilm ? { "Accept-Ranges": "bytes" } : {}),
+  };
+  if (isFilm && request.method === "GET" && request.headers["if-range"] === undefined) {
+    const match = /^bytes=(\d*)-(\d*)$/u.exec(request.headers.range ?? "");
+    if (match && (match[1] || match[2])) {
+      const first = match[1] ? Number(match[1]) : Math.max(0, file.bytes - Number(match[2]));
+      const last = match[1] && match[2] ? Math.min(Number(match[2]), file.bytes - 1) : file.bytes - 1;
+      if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last) || first >= file.bytes || last < first) {
+        respond(response, 416, { "Content-Type": "text/plain; charset=utf-8", "Content-Range": `bytes */${file.bytes}`, "Accept-Ranges": "bytes" }, "Range not satisfiable\n");
+        return;
+      }
+      response.writeHead(206, { ...headers, "Content-Length": String(last - first + 1), "Content-Range": `bytes ${first}-${last}/${file.bytes}` });
+      response.end(file.content.subarray(first, last + 1));
+      return;
+    }
+  }
+  response.writeHead(200, headers);
   if (request.method === "HEAD") response.end();
   else response.end(file.content);
 });

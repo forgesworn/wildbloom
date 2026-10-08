@@ -179,7 +179,7 @@ describe("deployed security-header validation", () => {
       "font-src 'none'",
       "frame-src 'none'",
       "manifest-src 'none'",
-      "media-src 'none'",
+      "media-src 'self'",
       "trusted-types 'none'",
       "require-trusted-types-for 'script'",
     ]) {

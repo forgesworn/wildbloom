@@ -189,9 +189,10 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
   });
 
   for (const file of validatedEvidence.files.filter((item) => item.path !== "index.html")) {
-    const contentType = file.path.endsWith(".css")
-      ? "text/css; charset=utf-8"
-      : ["text/javascript; charset=utf-8", "application/javascript"];
+    const contentType = file.path.endsWith(".mp4") ? "video/mp4"
+      : file.path.endsWith(".png") ? "image/png"
+        : file.path.endsWith(".css") ? "text/css; charset=utf-8"
+          : ["text/javascript; charset=utf-8", "application/javascript"];
     await requestExact(`${origin}/${file.path}`, {
       expectedBytes: file.bytes,
       expectedHash: file.sha256,

@@ -54,3 +54,34 @@ reload. Intermittent native-control failures prevented completion of the
 keyboard/form interaction review. Neither 400% zoom nor spoken VoiceOver was
 verified. Chrome's attempted zoom shortcut did not change the observed viewport
 or device-pixel ratio and does not count as a real zoom result.
+
+## Illustrated marketing film
+
+The first film is a silent 32-second, 1280 × 720 illustration of local
+encryption, a 2-of-4 layout, recovery after two nodes go offline, and keeping the
+signed receipt and recovery key separately. It is labelled as an illustration,
+not live recovery evidence. The original vector renderer lives in
+`scripts/marketing-film/render.py`; rebuilding needs Python 3, `rsvg-convert`,
+FFmpeg with libx264, Georgia and Helvetica Neue. Run it from any directory with
+`python3 scripts/marketing-film/render.py`. `--stills` also writes review frames.
+The checked-in MP4 and poster do not require those tools during site builds.
+
+The on-demand player assigns no media source before Play is pressed. It has a
+complete adjacent text alternative, native playback controls, same-origin
+fullscreen, and pauses when the client opens or the page becomes hidden. Media
+is self-hosted; no external embed, analytics or automatic playback is added.
+The production server serves bounded ranges from its pinned release snapshot.
+
+Local checks passed: 235 tests, production deployment acceptance including
+exact media hashes, MIME types and range handling; complete browser journeys
+in system Chrome, Firefox and WebKit including keyboard playback, decoded
+dimensions/duration, seeking, pause-on-client-entry, accessibility and reflow
+with the transcript expanded. Desktop and 390px screenshots and a decoded
+recovery frame were inspected. These checks do not establish physical mobile
+fullscreen or a spoken screen-reader result. The new film is not yet deployed.
+
+The requested second film remains a real app walkthrough using sanitised
+demonstration data. Its Archipelago chapter should show installation, opening
+the client through the dashboard, the existing node identity and storage
+health. Paid checkout, full-read audits and owner repair must be described as
+explicit operator configuration rather than automatic installation outcomes.

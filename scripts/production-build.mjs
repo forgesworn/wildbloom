@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const HASHED_ASSET = /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:css|js)$/u;
+const HASHED_ASSET = /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:css|js|mp4|png)$/u;
 export const MAX_PRODUCTION_FILES = 64;
 export const MAX_PRODUCTION_FILE_BYTES = 32 * 1024 * 1024;
 export const MAX_PRODUCTION_BUILD_BYTES = 64 * 1024 * 1024;
@@ -63,7 +63,7 @@ export function loadProductionBuild(root = resolve(process.cwd(), "dist")) {
       throw new Error(`Production asset must be a regular file: ${relative}`);
     }
     if (!isProductionAssetPath(relative)) {
-      throw new Error(`Production asset is not a hashed JavaScript or CSS file: ${relative}`);
+      throw new Error(`Production asset is not a supported hashed asset: ${relative}`);
     }
   }
 

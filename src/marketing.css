@@ -87,6 +87,22 @@ body:has(#overview:not([hidden])) :where(a:hover) { color: #1a4329; }
 #overview .benefit-grid h3 { font-size: 1.8rem; margin-bottom: 1rem; }
 .benefit-grid p { color: var(--muted); font-size: 0.9rem; margin-bottom: 0; }
 .storage-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 3.5rem 3rem; align-items: center; }
+.film-intro { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: 0 3rem; align-items: end; }
+.film-intro .section-kicker { grid-column: 1 / -1; }
+.film-intro > p:last-child { max-width: 30rem; color: var(--muted); }
+.film-player { margin: 1.5rem 0 0; }
+.film-player video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 12px; background: #173d2c; }
+.film-player figcaption { margin-top: 0.85rem; color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+#overview .film-play { display: inline-flex; align-items: center; gap: 1.5rem; width: auto; min-height: 48px; margin-top: 1rem; padding: 0.8rem 1.2rem; border: 1px solid var(--moss); border-radius: 8px; color: #fffdf4; background: var(--moss); font: 650 1rem/1.4 ui-sans-serif, system-ui, sans-serif; }
+#overview .film-play:hover { background: #26472f; }
+#overview .film-play[hidden] { display: none; }
+#film-status:empty { display: none; }
+#film-status { margin-block: 1rem 0; color: var(--muted); }
+.film-transcript { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.film-transcript summary { width: fit-content; max-width: 100%; min-height: 44px; padding-block: 0.75rem; cursor: pointer; font-weight: 600; }
+.film-transcript ol { max-width: 52rem; padding-left: 1.5rem; }
+.film-transcript li { margin-block: 1rem; padding-left: 0.4rem; line-height: 1.7; }
+.film-transcript > p { max-width: 52rem; color: var(--muted); }
 .storage-intro > p:not(.section-kicker) { max-width: 27rem; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.95rem; }
 .storage-intro h2 em { color: #5b763b; }
 .text-arrow { display: inline-flex; gap: 1rem; align-items: center; min-height: 44px; margin-top: 1.2rem; font-size: 0.85rem; font-weight: 650; text-decoration: none; }
