@@ -10,9 +10,9 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       name="description"
-      content="Wildbloom is an MIT-licensed toolkit for encrypted publishing and self-hosted Blossom storage over Nostr, HTTPS and optional Tor."
+      content="Encrypt files in your browser. Keep copies or recoverable parts on storage nodes you choose, with replication, sharding and owner-controlled repair."
     />
-    <meta name="theme-color" content="#0a0d0b" />
+    <meta name="theme-color" content="#f4f3eb" />
     <meta property="og:title" content="Wildbloom · Files that outlive their host" />
     <meta
       property="og:description"
@@ -28,478 +28,125 @@
     <a class="skip-link" href="#client">Skip to the client</a>
     <main class="shell">
       <nav class="site-nav" aria-label="Primary navigation">
-        <a class="wordmark" href="#top" aria-label="Wildbloom home">Wildbloom</a>
-        <div>
-          <a href="#what">What it is</a>
-          <a href="#services">Find &amp; verify</a>
-          <a href="#storage">Storage pools</a>
-          <a href="#install">Install</a>
-          <a href="#protocol">Protocol</a>
-          <a href="#client">Open the client</a>
-          <a href="https://github.com/forgesworn/wildbloom" rel="noreferrer">GitHub</a>
-        </div>
+        <a class="wordmark" href="#top" aria-label="Wildbloom home"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M14 24V12M14 17C3 18 3 7 3 7s11-1 11 10ZM14 12C14 2 25 3 25 3s1 10-11 9Z" /></svg>Wildbloom<span class="preview-label">Preview</span></a>
+        <div class="nav-links"><a href="#what">Why Wildbloom</a><a href="#storage">How it works</a><a href="#install">Get started</a></div>
+        <a class="nav-client" href="#client">Open the client <span aria-hidden="true">↗</span></a>
       </nav>
 
       <div id="overview">
-      <header id="top" class="masthead hero">
-        <div class="hero-main">
-        <p class="eyebrow">ForgeSworn · open source · MIT</p>
-        <h1>Wildbloom</h1>
-        <p class="lede">Files that outlive their host.</p>
-        <p class="hero-copy">
-          Encrypt in your browser. Keep copies with people you trust, or split
-          a file across nodes so a few can go offline and you can still recover it.
-          Your storage, your signer, your way back.
-        </p>
-        <div class="hero-actions">
-          <a class="button-link" href="#client">Open the client</a>
-          <a class="button-link secondary" href="#install">Run a node</a>
-        </div>
-        <ul class="hero-facts" aria-label="Wildbloom principles">
-          <li>No account</li>
-          <li>Keys stay in your signer</li>
-          <li>Tor is optional</li>
-          <li>Encrypted before upload</li>
-        </ul>
-        </div>
-        <aside class="hero-recovery" aria-label="Example recovery plan">
-          <p class="section-kicker">A little room for the unexpected</p>
-          <div class="recovery-metric"><strong>2 <span>of</span> 4</strong><span>parts needed to recover</span></div>
-          <div class="recovery-nodes" aria-label="Two available parts and two offline parts">
-            <span><i aria-hidden="true"></i>Part 1<small>Available</small></span>
-            <span class="offline"><i aria-hidden="true"></i>Part 2<small>Offline</small></span>
-            <span><i aria-hidden="true"></i>Part 3<small>Available</small></span>
-            <span class="offline"><i aria-hidden="true"></i>Part 4<small>Offline</small></span>
+        <header id="top" class="landing-hero">
+          <div class="hero-main">
+            <p class="eyebrow"><span class="preview-dot" aria-hidden="true"></span> Open source. Yours to grow.</p>
+            <h1>Your files.<br />More than one<br /><em>way home.</em></h1>
+            <p class="hero-copy">Encrypt in your browser. Keep copies on nodes you trust, or split a file into recoverable parts. Stay in control when a host goes offline.</p>
+            <div class="hero-actions">
+              <a class="button-link" href="#client">Open the client <span aria-hidden="true">↗</span></a>
+              <a class="hero-secondary" href="#storage">See how recovery works <span aria-hidden="true">↓</span></a>
+            </div>
+            <p class="hero-note">Public preview · Bring your own storage and signer</p>
           </div>
-          <p class="recovery-caption">Two nodes offline. Your file still has a way home.</p>
-          <p class="hint">An example layout, not a live status. Recovery needs the receipt, key and two valid parts.</p>
-          <a href="#storage">Find your storage layout <span aria-hidden="true">↗</span></a>
-        </aside>
-      </header>
-
-      <section id="what" class="story-section" aria-labelledby="what-heading">
-        <p class="section-kicker">What it is</p>
-        <h2 id="what-heading">One tool for your files. One home for their encrypted bytes.</h2>
-        <p class="story-intro">
-          The browser prepares and encrypts a file, asks your Nostr signer to
-          approve exact actions, and publishes a signed pointer.  Wildbloom
-          Node stores the bytes on a machine you control and exposes a standard
-          Blossom service through your HTTPS setup or a stable Tor onion
-          address.
-        </p>
-        <div class="story-grid two">
-          <article>
-            <span class="card-number">01</span>
-            <h3>Wildbloom</h3>
-            <p>Encrypt, upload, publish, retrieve and verify in the browser.  Nothing contacts the network until you press the relevant button.</p>
-          </article>
-          <article>
-            <span class="card-number">02</span>
-            <h3>Wildbloom Node</h3>
-            <p>A desktop tray app for Windows, Linux and macOS.  Choose direct mode or optional bundled Tor; either way, writes remain limited to your chosen Nostr public key and invited friends.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="why" class="story-section contrast" aria-labelledby="why-heading">
-        <p class="section-kicker">Why it exists</p>
-        <h2 id="why-heading">A URL is not custody.</h2>
-        <div class="story-grid three-cards">
-          <article>
-            <h3>Servers disappear</h3>
-            <p>A Blossom URL proves where bytes were once available.  It does not promise that somebody else will keep paying for the disk.</p>
-          </article>
-          <article>
-            <h3>Home hosting is awkward</h3>
-            <p>Router rules, changing IP addresses and carrier NAT make a simple home server needlessly hostile.  Optional Tor removes that inbound networking chore; people with HTTPS infrastructure can use it directly.</p>
-          </article>
-          <article>
-            <h3>Redundancy must be visible</h3>
-            <p>Choose complete encrypted copies or recoverable shards. Wildbloom reads bytes back and verifies their hashes before counting them as stored. Choose nodes with independent failure risks.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="blossom" class="story-section" aria-labelledby="blossom-heading">
-        <p class="section-kicker">How it relates to Blossom</p>
-        <h2 id="blossom-heading">Blossom does the storing.  Wildbloom handles everything around it.</h2>
-        <p class="story-intro">
-          Blossom is the storage protocol: put bytes on a server, fetch them
-          back by their SHA-256.  Wildbloom uses it unchanged and talks to any
-          Blossom server, not only its own.  What it adds happens before the
-          upload and after the server is gone.
-        </p>
-
-        <figure class="diagram diagram-wide">
-          <svg class="dg-wide" viewBox="0 0 680 420" role="img" aria-labelledby="dg-fit-title dg-fit-desc">
-            <title id="dg-fit-title">How the pieces fit</title>
-            <desc id="dg-fit-desc">Your browser encrypts the file and you sign each step.  Encrypted bytes go to a Blossom server, a signed NIP-94 event goes to Nostr relays, and torrent peers are an optional extra lane.</desc>
-            <defs>
-              <marker id="dg-fit-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
-            </defs>
-            <rect class="dg-box dg-accent" x="20" y="20" width="220" height="380" rx="18" />
-            <g class="dg-icon" transform="translate(130 128)">
-              <rect x="-24" y="-6" width="48" height="38" rx="6" />
-              <path d="M-14 -6v-12a14 14 0 0 1 28 0v12" />
-            </g>
-            <text class="dg-label" x="130" y="212">Your browser</text>
-            <text class="dg-sub" x="130" y="250">encrypts the file</text>
-            <text class="dg-sub" x="130" y="278">you sign each step</text>
-
-            <rect class="dg-box" x="440" y="20" width="220" height="100" rx="18" />
-            <text class="dg-label" x="550" y="64">Blossom server</text>
-            <text class="dg-sub" x="550" y="96">stores ciphertext</text>
-            <rect class="dg-box" x="440" y="160" width="220" height="100" rx="18" />
-            <text class="dg-label" x="550" y="204">Nostr relays</text>
-            <text class="dg-sub" x="550" y="236">carry the pointer</text>
-            <rect class="dg-box dg-dashed" x="440" y="300" width="220" height="100" rx="18" />
-            <text class="dg-label" x="550" y="344">Torrent peers</text>
-            <text class="dg-sub" x="550" y="376">optional extra lane</text>
-
-            <path class="dg-arrow" d="M244 70H432" marker-end="url(#dg-fit-head)" />
-            <text class="dg-edge" x="338" y="56">encrypted bytes</text>
-            <path class="dg-arrow" d="M244 210H432" marker-end="url(#dg-fit-head)" />
-            <text class="dg-edge" x="338" y="196">NIP-94 event</text>
-            <path class="dg-arrow dg-dashed" d="M244 350H432" marker-end="url(#dg-fit-head)" />
-            <text class="dg-edge" x="338" y="336">if you choose</text>
-          </svg>
-          <svg class="dg-tall" viewBox="0 0 360 550" role="img" aria-labelledby="dg-fit-t-title dg-fit-t-desc">
-            <title id="dg-fit-t-title">How the pieces fit</title>
-            <desc id="dg-fit-t-desc">Your browser encrypts the file and you sign each step.  Encrypted bytes go to a Blossom server, a signed NIP-94 event goes to Nostr relays, and torrent peers are an optional extra lane.</desc>
-            <defs>
-              <marker id="dg-fit-t-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
-            </defs>
-            <rect class="dg-box dg-accent" x="10" y="10" width="340" height="130" rx="18" />
-            <g class="dg-icon" transform="translate(62 70)">
-              <rect x="-24" y="-6" width="48" height="38" rx="6" />
-              <path d="M-14 -6v-12a14 14 0 0 1 28 0v12" />
-            </g>
-            <text class="dg-label" x="215" y="62">Your browser</text>
-            <text class="dg-sub" x="215" y="94">encrypts the file</text>
-            <text class="dg-sub" x="215" y="122">you sign each step</text>
-
-            <path class="dg-arrow" d="M40 140V365" />
-            <path class="dg-arrow dg-dashed" d="M40 365V495" />
-            <path class="dg-arrow" d="M40 235H82" marker-end="url(#dg-fit-t-head)" />
-            <path class="dg-arrow" d="M40 365H82" marker-end="url(#dg-fit-t-head)" />
-            <path class="dg-arrow dg-dashed" d="M40 495H82" marker-end="url(#dg-fit-t-head)" />
-
-            <text class="dg-edge dg-start" x="90" y="180">encrypted bytes</text>
-            <rect class="dg-box" x="90" y="190" width="260" height="90" rx="18" />
-            <text class="dg-label" x="220" y="228">Blossom server</text>
-            <text class="dg-sub" x="220" y="260">stores ciphertext</text>
-            <text class="dg-edge dg-start" x="90" y="310">NIP-94 event</text>
-            <rect class="dg-box" x="90" y="320" width="260" height="90" rx="18" />
-            <text class="dg-label" x="220" y="358">Nostr relays</text>
-            <text class="dg-sub" x="220" y="390">carry the pointer</text>
-            <text class="dg-edge dg-start" x="90" y="440">if you choose</text>
-            <rect class="dg-box dg-dashed" x="90" y="450" width="260" height="90" rx="18" />
-            <text class="dg-label" x="220" y="488">Torrent peers</text>
-            <text class="dg-sub" x="220" y="520">optional extra lane</text>
-          </svg>
-          <figcaption>The file never touches Nostr.  Relays carry a signed pointer: where to fetch, what hash and size to expect.</figcaption>
-        </figure>
-
-        <div class="diagram-pair">
-          <figure class="diagram">
-            <svg class="dg-wide" viewBox="0 0 640 360" role="img" aria-labelledby="dg-sees-title dg-sees-desc">
-              <title id="dg-sees-title">What the server sees</title>
-              <desc id="dg-sees-desc">A typical upload shows the server a readable file called holiday.jpg, its type and its size.  A Wildbloom upload shows only an encrypted, padded blob identified by its hash, with no name and no type.</desc>
-              <defs>
-                <pattern id="dg-hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path class="dg-hatch-line" d="M0 0V12" /></pattern>
-              </defs>
-              <rect class="dg-box" x="10" y="10" width="300" height="340" rx="18" />
-              <text class="dg-label" x="160" y="54">Typical upload</text>
-              <path class="dg-doc" d="M115 78h66l29 29v101h-95z" />
-              <path class="dg-doc-fold" d="M181 78v29h29" />
-              <circle class="dg-sun" cx="140" cy="130" r="10" />
-              <path class="dg-hills" d="M122 192l28-34 18 20 14-12 22 26z" />
-              <text class="dg-sub dg-ink" x="160" y="252">holiday.jpg</text>
-              <text class="dg-sub" x="160" y="284">image/jpeg · 2.4 MB</text>
-              <text class="dg-sub dg-warn-text" x="160" y="316">contents readable</text>
-
-              <rect class="dg-box dg-accent" x="330" y="10" width="300" height="340" rx="18" />
-              <text class="dg-label" x="480" y="54">Wildbloom upload</text>
-              <rect class="dg-blob" x="430" y="78" width="100" height="130" rx="6" />
-              <rect class="dg-blob-hatch" x="430" y="78" width="100" height="130" rx="6" fill="url(#dg-hatch)" />
-              <g class="dg-icon dg-icon-solid" transform="translate(480 140)">
-                <rect x="-20" y="-4" width="40" height="32" rx="5" />
-                <path d="M-12 -4v-10a12 12 0 0 1 24 0v10" />
-              </g>
-              <text class="dg-sub dg-ink dg-mono" x="480" y="252">3f9a…c21</text>
-              <text class="dg-sub" x="480" y="284">padded size only</text>
-              <text class="dg-sub dg-ok-text" x="480" y="316">no name, no type</text>
+          <div class="bloom-art" role="img" aria-label="An encrypted file connected to four separate storage nodes, with multiple paths back to the file.">
+            <svg viewBox="0 0 460 460" aria-hidden="true">
+              <defs><pattern id="bloom-grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" /></pattern></defs>
+              <circle class="bloom-field" cx="230" cy="230" r="224" />
+              <circle class="bloom-orbit" cx="230" cy="230" r="172" />
+              <circle class="bloom-orbit inner" cx="230" cy="230" r="108" />
+              <path class="bloom-stem" d="M230 230Q110 230 110 110M230 230Q350 230 350 110M230 230Q110 230 110 350M230 230Q350 230 350 350" />
+              <path class="bloom-leaf" d="M230 230C122 233 116 144 143 143C233 116 233 122 230 230Z" />
+              <path class="bloom-leaf light" d="M230 230C227 122 316 116 317 143C344 233 338 233 230 230Z" />
+              <path class="bloom-leaf light" d="M230 230C233 338 144 344 143 317C116 227 122 227 230 230Z" />
+              <path class="bloom-leaf" d="M230 230C338 227 344 316 317 317C227 344 227 338 230 230Z" />
+              <g class="bloom-node"><rect x="84" y="84" width="52" height="52" rx="18" /><text x="110" y="116">01</text></g>
+              <g class="bloom-node"><rect x="324" y="84" width="52" height="52" rx="18" /><text x="350" y="116">02</text></g>
+              <g class="bloom-node"><rect x="84" y="324" width="52" height="52" rx="18" /><text x="110" y="356">03</text></g>
+              <g class="bloom-node"><rect x="324" y="324" width="52" height="52" rx="18" /><text x="350" y="356">04</text></g>
+              <circle class="bloom-core" cx="230" cy="230" r="48" />
+              <g class="bloom-lock"><rect x="213" y="224" width="34" height="26" rx="5" /><path d="M221 224v-9a9 9 0 0 1 18 0v9" /><path d="M230 234v6" /></g>
             </svg>
-            <svg class="dg-tall" viewBox="0 0 360 700" role="img" aria-labelledby="dg-sees-t-title dg-sees-t-desc">
-              <title id="dg-sees-t-title">What the server sees</title>
-              <desc id="dg-sees-t-desc">A typical upload shows the server a readable file called holiday.jpg, its type and its size.  A Wildbloom upload shows only an encrypted, padded blob identified by its hash, with no name and no type.</desc>
-              <defs>
-                <pattern id="dg-hatch-t" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path class="dg-hatch-line" d="M0 0V12" /></pattern>
-              </defs>
-              <rect class="dg-box" x="10" y="10" width="340" height="330" rx="18" />
-              <g transform="translate(20 0)">
-                <text class="dg-label" x="160" y="54">Typical upload</text>
-                <path class="dg-doc" d="M115 78h66l29 29v101h-95z" />
-                <path class="dg-doc-fold" d="M181 78v29h29" />
-                <circle class="dg-sun" cx="140" cy="130" r="10" />
-                <path class="dg-hills" d="M122 192l28-34 18 20 14-12 22 26z" />
-                <text class="dg-sub dg-ink" x="160" y="252">holiday.jpg</text>
-                <text class="dg-sub" x="160" y="284">image/jpeg · 2.4 MB</text>
-                <text class="dg-sub dg-warn-text" x="160" y="316">contents readable</text>
-              </g>
-              <rect class="dg-box dg-accent" x="10" y="360" width="340" height="330" rx="18" />
-              <g transform="translate(-300 350)">
-                <text class="dg-label" x="480" y="54">Wildbloom upload</text>
-                <rect class="dg-blob" x="430" y="78" width="100" height="130" rx="6" />
-                <rect class="dg-blob-hatch" x="430" y="78" width="100" height="130" rx="6" fill="url(#dg-hatch-t)" />
-                <g class="dg-icon dg-icon-solid" transform="translate(480 140)">
-                  <rect x="-20" y="-4" width="40" height="32" rx="5" />
-                  <path d="M-12 -4v-10a12 12 0 0 1 24 0v10" />
-                </g>
-                <text class="dg-sub dg-ink dg-mono" x="480" y="252">3f9a…c21</text>
-                <text class="dg-sub" x="480" y="284">padded size only</text>
-                <text class="dg-sub dg-ok-text" x="480" y="316">no name, no type</text>
-              </g>
-            </svg>
-            <figcaption>Encryption covers the content, the filename and the type.  The server still sees your connection and the blob's hash.</figcaption>
-          </figure>
+            <p><span class="art-line" aria-hidden="true"></span> Encrypted first. Distributed by you.</p>
+          </div>
+        </header>
 
-          <figure class="diagram">
-            <svg class="dg-wide" viewBox="0 0 640 360" role="img" aria-labelledby="dg-gone-title dg-gone-desc">
-              <title id="dg-gone-title">When a server goes</title>
-              <desc id="dg-gone-desc">The original server has been switched off.  A mirror copied the blob earlier using BUD-04.  Later, you fetch from the mirror with your saved event and recovery key; the size and hash are checked before the file is decrypted.</desc>
-              <defs>
-                <marker id="dg-gone-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
-              </defs>
-              <rect class="dg-box dg-warn dg-dashed" x="10" y="20" width="250" height="110" rx="18" />
-              <text class="dg-label dg-faded" x="135" y="66">Original server</text>
-              <text class="dg-sub dg-warn-text" x="135" y="100">switched off</text>
-              <path class="dg-arrow dg-dashed" d="M135 134V212" marker-end="url(#dg-gone-head)" />
-              <text class="dg-edge dg-start" x="152" y="180">copied earlier</text>
-              <rect class="dg-box" x="10" y="220" width="250" height="110" rx="18" />
-              <text class="dg-label" x="135" y="266">Mirror</text>
-              <text class="dg-sub" x="135" y="300">any Blossom server</text>
-
-              <path class="dg-arrow" d="M264 275H372" marker-end="url(#dg-gone-head)" />
-              <text class="dg-edge" x="318" y="261">fetch</text>
-              <rect class="dg-box dg-accent" x="380" y="150" width="250" height="180" rx="18" />
-              <text class="dg-label" x="505" y="194">You, later</text>
-              <text class="dg-sub" x="505" y="230">saved event</text>
-              <text class="dg-sub" x="505" y="258">+ recovery key</text>
-              <path class="dg-tick" d="M436 292l10 10 18-20" />
-              <text class="dg-sub dg-ok-text dg-start" x="474" y="302">hash checked</text>
-            </svg>
-            <svg class="dg-tall" viewBox="0 0 360 530" role="img" aria-labelledby="dg-gone-t-title dg-gone-t-desc">
-              <title id="dg-gone-t-title">When a server goes</title>
-              <desc id="dg-gone-t-desc">The original server has been switched off.  A mirror copied the blob earlier using BUD-04.  Later, you fetch from the mirror with your saved event and recovery key; the size and hash are checked before the file is decrypted.</desc>
-              <defs>
-                <marker id="dg-gone-t-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0 0 10 5 0 10z" /></marker>
-              </defs>
-              <rect class="dg-box dg-warn dg-dashed" x="30" y="10" width="300" height="100" rx="18" />
-              <text class="dg-label dg-faded" x="180" y="54">Original server</text>
-              <text class="dg-sub dg-warn-text" x="180" y="88">switched off</text>
-              <path class="dg-arrow dg-dashed" d="M180 114V172" marker-end="url(#dg-gone-t-head)" />
-              <text class="dg-edge dg-start" x="196" y="150">copied earlier</text>
-              <rect class="dg-box" x="30" y="180" width="300" height="100" rx="18" />
-              <text class="dg-label" x="180" y="224">Mirror</text>
-              <text class="dg-sub" x="180" y="258">any Blossom server</text>
-              <path class="dg-arrow" d="M180 284V342" marker-end="url(#dg-gone-t-head)" />
-              <text class="dg-edge dg-start" x="196" y="320">fetch</text>
-              <rect class="dg-box dg-accent" x="30" y="350" width="300" height="170" rx="18" />
-              <text class="dg-label" x="180" y="394">You, later</text>
-              <text class="dg-sub" x="180" y="430">saved event</text>
-              <text class="dg-sub" x="180" y="458">+ recovery key</text>
-              <path class="dg-tick" d="M112 488l10 10 18-20" />
-              <text class="dg-sub dg-ok-text dg-start" x="150" y="498">hash checked</text>
-            </svg>
-            <figcaption>A URL is a location, not a promise.  Keep the signed event and the key, and any copy will do.</figcaption>
-          </figure>
-        </div>
-
-        <table class="compare-table">
-          <caption>A typical Blossom upload compared with the same file sent through Wildbloom</caption>
-          <thead>
-            <tr><th scope="col">Question</th><th scope="col">Typical Blossom upload</th><th scope="col">Through Wildbloom</th></tr>
-          </thead>
-          <tbody>
-            <tr><th scope="row">What can the server read?</th><td data-label="Typical upload">The file, its name and its type</td><td data-label="Wildbloom">An encrypted, padded blob and its hash</td></tr>
-            <tr><th scope="row">The server disappears</th><td data-label="Typical upload">The link stops working</td><td data-label="Wildbloom">Fetch any other copy using the saved event and key</td></tr>
-            <tr><th scope="row">How do others find it?</th><td data-label="Typical upload">A URL pasted into a note</td><td data-label="Wildbloom">A signed NIP-94 event with the hash and size</td></tr>
-            <tr><th scope="row">Hosting it at home</th><td data-label="Typical upload">Router rules, a tunnel or a rented server</td><td data-label="Wildbloom">Wildbloom Node over optional Tor, with no router changes</td></tr>
-            <tr><th scope="row">Delivery</th><td data-label="Typical upload">HTTP</td><td data-label="Wildbloom">HTTP, plus torrent peers if you choose</td></tr>
-          </tbody>
-        </table>
-        <p class="compare-note">
-          None of this is exclusive.  Other Blossom clients encrypt, other
-          servers mirror, and Wildbloom files are ordinary blobs any Blossom
-          server can hold.  Wildbloom brings these choices together
-          in one explicit workflow and tells you where each guarantee stops.
-        </p>
-
-        <div class="story-grid two neighbours">
-          <article>
-            <h3>Other Blossom software worth knowing</h3>
-            <ul class="neighbour-list">
-              <li><a href="https://github.com/hzrd149/blossom-server" rel="noreferrer">blossom-server</a><span>The reference server, from the author of the Blossom specification.</span></li>
-              <li><a href="https://github.com/Letdown2491/hanami" rel="noreferrer">hanami</a><span>A members-only server with an encrypted drive, a redundancy target and private backup between your own instances.  The closest neighbour if you want a shared family drive.</span></li>
-              <li><a href="https://github.com/v0l/route96" rel="noreferrer">route96</a><span>A Rust server with quotas, Lightning payments and moderation, packaged for Umbrel.</span></li>
-              <li><a href="https://github.com/MonumentalSystems/blossom-rs" rel="noreferrer">blossom-rs</a><span>A Rust library and server with an iroh QUIC transport for hole-punched uploads.</span></li>
-            </ul>
-          </article>
-          <article>
-            <h3>When you do not need Wildbloom</h3>
-            <p>Posting a public picture in a note?  A hosted Blossom server is simpler, and encryption only gets in the way.  Wildbloom earns its keep when the host should not read the file, or when the file has to outlast the host.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="storage" class="story-section" aria-labelledby="storage-heading">
-        <p class="section-kicker">Replication &amp; sharding · preview</p>
-        <h2 id="storage-heading">A failed disk should not take your only copy.</h2>
-        <p class="story-intro">A home node can go offline. A host can close. Replication and sharding let you spread encrypted storage across nodes you choose, so losing one does not have to mean losing the file. Choose how much storage to use, how much loss to tolerate, and whether each node receives a complete encrypted copy or just a part.</p>
-        <div class="story-grid three-cards">
-          <article>
-            <span class="card-number">ONE NODE</span>
-            <h3>Keep it simple</h3>
-            <p>Use one node when you already keep a separate backup, or can upload the file again. It uses the least storage, but that node going offline makes its copy unavailable.</p>
-          </article>
-          <article>
-            <span class="card-number">REPLICATION</span>
-            <h3>Keep complete copies</h3>
-            <p>Put two or three complete encrypted copies on separate nodes. Any one verified copy can restore the file. Choose this for straightforward recovery; two copies use twice the storage, three use three times.</p>
-          </article>
-          <article>
-            <span class="card-number">SHARDING + ERASURE CODING</span>
-            <h3>Share the storage</h3>
-            <p>Split the encrypted file into parts, with extra parts for recovery. Choose this to spread storage across trusted nodes and send each only its assigned part. You need a threshold of different parts to restore the file.</p>
-          </article>
-        </div>
-
-        <figure class="diagram storage-example" aria-labelledby="storage-example-heading">
-          <p class="section-kicker">A 4-of-6 example</p>
-          <h3 id="storage-example-heading">Six parts stored. Any four can bring the file back.</h3>
-          <ol class="storage-parts" aria-label="Six parts on separate nodes, with two nodes offline">
-            <li><span>Node 1</span><strong>Part 1</strong><span>Available</span></li>
-            <li class="part-offline"><span>Node 2</span><strong>Part 2</strong><span>Offline</span></li>
-            <li><span>Node 3</span><strong>Part 3</strong><span>Available</span></li>
-            <li><span>Node 4</span><strong>Part 4</strong><span>Available</span></li>
-            <li class="part-offline"><span>Node 5</span><strong>Part 5</strong><span>Offline</span></li>
-            <li><span>Node 6</span><strong>Part 6</strong><span>Available</span></li>
-          </ol>
-          <figcaption>The four available parts reconstruct the encrypted file; your recovery key unlocks it. A 4-of-6 layout uses about <strong>1.5× the encrypted file size</strong> in total and tolerates any two missing parts. Simply splitting a file without this extra redundancy would require every part back.</figcaption>
-        </figure>
-
-        <div class="story-grid two">
-          <article>
-            <h3>Spread the risk as well as the bytes</h3>
-            <p>Two nodes on the same disk, power supply or internet connection can fail together. Use independent machines and locations, and group nodes that share a failure risk. Wildbloom reads bytes back and verifies their hashes before counting a copy or part as stored.</p>
-          </article>
-          <article>
-            <h3>Repair before another node is lost</h3>
-            <p>After a loss, the remaining copies or parts leave less room for another failure. Restore redundancy in the browser, or import the signed receipt into Wildbloom Node and explicitly enable owner repair while the browser is closed. Repair needs enough surviving parts, an external signer and available storage at approved destinations. It works on encrypted bytes without your recovery key.</p>
-          </article>
-        </div>
-        <p class="compare-note"><strong>Want each storage node to hold only a part?</strong> Choose sharding. Upload and repair send each node only its assigned part; reconstruction happens in your browser or on your separate owner repair machine. Encryption protects the contents. Splitting alone does not stop operators combining parts, or fetching other parts if they obtain your receipt.</p>
-        <p class="compare-note"><strong>Keep your route back to the file.</strong> Save the private signed receipt, which records where the parts belong, and back up the recovery key separately. Extra parts cannot replace either one. Keep an independent backup of irreplaceable files too.</p>
-        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Find recommendations from trusted signed server lists, then choose which nodes to contact. Free-capacity discovery, draining and cluster-wide rebalancing are not available.</div>
-        <div class="text-links">
-          <a href="#client">Choose a storage layout</a>
-          <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>
-          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md" rel="noreferrer">Use desktop pool controls</a>
-        </div>
-        <p class="compare-note">Pool storage is a preview. Automated local-process checks do not establish independent physical custody or acceptance on every device. Wildbloom Node includes desktop health checks and owner repair controls. Repair authority expires and must be approved again after restarting the app.</p>
-      </section>
-
-      <section id="services" class="story-section" aria-labelledby="services-heading">
-        <p class="section-kicker">Choose with confidence</p>
-        <h2 id="services-heading">Find a node. Know the terms.<br />Check your file is there.</h2>
-        <p class="story-intro">Storage needs more than an upload button. Wildbloom gives you a way to choose a host, pay its operator when needed, and check the encrypted bytes afterwards.</p>
-        <div class="story-grid three-cards service-cards">
-          <article><span class="card-number">01 / DISCOVER</span><h3>Start with people you trust</h3><p>Find signed node recommendations from public keys you choose. Review a suggestion before using it; discovery does not silently join a pool or send your file anywhere.</p><a href="#client-services">Find recommended nodes <span aria-hidden="true">↗</span></a></article>
-          <article><span class="card-number">02 / PAY DIRECTLY</span><h3>A price before a payment</h3><p>Review an operator’s storage allowance, term and refund policy. Supported operators accept Lightning or LNURLcash directly. Save your private order reference; payment and upload are separate steps.</p><a href="#client-services">Explore storage offers <span aria-hidden="true">↗</span></a></article>
-          <article><span class="card-number">03 / VERIFY</span><h3>Check bytes, not promises</h3><p>A fresh storage challenge reads the entire encrypted file or shard, and your browser independently downloads and verifies it. It proves retrievability at that check, not continuous custody or future availability.</p><a href="#client-retrieve">Recover and verify <span aria-hidden="true">↗</span></a></article>
-        </div>
-        <p class="compare-note">Run your own node without selling storage. Paid checkout is optional and needs the operator’s receiving service. Wildbloom holds no customer balance and does not pay other operators on your behalf.</p>
-      </section>
-
-      <section id="uses" class="story-section" aria-labelledby="uses-heading">
-        <p class="section-kicker">Use cases</p>
-        <h2 id="uses-heading">Useful anywhere the file matters more than the host.</h2>
-        <ul class="use-list">
-          <li><strong>Creators</strong><span>Keep media referenced by Nostr posts available without betting everything on a free upload host.</span></li>
-          <li><strong>Communities</strong><span>Share the storage burden across independently run nodes and verify every replica by hash.</span></li>
-          <li><strong>Families and small teams</strong><span>Use optional Tor when the home address should stay hidden, or connect the same node to infrastructure you already operate.</span></li>
-          <li><strong>Developers</strong><span>Dogfood standard Blossom storage in an existing Nostr application rather than adopting a proprietary API.</span></li>
+        <ul class="principle-strip" aria-label="Wildbloom principles">
+          <li><span aria-hidden="true">↗</span> Your storage</li>
+          <li><span aria-hidden="true">⌁</span> Your signer</li>
+          <li><span aria-hidden="true">✳</span> Open protocols</li>
+          <li><span aria-hidden="true">○</span> No Wildbloom account</li>
         </ul>
-      </section>
 
-      <section id="install" class="story-section install-section" aria-labelledby="install-heading">
-        <p class="section-kicker">Install</p>
-        <h2 id="install-heading">Try a preview, or build from source.</h2>
-        <p class="story-intro">
-          Preview installers are available for Windows, Linux and both Mac
-          architectures. The Mac preview is Developer ID signed and Apple
-          notarised. Windows packages remain unsigned. Trusted automatic updates and broader physical-device acceptance remain open.
-        </p>
-        <div class="install-grid">
-          <article>
-            <p class="platform">Windows · Linux · macOS</p>
-            <h3>Wildbloom Node</h3>
-            <p>Mac preview 0.3.5 adds optional operator-run paid storage and private full-read audits alongside pool health checks and owner-controlled repair. Checkout needs the operator’s own receiving service. A live LNURLcash purchase, file recovery and paired backup restore have passed on one Mac; hosted-operator and refund acceptance remain open. Windows and Linux downloads are the earlier 0.3.3 preview.</p>
-            <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.5-preview.1" rel="noreferrer">Download signed Mac preview 0.3.5</a>
-            <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.3-preview.1" rel="noreferrer">Download Windows and Linux previews 0.3.3</a>
-            <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Build the desktop app from source</a>
-          </article>
-          <article>
-            <p class="platform">Any modern browser</p>
-            <h3>Wildbloom</h3>
-            <p>The client runs in your browser and connects only to servers you name.  This site stores nothing.  For onion endpoints, use Tor Browser and read the privacy boundary before connecting.</p>
-            <a href="#client">Open the client</a>
-          </article>
-          <article class="archipelago-install">
-            <p class="platform">Archipelago</p><h3>Two apps. Your node identities.</h3>
-            <p>Run Wildbloom and Wildbloom Node together on Archipelago. The browser uses Archipelago’s signer; storage writes stay limited to your node identities. Keep your existing data volume when upgrading.</p>
-            <a href="https://github.com/forgesworn/archipelago-apps" rel="noreferrer">Get the Archipelago packages</a>
-          </article>
-        </div>
-      </section>
+        <section id="what" class="marketing-section" aria-labelledby="what-heading">
+          <div class="section-heading"><p class="section-kicker">01 / Take ownership</p><h2 id="what-heading">A file deserves more<br />than a fragile link.</h2><p>A disk fails. A service closes. A link stops working. Wildbloom helps you decide where your files live, who can read them, and how to bring them back.</p></div>
+          <div class="benefit-grid">
+            <article><span class="benefit-icon" aria-hidden="true">01 / PRIVATE</span><h3>Encrypt before<br />it leaves.</h3><p>Content, filename and file type are encrypted in your browser by default. Storage nodes receive encrypted bytes. You keep the recovery key.</p></article>
+            <article><span class="benefit-icon" aria-hidden="true">02 / RESILIENT</span><h3>Give your file<br />another way back.</h3><p>Keep complete copies or recoverable parts on separate nodes. Choose a layout that can survive losing a host.</p></article>
+            <article><span class="benefit-icon" aria-hidden="true">03 / YOURS</span><h3>Choose the people.<br />Choose the places.</h3><p>Use your own machines or storage from trusted operators. Your signer approves actions; Wildbloom never asks for your private signing key.</p></article>
+          </div>
+        </section>
 
-      <section id="protocol" class="story-section" aria-labelledby="protocol-heading">
-        <p class="section-kicker">Protocol</p>
-        <h2 id="protocol-heading">Open protocols. A clear route back.</h2>
-        <ol class="protocol-flow">
-          <li><span>1</span><div><strong>Prepare</strong><p>The browser encrypts content, filename and MIME type locally, then calculates the payload's SHA-256.</p></div></li>
-          <li><span>2</span><div><strong>Authorise</strong><p>Your signer approves a short-lived BUD-11 action for one hash and one Blossom host.  Wildbloom never asks for an nsec.</p></div></li>
-          <li><span>3</span><div><strong>Store and replicate</strong><p>BUD-02 uploads the exact bytes.  BUD-04 lets another authorised node mirror them, and each node verifies the content hash.</p></div></li>
-          <li><span>4</span><div><strong>Keep the recovery record</strong><p>Single-file publishing uses a signed NIP-94 event. Pools use a private signed receipt saved to your device, without relay publication or torrent discovery.</p></div></li>
-          <li><span>5</span><div><strong>Verify</strong><p>Retrieval is not complete until the byte count and SHA-256 match the signed event.  Decryption happens locally.</p></div></li>
-        </ol>
-        <div class="boundary protocol-boundary">
-          <strong>Storage you direct.</strong>  Wildbloom is interoperable storage and
-          owner-directed replication and shard repair.
-          Nodes do not discover strangers, promise permanent custody or create
-          replicas without somebody explicitly asking them to. An explicitly configured owner service can keep repairing while your browser is closed. Two nodes mean
-          two copies only after mirroring succeeds and both hashes verify.
-        </div>
-        <div class="text-links">
-          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/PROTOCOL.md" rel="noreferrer">Read the protocol</a>
-          <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/THREAT-MODEL.md" rel="noreferrer">Read the threat model</a>
-          <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/ENCRYPTION.md" rel="noreferrer">Read the encryption format</a>
-        </div>
-      </section>
+        <section id="storage" class="marketing-section storage-section" aria-labelledby="storage-heading">
+          <div class="storage-intro"><p class="section-kicker">02 / Make room for failure</p><h2 id="storage-heading">One node goes away.<br /><em>Your file needn’t.</em></h2><p>Replication keeps complete encrypted copies. Sharding with erasure coding creates parts that can rebuild the file—even when some are missing.</p><p>Try taking nodes offline in this example. Any two of the four parts are enough to recover.</p><a class="text-arrow" href="#install">Build your own storage pool <span aria-hidden="true">↗</span></a></div>
+          <div class="recovery-demo" aria-labelledby="demo-heading">
+            <div class="demo-topline"><h3 id="demo-heading">A little room for the unexpected</h3><span>Interactive example</span></div>
+            <div class="demo-count"><strong>2 <span>of</span> 4</strong><p>parts needed<br />to recover</p></div>
+            <div class="demo-nodes" role="group" aria-label="Example nodes: pressed means online">
+              <button type="button" data-demo-node aria-pressed="true"><span class="node-symbol" aria-hidden="true">Ⅰ</span><strong>Node 1</strong><span class="node-state">Online</span></button>
+              <button type="button" data-demo-node aria-pressed="false"><span class="node-symbol" aria-hidden="true">Ⅱ</span><strong>Node 2</strong><span class="node-state">Offline</span></button>
+              <button type="button" data-demo-node aria-pressed="true"><span class="node-symbol" aria-hidden="true">Ⅲ</span><strong>Node 3</strong><span class="node-state">Online</span></button>
+              <button type="button" data-demo-node aria-pressed="false"><span class="node-symbol" aria-hidden="true">Ⅳ</span><strong>Node 4</strong><span class="node-state">Offline</span></button>
+            </div>
+            <p class="demo-instruction">Tap a node to take it offline or bring it back.</p>
+            <p id="demo-result" class="demo-result" role="status"><strong>Your file can come home.</strong><span>2 parts available. Enough to recover.</span></p>
+            <p class="demo-caption">An illustration, not a live storage check. Recovery also needs your saved receipt and recovery key. Nothing is uploaded or contacted here.</p>
+          </div>
+          <div class="layout-options">
+            <article><p class="section-kicker">Single node</p><h3>A simple start.</h3><p>One encrypted copy. Best when you already keep a separate backup.</p><span>No redundancy</span></article>
+            <article><p class="section-kicker">Replication</p><h3>More complete copies.</h3><p>Any verified copy can restore the file. Two copies use twice the storage.</p><span>Simple recovery</span></article>
+            <article><p class="section-kicker">Erasure-coded shards</p><h3>Parts with a plan.</h3><p>Each node receives a part. For example, 4-of-6 uses about 1.5× the encrypted file size.</p><span>Recover from a threshold</span></article>
+          </div>
+          <p class="storage-footnote">Choose independent machines and locations: nodes sharing a disk, power supply or connection can fail together. Pool storage is a preview. <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Understand recovery and its limits ↗</a></p>
+        </section>
 
-      <section class="story-section small-print" aria-labelledby="reality-heading">
-        <p class="section-kicker">Privacy, in practice</p>
-        <h2 id="reality-heading">Your content is private. Connections still leave clues.</h2>
-        <p>
-          Encryption protects file content, not timing, byte counts or a reused
-          public identity.  Nostr relays provide discovery, not the file bytes.
-          Tor is optional and hides the node's home address, not every behavioural clue.  Direct mode exposes ordinary network metadata.  The
-          experimental direct browser swarm remains an optional compatibility
-          path and can expose IP addresses; the Wildbloom Node path does not use
-          WebRTC, STUN or TURN.
-        </p>
-      </section>
+        <section id="protocol" class="marketing-section journey-section" aria-labelledby="protocol-heading">
+          <div class="section-heading"><p class="section-kicker">03 / From file to safe return</p><h2 id="protocol-heading">A few deliberate steps.<br />A clear route back.</h2></div>
+          <ol class="journey-list">
+            <li><span>01</span><div><h3>Prepare it locally</h3><p>Choose your file and storage layout. The browser encrypts it. Save your recovery key somewhere safe.</p></div></li>
+            <li><span>02</span><div><h3>Choose where it lives</h3><p>Approve uploads with your signer. Encrypted bytes go to your chosen Blossom nodes, with hashes checked on read-back for pools.</p></div></li>
+            <li><span>03</span><div><h3>Keep your route home</h3><p>Save the signed file event or private pool receipt. Keep the recovery key separately—you need both to recover.</p></div></li>
+            <li><span>04</span><div><h3>Recover. Verify. Repair.</h3><p>Retrieve and decrypt locally. Restore lost redundancy in the browser, or explicitly enable the separate owner repair service.</p></div></li>
+          </ol>
+          <div class="protocol-note" id="blossom"><strong>Built on open protocols.</strong><p>Blossom stores the bytes. Nostr carries signed file pointers when you choose to publish them. Pool receipts stay private. Optional WebTorrent offers another delivery path.</p><a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/PROTOCOL.md" rel="noreferrer">Read the protocol ↗</a></div>
+        </section>
+
+        <section id="services" class="marketing-section" aria-labelledby="services-heading">
+          <div class="section-heading"><p class="section-kicker">04 / Know your storage</p><h2 id="services-heading">Trust your people.<br />Verify your bytes.</h2><p>Run a node without selling storage, or choose an operator with an offer that suits you. Each connection is your decision.</p></div>
+          <div class="service-grid">
+            <article><span class="service-mark" aria-hidden="true">↗</span><h3>Find trusted nodes</h3><p>Discover signed recommendations from people you choose. Review a node before contacting it.</p><a href="#client-services">Find a node <span aria-hidden="true">↗</span></a></article>
+            <article><span class="service-mark" aria-hidden="true">↔</span><h3>Pay the operator directly</h3><p>Review the allowance, term and refund policy. Supported operators accept Lightning or LNURLcash; Wildbloom holds no customer balance.</p><a href="#client-services">Explore storage offers <span aria-hidden="true">↗</span></a></article>
+            <article><span class="service-mark" aria-hidden="true">✓</span><h3>Check your file is there</h3><p>A fresh full-read audit verifies current retrievability. It cannot promise continuous custody or future availability.</p><a href="#client-retrieve">Recover and verify <span aria-hidden="true">↗</span></a></article>
+          </div>
+        </section>
+
+        <section id="install" class="marketing-section start-section" aria-labelledby="install-heading">
+          <div class="section-heading"><p class="section-kicker">05 / Make it yours</p><h2 id="install-heading">Start in a browser.<br />Put down your own roots.</h2><p>Wildbloom is the browser client. Wildbloom Node is the home for your encrypted bytes. Use them together, or bring an existing Blossom server.</p></div>
+          <div class="start-grid">
+            <article class="start-browser"><span class="start-label">01 / USE THE CLIENT</span><h3>No install.<br />No Wildbloom account.</h3><p>Bring a trusted storage node and Nostr signer. Source files up to 256 MiB. This website does not store your files.</p><a class="button-link" href="#client">Open the client <span aria-hidden="true">↗</span></a><a class="start-recover" href="#client-retrieve">Already have a receipt? Recover a file →</a></article>
+            <article><span class="start-label">02 / RUN A NODE</span><h3>A home for<br />encrypted bytes.</h3><p>A desktop tray app with storage, pool health and owner repair controls. Use your HTTPS setup or optional Tor.</p><a class="download-link" href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.5-preview.1" rel="noreferrer"><span>macOS <small>0.3.5 preview · signed &amp; notarised</small></span><span aria-hidden="true">↗</span></a><a class="download-link" href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.3-preview.1" rel="noreferrer"><span>Windows &amp; Linux <small>0.3.3 preview · Windows unsigned</small></span><span aria-hidden="true">↗</span></a></article>
+          </div>
+          <div class="archipelago-banner"><div><p class="section-kicker">Already running Archipelago?</p><h3>Your node. Both apps. One place.</h3><p>Install Wildbloom and Wildbloom Node with your existing node identities.</p></div><a class="button-link secondary" href="https://github.com/forgesworn/archipelago-apps" rel="noreferrer">Get the packages <span aria-hidden="true">↗</span></a></div>
+          <p class="release-note">Mac 0.3.5 includes optional checkout and storage audits; Windows and Linux downloads are the earlier 0.3.3 preview. Trusted automatic updates remain open. <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Prefer to build from source? ↗</a></p>
+        </section>
+
+        <section id="questions" class="marketing-section faq-section" aria-labelledby="questions-heading">
+          <div><p class="section-kicker">A few things to know</p><h2 id="questions-heading">Clear expectations.<br />Better decisions.</h2><p class="faq-intro">A public preview for people who want more control over their files. Keep an independent backup of anything irreplaceable.</p></div>
+          <div class="faq-list">
+            <details><summary>Is Wildbloom ready for my only copy?</summary><p>Keep another backup. Encrypted storage, recovery and repair have automated acceptance coverage, and live one-Mac LNURLcash purchase, recovery and paired backup restore have passed. Independent security review, broader physical-device testing, hosted-operator and refund acceptance remain open.</p><a href="https://github.com/forgesworn/wildbloom/blob/main/docs/ACCEPTANCE.md" rel="noreferrer">Read the acceptance evidence ↗</a></details>
+            <details><summary>Can a storage node read my file?</summary><p>With encryption enabled, nodes receive encrypted content, filename and file type. Your separate recovery key unlocks the file. Connections still reveal metadata such as timing, byte counts and, in direct mode, IP addresses. Optional Tor reduces address exposure; it does not remove every clue.</p><a href="https://github.com/forgesworn/wildbloom/blob/main/docs/PRIVACY.md" rel="noreferrer">Understand the privacy boundary ↗</a></details>
+            <details><summary>Can I keep the whole file off every node?</summary><p>Choose erasure-coded sharding. Upload and repair send each storage node only its assigned part. Reconstruction happens in your browser or separate owner repair service. Encryption protects the contents; splitting alone does not prevent operators combining parts or fetching other parts if they obtain your receipt.</p></details>
+            <details><summary>Does repair happen automatically?</summary><p>You can explicitly enable a separate owner repair service in Wildbloom Node. It works on encrypted bytes without the recovery key, but needs enough surviving parts, an external signer and approved storage destinations. Repair authority expires and needs approval again after restarting the app. Free-capacity discovery, draining and cluster-wide rebalancing are not available.</p><a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md" rel="noreferrer">Set up owner repair ↗</a></details>
+            <details><summary>What do I need to recover a file?</summary><p>Your signed file event or private pool receipt, the separate recovery key, and enough available verified bytes or parts. Save the record and key before closing the browser. Extra copies cannot replace a lost recovery key. Ordinary file recovery needs no signer.</p><a href="#client-retrieve">Open file recovery →</a></details>
+          </div>
+        </section>
+        <section class="closing-note" aria-labelledby="closing-heading"><p class="section-kicker">Files that outlive their host.</p><h2 id="closing-heading">Let your files<br /><em>put down roots.</em></h2><a class="button-link" href="#client">Try Wildbloom <span aria-hidden="true">↗</span></a><p>Open source · MIT licensed · Made by ForgeSworn</p></section>
       </div>
 
       <div id="client" hidden>
