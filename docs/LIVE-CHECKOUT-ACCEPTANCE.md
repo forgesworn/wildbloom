@@ -181,15 +181,22 @@ On 8 October, two fresh live audits passed 324 seconds apart. A page reload,
 reconnection to the same signer and another fresh audit also passed. All three
 nonce-bound proof digests were independently recomputed. Popup state during the
 gap was not confirmed, so this is an inter-request gap and page-reload result,
-not proof of a closed-popup idle cycle or a Chrome process restart.
+not proof of a closed-popup idle cycle.
+
+A later full Chrome process restart passed: a read-only process check confirmed
+Chrome had exited before reopening the same profile. Bark connected to the same
+signer without re-pairing, and a new full-read audit passed with its digest
+independently recomputed over all 65,608 ciphertext bytes. The agent did not open
+Bark's popup before that connection. This establishes one successful process
+restart, not sustained reliability across repeated restarts or device outages.
 
 Bark's existing `e2e/reconnect-lifecycle.spec.js` also passed all four tests from
 source `d980954` in an isolated checkout: delayed handshake/concurrent callers,
 refusal without retry storms, lost relay sockets with the original pairing, and
 signing after a 45-second idle gap plus explicit reconnect. These use disposable
 Chromium profiles and a synthetic local signer. The sandbox initially prevented
-Chromium from launching; the authorised run outside it passed. Physical popup,
-Chrome-restart and Heartwood-offline cycles remain unobserved.
+Chromium from launching; the authorised run outside it passed. A separately
+observed popup close/reopen cycle and Heartwood-offline cycle remain unverified.
 
 Keep the original pairing and paid order. For each cycle, obtain a fresh signed
 HTTP authorisation and full-read audit, save the private report, and independently
