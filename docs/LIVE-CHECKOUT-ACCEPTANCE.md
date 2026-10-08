@@ -3,9 +3,16 @@
 This checklist separates controlled integration tests from live acceptance.
 A one-Mac LNURLcash run on 7 October 2026 activated a paid allowance, survived
 a daemon restart and recovered all 39,936 original bytes from encrypted storage.
-The full audit remains unverified; the subsequent retry stopped at signer
-connection. This is not a completed live acceptance ceremony or a hosted
-operator acceptance result. Sensitive evidence is retained privately.
+A fresh full-read audit subsequently passed with one target verified and zero
+failures, with its digest independently recomputed over all 65,608 ciphertext
+bytes. Only Bark 1.3.13 was enabled for that passing run. The earlier connection
+failures remain part of the private evidence; the passing result does not
+establish that the separately patched unpacked extension works with this pairing.
+On 8 October, the paired restore also passed authenticated order recovery and a
+fresh full-read audit using the existing Heartwood pairing and user-reported
+Bark 1.3.14. The restored file matched all 39,936 original bytes. This completes
+the one-Mac paired-restore check, not the full live acceptance ceremony or hosted
+operator acceptance. Sensitive evidence is retained privately.
 
 This ceremony checks one actual operator and receiving service,
 one payment rail at a time. A Lightning pass does not establish LNURLcash
@@ -120,6 +127,116 @@ never export the replacement spend or secret. An uncertain rotation must be
 reconciled using its saved journal. Do not re-submit another note to resolve it.
 
 ## Evidence and remaining physical gate
+
+### One-Mac observations, 7 October 2026
+
+These observations concern a loopback development daemon built from Node source
+`ce4bceaea65b3a2992933ecaa38aa7545a79e044`, a real Moneyer LNURLcash purchase and
+the existing external signer. They do not establish hosted operator readiness,
+Phoenixd acceptance or independent physical storage.
+
+| Check | Observed result |
+| --- | --- |
+| Paid allowance and daemon restart | Passed: the original order and receipt survived restart; one order and settlement were retained. |
+| Fresh-browser encrypted recovery | Passed: all 39,936 plaintext bytes matched the source. |
+| Fresh full-read audit before backup | Passed: 1/1 targets, zero failures; a fresh nonce and independently recomputed digest over 65,608 ciphertext bytes. |
+| Offline backup after upload | Passed: both stores were copied with the daemon stopped; SQLite integrity and copied-file hashes matched. The earlier pre-upload backup was retained separately. |
+| Restore into separate directories | Passed: only the restored copy was started, on the original loopback origin. The original stores were preserved. The active order, receipt, allowance limits/deadlines, paid sale and file claim matched. |
+| Fresh-browser recovery from restored storage | Passed: AES-GCM verification succeeded and the downloaded plaintext matched all 39,936 source bytes exactly. |
+| Signed order recovery and fresh audit after restore | Blocked: the fresh signer connection timed out, including a retry after the signer was reported ready. Bark remained reconnecting; no post-restore audit started. Local ledger comparison is separate evidence, not a signed HTTP order-recovery pass. |
+| Return to original stores | Passed: the restored daemon was stopped, payment state and the unchanged backup were checked, and the original daemon was restarted alone. |
+| Operator refund procedure | Not exercised. |
+| Independent physical node loss and repair | Not exercised: only one Mac was available. |
+
+No additional purchase, note submission or payment was made during restoration.
+Private evidence retains the backup manifest, logical database comparisons,
+download comparison and individual signer/audit attempts. Do not publish the
+stores, order references, raw audit reports or recovery material.
+
+### Paired-restore completion, 8 October 2026
+
+The same paid order, daemon binary, original signer and isolated restore were
+reused. Only one copy of the spendable-note ledger ran at a time. The user
+reported the enabled Bark version as 1.3.14. Earlier failures remain recorded
+above and in private evidence.
+
+| Check | Observed result |
+| --- | --- |
+| Signed original-order recovery from restored stores | Passed: the original signer recovered the order as `active`. This status does not extend the original write window or retention deadline. |
+| Fresh full-read audit against restored stores | Passed: 1/1 targets and zero failures; the nonce-bound digest was independently recomputed over all 65,608 ciphertext bytes. |
+| Fresh-browser file recovery from restored stores | Passed: authenticated decryption and an exact comparison of all 39,936 original plaintext bytes. |
+| Payment state and backup preservation | Passed: every logical table in both paired stores matched the baseline, SQLite integrity checks passed, and the offline backup's file hashes were unchanged. No further payment or note submission occurred. |
+| Return to original stores | Passed: the restored daemon was stopped before the original restarted alone; original ciphertext read-back matched its expected hash. |
+
+An interrupted retry coincided with a separate firmware-flashing process on the
+Heartwood serial port. That observation does not establish a firmware crash or
+prove the cause of every earlier timeout. The checks above passed after flashing
+ended; the installed Heartwood firmware version was not independently recorded.
+This remains one-Mac loopback development evidence, not a hosted TLS deployment,
+independent physical failure test or sustained signer reliability result.
+
+### Signer reliability follow-up
+
+On 8 October, two fresh live audits passed 324 seconds apart. A page reload,
+reconnection to the same signer and another fresh audit also passed. All three
+nonce-bound proof digests were independently recomputed. Popup state during the
+gap was not confirmed, so this is an inter-request gap and page-reload result,
+not proof of a closed-popup idle cycle or a Chrome process restart.
+
+Bark's existing `e2e/reconnect-lifecycle.spec.js` also passed all four tests from
+source `d980954` in an isolated checkout: delayed handshake/concurrent callers,
+refusal without retry storms, lost relay sockets with the original pairing, and
+signing after a 45-second idle gap plus explicit reconnect. These use disposable
+Chromium profiles and a synthetic local signer. The sandbox initially prevented
+Chromium from launching; the authorised run outside it passed. Physical popup,
+Chrome-restart and Heartwood-offline cycles remain unobserved.
+
+Keep the original pairing and paid order. For each cycle, obtain a fresh signed
+HTTP authorisation and full-read audit, save the private report, and independently
+recompute its digest. An old success message or an unchanged public key is not a
+new signing result. Allow normal popup startup time before judging a failure.
+
+1. Record a baseline audit, close the popup, leave the signer idle for at least
+   three minutes, then audit again without first opening the popup.
+2. Close and reopen Bark's popup, allow it to connect, close it again, and audit.
+3. Quit and reopen Chrome with the same profile, recover the saved signed file
+   event and original signer, and audit without re-pairing.
+4. Take Heartwood offline, confirm a request ends with a bounded failure, restore
+   its connection, and require a fresh passing audit with the same pairing.
+
+Record the elapsed idle interval and separate user-observed popup/device actions
+from browser-observed signing results. Synthetic lifecycle tests complement these
+steps but do not establish a pass on the physical device. No new quote, payment,
+relay publication or change to signer policy is needed.
+
+### Repeating the paired restore safely
+
+1. Record the exact daemon build, matching configuration, original order and
+   expected plaintext/ciphertext hashes privately. Keep the file recovery key
+   separately from the operator backup.
+2. Stop the designated daemon and verify that its listener and store handles
+   have closed. Copy **both** checkout and storage directories, including any
+   SQLite sidecars, into a new private backup directory. Check database
+   integrity and record file hashes. Never overwrite an earlier backup.
+3. Restore into another new private directory. Verify its files against the
+   backup before starting it. Use the same binary and configuration, changing
+   only the checkout/storage paths. On a single Mac, reuse the original
+   loopback bind and public origin while the original daemon remains stopped;
+   this preserves the signed URL and checkout origin bindings.
+4. Recover the original order using its original signer, retrieve/decrypt the
+   saved file in a fresh browser session, compare the downloaded bytes, and run
+   a fresh storage audit. Compare the order, receipt, allowance and settlement
+   state; do not create a quote or submit a payment during this check.
+5. Stop the restored daemon before returning to the original. Compare the
+   payment state before deciding which store is authoritative. If a payment,
+   note rotation or other financial mutation occurred, do not blindly restart
+   the older ledger: preserve both offline and reconcile first. If only the
+   read-only checks occurred and payment state is unchanged, restart the
+   original daemon and leave the backup and restored copy offline.
+
+At no point may two copies of the spendable-note ledger run concurrently.
+An intact backup and an authenticated file download do not replace the signed
+order-recovery and fresh-audit checks. Record any blocked step separately.
 
 For each numbered row record date, exact builds, expected result, observed result
 and **pass / fail / blocked**. Preserve failed attempts; a later pass does not

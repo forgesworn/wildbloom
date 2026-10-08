@@ -127,7 +127,14 @@ against Node source `ce4bceaea65b3a2992933ecaa38aa7545a79e044`.
 The browser release was [deployed and verified](https://github.com/forgesworn/wildbloom/actions/runs/37600723199)
 from `24e8f0b064e5c4f22e6aaf142bd6cfc3116d85ea`.
 
-This is one-host synthetic acceptance. Real Phoenixd/issuer acceptance, deployed
-credentials, refunds and paired backup/restore remain separate. It is not evidence
-of a production payment deployment, physical multi-device custody or independent
-security review.
+This is one-host synthetic acceptance. A separate [live one-Mac LNURLcash
+run](LIVE-CHECKOUT-ACCEPTANCE.md#one-mac-observations-7-october-2026) activated a
+paid allowance, recovered the encrypted file and passed a fresh full-read audit.
+On 8 October, the [paired restore completed](LIVE-CHECKOUT-ACCEPTANCE.md#paired-restore-completion-8-october-2026):
+the original signer recovered the paid order, a fresh post-restore audit passed
+with its digest independently recomputed, and all 39,936 plaintext bytes matched.
+Payment state and the offline backup remained unchanged. The enabled Bark version
+was user-reported as 1.3.14; sustained signer reliability remains a separate check.
+Real Phoenixd acceptance, hosted credentials, refunds and physical multi-device
+custody remain separate. Neither run establishes a production payment deployment
+or independent security review.
