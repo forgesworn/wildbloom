@@ -174,7 +174,7 @@ try {
   await assertNoBrowserPersistence(p, publisher.context, "pool publisher");
   await publisher.context.close();
   const fresh = await pageAt(origin, allowed), r = fresh.page;
-  await r.getByText("Use a saved signed event without a relay", { exact: true }).click();
+  await r.getByText("Use a saved file event or pool receipt", { exact: true }).click();
   await r.fill("#saved-event-json", receiptBytes.toString());
   const before = fresh.requests.length;
   await r.click("#verify-saved-event");
@@ -343,7 +343,7 @@ process.stdout.write(JSON.stringify(finalizeEvent(request, new Uint8Array(32).fi
   assert.notEqual(expired.code, 0); assert.equal(expired.stdout, "");
   // All browser/native coded bytes must still agree after both repair generations.
   const recovered = await pageAt(origin, allowed);
-  await recovered.page.getByText("Use a saved signed event without a relay", { exact: true }).click();
+  await recovered.page.getByText("Use a saved file event or pool receipt", { exact: true }).click();
   await recovered.page.fill("#saved-event-json", replacementReceiptBytes.toString());
   await recovered.page.click("#verify-saved-event");
   await status(recovered.page, "#retrieve-status", "Pool receipt verified locally");

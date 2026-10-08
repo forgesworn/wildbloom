@@ -152,7 +152,7 @@
       <div id="client" hidden>
       <header class="tool-intro">
         <p class="section-kicker">Browser client</p>
-        <h2 id="client-heading" tabindex="-1">Publish or retrieve a file</h2>
+        <h1 id="client-heading" tabindex="-1">Publish or retrieve a file</h1>
         <p class="byo-notice">
           <strong>This site stores nothing.</strong> Files go from your browser
           to storage you choose. Bring a trusted Blossom server or
@@ -322,7 +322,7 @@
           <span>02</span>
           <div>
             <h2 id="publish-heading" tabindex="-1">Publish a file</h2>
-            <p>Inspect locally first. Every network step remains separate.</p>
+            <p>Inspect your file, save its recovery key, then approve the upload. Keep the signed file event or pool receipt for recovery.</p>
           </div>
         </div>
 
@@ -420,7 +420,7 @@
           <span>03</span>
           <div>
             <h2 id="retrieve-heading" tabindex="-1">Retrieve and verify</h2>
-            <p>Look up a signed event on your relays or verify a saved event locally, then choose how to fetch the file.</p>
+            <p>Start with your saved file event or pool receipt. Verify it locally, enter the recovery key when asked, then fetch and save the verified file. No signer is needed for ordinary recovery.</p>
           </div>
         </div>
 
@@ -441,10 +441,10 @@
           <button id="resolve-event" type="button">Resolve signed event</button>
         </div>
         <details id="saved-recovery">
-          <summary>Use a saved signed event without a relay</summary>
-          <p>Load the signed file event you saved or received, or paste its JSON below. Verification checks its signature and file information locally. Check the author or retained event ID before fetching; a valid signature alone does not identify someone you trust.</p>
+          <summary>Use a saved file event or pool receipt</summary>
+          <p>Load the signed file event or pool receipt you saved, or paste its JSON below. You do not need to configure relays or a publishing layout for this. Verification checks its signature and file information locally. Check the author or retained event ID before fetching; a valid signature alone does not identify someone you trust.</p>
           <label>
-            Signed event file <small>JSON, at most 128 KiB</small>
+            Saved event or pool receipt <small>JSON, at most 128 KiB</small>
             <input id="saved-event-file" type="file" accept="application/json,.json" />
           </label>
           <label>

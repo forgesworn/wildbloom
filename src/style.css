@@ -39,7 +39,7 @@ a:hover { color: #b9eea2; }
 
 .section-kicker { color: var(--moss); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
 .boundary { max-width: 720px; border-left: 2px solid var(--rust); padding-left: 1rem; color: #d9d2c5; line-height: 1.6; }
-.tool-intro > h2 { font-size: clamp(2.25rem, 6vw, 4.8rem); letter-spacing: -0.045em; line-height: 1; }
+.tool-intro > :is(h1, h2) { font-size: clamp(2.25rem, 6vw, 4.8rem); letter-spacing: -0.045em; line-height: 1; }
 .text-links { display: flex; flex-wrap: wrap; gap: 0.8rem 1.4rem; }
 .text-links a { font-weight: 720; }
 
@@ -187,7 +187,7 @@ footer p { margin: 0.45rem 0; }
 #client-services summary { min-height: 1.5rem; color: var(--ink); }
 #client-services details > label { margin-top: 1rem; }
 .consent { display: flex; align-items: flex-start; gap: 0.75rem; line-height: 1.5; }
-.consent input { flex: 0 0 auto; width: 1.25rem; height: 1.25rem; margin: 0.1rem 0 0; accent-color: var(--moss); }
+.consent input { flex: 0 0 auto; width: 1.5rem; height: 1.5rem; margin: 0.1rem 0 0; accent-color: var(--moss); }
 #client .tool-intro { margin-bottom: 2rem; }
 #client .byo-notice { font-size: 1rem; }
 #client .boundary { font-size: 0.9rem; }
@@ -201,4 +201,24 @@ footer p { margin: 0.45rem 0; }
 }
 @media (forced-colors: active) {
   .workspace-nav a span { color: LinkText; }
+}
+
+/* Keep workspace controls readable with larger text and narrow viewports. */
+#client { overflow-wrap: anywhere; line-height: 1.6; }
+#client * { min-width: 0; }
+#client .tool-intro > h1 { margin: 0; }
+#client .panel-heading > span { flex-shrink: 0; }
+#client .workspace-nav a { flex-wrap: wrap; }
+#client :where(button, input, select, textarea) { max-width: 100%; }
+#client .gate { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+#client .panel > label + label,
+#client details > label + label { margin-top: 1rem; }
+#client .panel summary { min-height: 44px; padding-block: 0.5rem; }
+#client .consent { margin-block: 1rem; }
+#client :where(input, textarea, select, .profile-option) { border-color: #718875; }
+#client :where(input, textarea)::placeholder { color: #a8b0a9; opacity: 1; }
+#client .hint { color: var(--muted); font-size: 0.9rem; }
+@media (forced-colors: active) {
+  #client :where(input, textarea, select, .profile-option) { border-color: CanvasText; }
+  #client :where(input, textarea)::placeholder { color: GrayText; }
 }

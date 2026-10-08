@@ -1,6 +1,6 @@
 // Component bounds catch clipped/overlapping card text that a page-level
 // scrollWidth assertion and axe cannot detect. Run against the production CSS.
-export async function assertMarketingReflow(page) {
+export async function assertContentReflow(page, label = "Marketing") {
   const initialViewport = page.viewportSize();
   const originalStyles = await page.evaluate(() => {
     const elements = [document.documentElement, ...document.querySelectorAll('body *:not(svg):not(svg *)')];
@@ -55,7 +55,7 @@ export async function assertMarketingReflow(page) {
           }
           return [...new Set(issues)];
         });
-        if (problems.length) throw new Error(`Marketing ${width}px ${mode}: ${problems.slice(0, 8).join('; ')}`);
+        if (problems.length) throw new Error(`${label} ${width}px ${mode}: ${problems.slice(0, 8).join('; ')}`);
       }
     }
   } finally {
