@@ -8,8 +8,11 @@ failures, with its digest independently recomputed over all 65,608 ciphertext
 bytes. Only Bark 1.3.13 was enabled for that passing run. The earlier connection
 failures remain part of the private evidence; the passing result does not
 establish that the separately patched unpacked extension works with this pairing.
-This is not a completed live acceptance ceremony or a hosted operator acceptance
-result. Sensitive evidence is retained privately.
+On 8 October, the paired restore also passed authenticated order recovery and a
+fresh full-read audit using the existing Heartwood pairing and user-reported
+Bark 1.3.14. The restored file matched all 39,936 original bytes. This completes
+the one-Mac paired-restore check, not the full live acceptance ceremony or hosted
+operator acceptance. Sensitive evidence is retained privately.
 
 This ceremony checks one actual operator and receiving service,
 one payment rail at a time. A Lightning pass does not establish LNURLcash
@@ -149,6 +152,48 @@ No additional purchase, note submission or payment was made during restoration.
 Private evidence retains the backup manifest, logical database comparisons,
 download comparison and individual signer/audit attempts. Do not publish the
 stores, order references, raw audit reports or recovery material.
+
+### Paired-restore completion, 8 October 2026
+
+The same paid order, daemon binary, original signer and isolated restore were
+reused. Only one copy of the spendable-note ledger ran at a time. The user
+reported the enabled Bark version as 1.3.14. Earlier failures remain recorded
+above and in private evidence.
+
+| Check | Observed result |
+| --- | --- |
+| Signed original-order recovery from restored stores | Passed: the original signer recovered the order as `active`. This status does not extend the original write window or retention deadline. |
+| Fresh full-read audit against restored stores | Passed: 1/1 targets and zero failures; the nonce-bound digest was independently recomputed over all 65,608 ciphertext bytes. |
+| Fresh-browser file recovery from restored stores | Passed: authenticated decryption and an exact comparison of all 39,936 original plaintext bytes. |
+| Payment state and backup preservation | Passed: every logical table in both paired stores matched the baseline, SQLite integrity checks passed, and the offline backup's file hashes were unchanged. No further payment or note submission occurred. |
+| Return to original stores | Passed: the restored daemon was stopped before the original restarted alone; original ciphertext read-back matched its expected hash. |
+
+An interrupted retry coincided with a separate firmware-flashing process on the
+Heartwood serial port. That observation does not establish a firmware crash or
+prove the cause of every earlier timeout. The checks above passed after flashing
+ended; the installed Heartwood firmware version was not independently recorded.
+This remains one-Mac loopback development evidence, not a hosted TLS deployment,
+independent physical failure test or sustained signer reliability result.
+
+### Signer reliability follow-up
+
+Keep the original pairing and paid order. For each cycle, obtain a fresh signed
+HTTP authorisation and full-read audit, save the private report, and independently
+recompute its digest. An old success message or an unchanged public key is not a
+new signing result. Allow normal popup startup time before judging a failure.
+
+1. Record a baseline audit, close the popup, leave the signer idle for at least
+   three minutes, then audit again without first opening the popup.
+2. Close and reopen Bark's popup, allow it to connect, close it again, and audit.
+3. Quit and reopen Chrome with the same profile, recover the saved signed file
+   event and original signer, and audit without re-pairing.
+4. Take Heartwood offline, confirm a request ends with a bounded failure, restore
+   its connection, and require a fresh passing audit with the same pairing.
+
+Record the elapsed idle interval and separate user-observed popup/device actions
+from browser-observed signing results. Synthetic lifecycle tests complement these
+steps but do not establish a pass on the physical device. No new quote, payment,
+relay publication or change to signer policy is needed.
 
 ### Repeating the paired restore safely
 
