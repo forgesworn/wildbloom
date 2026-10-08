@@ -634,6 +634,20 @@ try {
   await assertAccessible(page, "Overview page");
   await page.locator(".hero-actions").getByRole("link", { name: "Open the client" }).click();
   await assertClientViewShown(page);
+  // Task links are local navigation, keep entered setup and move keyboard focus.
+  await page.locator("#blossom-server").fill("https://example.com");
+  await page.getByRole("navigation", { name: "Client tasks" }).getByRole("link", { name: "03 Recover" }).click();
+  await page.locator("#saved-recovery[open]").waitFor({ state: "visible" });
+  if (!(await page.locator("#client").isVisible())) {
+    throw new Error("Recovery task did not open the local saved-event controls.");
+  }
+  if (!(await page.evaluate(() => document.activeElement?.id === "retrieve-heading"))) throw new Error("Recovery task lost keyboard focus.");
+  await page.getByRole("navigation", { name: "Client tasks" }).getByRole("link", { name: "01 Set up" }).click();
+  await page.waitForFunction(() => document.activeElement?.id === "connection-heading");
+  if (await page.locator("#blossom-server").inputValue() !== "https://example.com") throw new Error("Task navigation discarded entered setup.");
+  await page.locator("#blossom-server").fill("");
+  await page.locator("#saved-recovery").evaluate((details) => { details.open = false; });
+  if (remoteRequests.length !== 0) throw new Error("Task navigation contacted a remote service.");
   const browserPolicy = await page.evaluate((deniedFeatures) => {
     const policy = document.permissionsPolicy ?? document.featurePolicy;
     const supported = typeof policy?.features === "function" ? new Set(policy.features()) : new Set();

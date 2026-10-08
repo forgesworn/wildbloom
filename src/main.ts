@@ -507,6 +507,11 @@ function applyProfile(): void {
     relayInput.placeholder = "wss://relay.example.com";
   }
   const pool = storageMode.value !== "single";
+  element<HTMLElement>("storage-layout-summary").textContent = storageMode.value === "erasure"
+    ? "Each node receives one encrypted part. Choose how many parts recovery needs and how many to store; extra parts provide room for node loss."
+    : storageMode.value === "replicas"
+      ? "Each node holds a complete encrypted copy. Any one verified copy can recover the file; use separate failure groups."
+      : "One node holds the encrypted file. Keep a separate backup: this layout has no redundancy.";
   element<HTMLElement>("pool-settings").hidden = !pool;
   element<HTMLElement>("pool-copies-field").hidden = storageMode.value !== "replicas";
   element<HTMLElement>("pool-required-field").hidden = storageMode.value !== "erasure";
@@ -1405,12 +1410,26 @@ const overviewView = element<HTMLDivElement>("overview");
 const clientView = element<HTMLDivElement>("client");
 
 function showRequestedView(moveFocus: boolean): void {
-  const showClient = location.hash === "#client";
+  const destinations: Record<string, string> = {
+    "#client-setup": "connection-heading",
+    "#client-publish": "publish-heading",
+    "#client-retrieve": "retrieve-heading",
+    "#client-services": "node-services-heading",
+  };
+  const headingId = destinations[location.hash];
+  const showClient = location.hash === "#client" || Boolean(headingId);
   overviewView.hidden = showClient;
   clientView.hidden = !showClient;
   if (showClient) {
-    window.scrollTo(0, 0);
-    if (moveFocus) element<HTMLHeadingElement>("client-heading").focus();
+    document.querySelectorAll<HTMLAnchorElement>(".workspace-nav a").forEach((link) => {
+      if (link.hash === location.hash) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+    if (headingId) {
+      if (location.hash === "#client-retrieve") element<HTMLDetailsElement>("saved-recovery").open = true;
+      element<HTMLElement>(location.hash.slice(1)).scrollIntoView();
+    } else window.scrollTo(0, 0);
+    if (moveFocus) element<HTMLHeadingElement>(headingId ?? "client-heading").focus({ preventScroll: true });
     return;
   }
   const target = location.hash.length > 1 ? document.getElementById(location.hash.slice(1)) : null;
