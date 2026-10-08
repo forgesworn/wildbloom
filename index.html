@@ -25,12 +25,13 @@
     <title>Wildbloom · Encrypted publishing and storage you control</title>
   </head>
   <body>
+    <a class="skip-link" href="#client">Skip to the client</a>
     <main class="shell">
       <nav class="site-nav" aria-label="Primary navigation">
         <a class="wordmark" href="#top" aria-label="Wildbloom home">Wildbloom</a>
         <div>
           <a href="#what">What it is</a>
-          <a href="#blossom">Blossom</a>
+          <a href="#services">Find &amp; verify</a>
           <a href="#storage">Storage pools</a>
           <a href="#install">Install</a>
           <a href="#protocol">Protocol</a>
@@ -41,14 +42,14 @@
 
       <div id="overview">
       <header id="top" class="masthead hero">
+        <div class="hero-main">
         <p class="eyebrow">ForgeSworn · open source · MIT</p>
         <h1>Wildbloom</h1>
         <p class="lede">Files that outlive their host.</p>
         <p class="hero-copy">
-          Publish encrypted files without handing one company the keys, the
-          address book and the only copy.  Wildbloom joins Nostr discovery,
-          Blossom storage and a home node reached through direct HTTPS or
-          optional Tor.
+          Encrypt in your browser. Keep copies with people you trust, or split
+          a file across nodes so a few can go offline and you can still recover it.
+          Your storage, your signer, your way back.
         </p>
         <div class="hero-actions">
           <a class="button-link" href="#client">Open the client</a>
@@ -56,15 +57,29 @@
         </div>
         <ul class="hero-facts" aria-label="Wildbloom principles">
           <li>No account</li>
-          <li>No private keys</li>
+          <li>Keys stay in your signer</li>
           <li>Tor is optional</li>
-          <li>No STUN or TURN for the node path</li>
+          <li>Encrypted before upload</li>
         </ul>
+        </div>
+        <aside class="hero-recovery" aria-label="Example recovery plan">
+          <p class="section-kicker">A little room for the unexpected</p>
+          <div class="recovery-metric"><strong>2 <span>of</span> 4</strong><span>parts needed to recover</span></div>
+          <div class="recovery-nodes" aria-label="Two available parts and two offline parts">
+            <span><i aria-hidden="true"></i>Part 1<small>Available</small></span>
+            <span class="offline"><i aria-hidden="true"></i>Part 2<small>Offline</small></span>
+            <span><i aria-hidden="true"></i>Part 3<small>Available</small></span>
+            <span class="offline"><i aria-hidden="true"></i>Part 4<small>Offline</small></span>
+          </div>
+          <p class="recovery-caption">Two nodes offline. Your file still has a way home.</p>
+          <p class="hint">An example layout, not a live status. Recovery needs the receipt, key and two valid parts.</p>
+          <a href="#storage">Find your storage layout <span aria-hidden="true">↗</span></a>
+        </aside>
       </header>
 
       <section id="what" class="story-section" aria-labelledby="what-heading">
         <p class="section-kicker">What it is</p>
-        <h2 id="what-heading">A publishing tool and a storage node.  Not another promise-shaped cloud.</h2>
+        <h2 id="what-heading">One tool for your files. One home for their encrypted bytes.</h2>
         <p class="story-intro">
           The browser prepares and encrypts a file, asks your Nostr signer to
           approve exact actions, and publishes a signed pointer.  Wildbloom
@@ -386,13 +401,25 @@
         </div>
         <p class="compare-note"><strong>Want each storage node to hold only a part?</strong> Choose sharding. Upload and repair send each node only its assigned part; reconstruction happens in your browser or on your separate owner repair machine. Encryption protects the contents. Splitting alone does not stop operators combining parts, or fetching other parts if they obtain your receipt.</p>
         <p class="compare-note"><strong>Keep your route back to the file.</strong> Save the private signed receipt, which records where the parts belong, and back up the recovery key separately. Extra parts cannot replace either one. Keep an independent backup of irreplaceable files too.</p>
-        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Trusted signed server lists can suggest nodes. Capacity discovery, draining and cluster-wide rebalancing are not available.</div>
+        <div class="boundary protocol-boundary"><strong>You choose the pool.</strong> Nodes keep their own quotas and retention rules. Replacement destinations need a new signed receipt. Find recommendations from trusted signed server lists, then choose which nodes to contact. Free-capacity discovery, draining and cluster-wide rebalancing are not available.</div>
         <div class="text-links">
           <a href="#client">Choose a storage layout</a>
           <a href="https://github.com/forgesworn/wildbloom/blob/main/docs/POOL-STORAGE.md" rel="noreferrer">Pool recovery and limits</a>
           <a href="https://github.com/forgesworn/wildbloom-node/blob/main/docs/DESKTOP-POOLS.md" rel="noreferrer">Use desktop pool controls</a>
         </div>
         <p class="compare-note">Pool storage is a preview. Automated local-process checks do not establish independent physical custody or acceptance on every device. Wildbloom Node includes desktop health checks and owner repair controls. Repair authority expires and must be approved again after restarting the app.</p>
+      </section>
+
+      <section id="services" class="story-section" aria-labelledby="services-heading">
+        <p class="section-kicker">Choose with confidence</p>
+        <h2 id="services-heading">Find a node. Know the terms.<br />Check your file is there.</h2>
+        <p class="story-intro">Storage needs more than an upload button. Wildbloom gives you a way to choose a host, pay its operator when needed, and check the encrypted bytes afterwards.</p>
+        <div class="story-grid three-cards service-cards">
+          <article><span class="card-number">01 / DISCOVER</span><h3>Start with people you trust</h3><p>Find signed node recommendations from public keys you choose. Review a suggestion before using it; discovery does not silently join a pool or send your file anywhere.</p><a href="#client-services">Find recommended nodes <span aria-hidden="true">↗</span></a></article>
+          <article><span class="card-number">02 / PAY DIRECTLY</span><h3>A price before a payment</h3><p>Review an operator’s storage allowance, term and refund policy. Supported operators accept Lightning or LNURLcash directly. Save your private order reference; payment and upload are separate steps.</p><a href="#client-services">Explore storage offers <span aria-hidden="true">↗</span></a></article>
+          <article><span class="card-number">03 / VERIFY</span><h3>Check bytes, not promises</h3><p>A fresh storage challenge reads the entire encrypted file or shard, and your browser independently downloads and verifies it. It proves retrievability at that check, not continuous custody or future availability.</p><a href="#client-retrieve">Recover and verify <span aria-hidden="true">↗</span></a></article>
+        </div>
+        <p class="compare-note">Run your own node without selling storage. Paid checkout is optional and needs the operator’s receiving service. Wildbloom holds no customer balance and does not pay other operators on your behalf.</p>
       </section>
 
       <section id="uses" class="story-section" aria-labelledby="uses-heading">
@@ -412,14 +439,13 @@
         <p class="story-intro">
           Preview installers are available for Windows, Linux and both Mac
           architectures. The Mac preview is Developer ID signed and Apple
-          notarised. Windows packages remain unsigned. Physical reboot testing
-          and trusted automatic updates remain open.
+          notarised. Windows packages remain unsigned. Trusted automatic updates and broader physical-device acceptance remain open.
         </p>
         <div class="install-grid">
           <article>
             <p class="platform">Windows · Linux · macOS</p>
             <h3>Wildbloom Node</h3>
-            <p>Mac preview 0.3.5 adds optional operator-run paid storage and private full-read audits alongside pool health checks and owner-controlled repair. Checkout needs the operator’s own receiving service; live payment acceptance remains outstanding. Windows and Linux downloads are the earlier 0.3.3 preview.</p>
+            <p>Mac preview 0.3.5 adds optional operator-run paid storage and private full-read audits alongside pool health checks and owner-controlled repair. Checkout needs the operator’s own receiving service. A live LNURLcash purchase, file recovery and paired backup restore have passed on one Mac; hosted-operator and refund acceptance remain open. Windows and Linux downloads are the earlier 0.3.3 preview.</p>
             <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.5-preview.1" rel="noreferrer">Download signed Mac preview 0.3.5</a>
             <a href="https://github.com/forgesworn/wildbloom-node/releases/tag/v0.3.3-preview.1" rel="noreferrer">Download Windows and Linux previews 0.3.3</a>
             <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Build the desktop app from source</a>
@@ -430,12 +456,17 @@
             <p>The client runs in your browser and connects only to servers you name.  This site stores nothing.  For onion endpoints, use Tor Browser and read the privacy boundary before connecting.</p>
             <a href="#client">Open the client</a>
           </article>
+          <article class="archipelago-install">
+            <p class="platform">Archipelago</p><h3>Two apps. Your node identities.</h3>
+            <p>Run Wildbloom and Wildbloom Node together on Archipelago. The browser uses Archipelago’s signer; storage writes stay limited to your node identities. Keep your existing data volume when upgrading.</p>
+            <a href="https://github.com/forgesworn/archipelago-apps" rel="noreferrer">Get the Archipelago packages</a>
+          </article>
         </div>
       </section>
 
       <section id="protocol" class="story-section" aria-labelledby="protocol-heading">
         <p class="section-kicker">Protocol</p>
-        <h2 id="protocol-heading">Boring standards at the joins.  Explicit limits at the edges.</h2>
+        <h2 id="protocol-heading">Open protocols. A clear route back.</h2>
         <ol class="protocol-flow">
           <li><span>1</span><div><strong>Prepare</strong><p>The browser encrypts content, filename and MIME type locally, then calculates the payload's SHA-256.</p></div></li>
           <li><span>2</span><div><strong>Authorise</strong><p>Your signer approves a short-lived BUD-11 action for one hash and one Blossom host.  Wildbloom never asks for an nsec.</p></div></li>
@@ -444,7 +475,7 @@
           <li><span>5</span><div><strong>Verify</strong><p>Retrieval is not complete until the byte count and SHA-256 match the signed event.  Decryption happens locally.</p></div></li>
         </ol>
         <div class="boundary protocol-boundary">
-          <strong>The blunt bit.</strong>  Wildbloom is interoperable storage and
+          <strong>Storage you direct.</strong>  Wildbloom is interoperable storage and
           owner-directed replication and shard repair.
           Nodes do not discover strangers, promise permanent custody or create
           replicas without somebody explicitly asking them to. An explicitly configured owner service can keep repairing while your browser is closed. Two nodes mean
@@ -458,8 +489,8 @@
       </section>
 
       <section class="story-section small-print" aria-labelledby="reality-heading">
-        <p class="section-kicker">What it does not do</p>
-        <h2 id="reality-heading">No magic words.</h2>
+        <p class="section-kicker">Privacy, in practice</p>
+        <h2 id="reality-heading">Your content is private. Connections still leave clues.</h2>
         <p>
           Encryption protects file content, not timing, byte counts or a reused
           public identity.  Nostr relays provide discovery, not the file bytes.
@@ -476,26 +507,34 @@
         <p class="section-kicker">Browser client</p>
         <h2 id="client-heading" tabindex="-1">Publish or retrieve a file</h2>
         <p class="byo-notice">
-          <strong>This site stores nothing.</strong>  The client runs entirely
-          in your browser and talks only to the servers you enter below.  There
-          is no Wildbloom server, no default relay and no default storage.  To
-          publish, you need a Blossom server: run
-          <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">Wildbloom Node</a>
-          or use one you trust.
+          <strong>This site stores nothing.</strong> Files go from your browser
+          to storage you choose. Bring a trusted Blossom server or
+          <a href="https://github.com/forgesworn/wildbloom-node#install-and-run" rel="noreferrer">run Wildbloom Node</a>.
+          There are no default servers or relays.
         </p>
         <p class="boundary">
-          Wildbloom encrypts file content locally by default and keeps signing
-          keys in your chosen signer.  Use NIP-07 or hand exact event JSON to an
-          external signer; never give Wildbloom a private key.  Publishing metadata and joining a
-          torrent swarm still reveal information.  Nothing starts automatically.
+          Files are encrypted locally by default. Signing keys stay in your
+          browser signer or external signer; never paste a private key here.
+          Connections and public events still reveal metadata. Each network action needs your go-ahead.
         </p>
       </header>
 
-      <section class="panel" aria-labelledby="connection-heading">
+      <nav class="workspace-nav" aria-label="Client tasks">
+        <a href="#client-setup"><span>01</span> Set up</a>
+        <a href="#client-publish"><span>02</span> Publish</a>
+        <a href="#client-retrieve"><span>03</span> Recover</a>
+        <a href="#client-services"><span>+</span> Node services</a>
+      </nav>
+      <div class="workspace-guide">
+        <p><strong>Publishing?</strong> Choose your storage, connect a signer, then prepare your file.</p>
+        <p><strong>Recovering?</strong> <a href="#client-retrieve">Start with your saved event or receipt.</a> Ordinary file recovery needs no signer.</p>
+      </div>
+
+      <section id="client-setup" class="panel" aria-labelledby="connection-heading">
         <div class="panel-heading">
           <span>01</span>
           <div>
-            <h2 id="connection-heading">Choose your infrastructure</h2>
+            <h2 id="connection-heading" tabindex="-1">Choose your infrastructure</h2>
             <p>No endorsed defaults. You decide which services learn about the file.</p>
           </div>
         </div>
@@ -522,12 +561,13 @@
 
         <label>
           Storage layout
-          <select id="storage-mode">
+          <select id="storage-mode" aria-describedby="storage-layout-summary">
             <option value="single">One node — existing Blossom publishing</option>
             <option value="replicas">Replicated pool — complete encrypted copies</option>
             <option value="erasure">Split pool — recover from a threshold of parts</option>
           </select>
         </label>
+        <p id="storage-layout-summary" class="layout-summary" aria-live="polite">One node holds the encrypted file. Keep a separate backup: this layout has no redundancy.</p>
         <div id="pool-settings" hidden>
           <p class="privacy-boundary">Pool files are always encrypted. Split mode sends each node only one coded part; reconstruction and repair happen in your browser or an explicitly configured owner repair service. Operators may collude or fetch other parts if they learn their addresses. Encryption protects the contents. Keep the signed pool receipt privately alongside a separate recovery key; pool receipts are not published to relays or swarms.</p>
           <label>Pool nodes <small>One URL, failure group and optional capacity weight per line. Nodes at the same site should share a group. Weights are relative allocations, not measured free space.</small>
@@ -592,8 +632,8 @@
         </div>
       </section>
 
-      <section class="panel" aria-labelledby="node-services-heading">
-        <div class="panel-heading"><span>+</span><div><h2 id="node-services-heading">Find nodes, buy storage and verify storage</h2><p>Each action is separate. Discovery is a recommendation, payment buys an allowance, and a storage check verifies current retrievability.</p></div></div>
+      <section id="client-services" class="panel" aria-labelledby="node-services-heading">
+        <div class="panel-heading"><span>+</span><div><h2 id="node-services-heading" tabindex="-1">Find nodes, buy storage and verify storage</h2><p>Each action is separate. Discovery is a recommendation, payment buys an allowance, and a storage check verifies current retrievability.</p></div></div>
         <details><summary>Discover recommended nodes</summary>
           <label>Trusted public keys <small>One 64-character public key per line. Your chosen relays learn which server lists you request.</small><textarea id="discovery-keys" rows="3" maxlength="1100" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea></label>
           <div class="actions"><button id="discover-nodes" type="button">Find nodes on my relays</button></div>
@@ -630,11 +670,11 @@
         <div class="actions"><button id="cancel-node-service" type="button">Cancel current service action</button><output id="node-service-status" class="quiet" aria-live="polite">No service contacted</output></div>
       </section>
 
-      <section class="panel" aria-labelledby="publish-heading">
+      <section id="client-publish" class="panel" aria-labelledby="publish-heading">
         <div class="panel-heading">
           <span>02</span>
           <div>
-            <h2 id="publish-heading">Publish a file</h2>
+            <h2 id="publish-heading" tabindex="-1">Publish a file</h2>
             <p>Inspect locally first. Every network step remains separate.</p>
           </div>
         </div>
@@ -728,11 +768,11 @@
         <div id="publish-links" class="downloads"></div>
       </section>
 
-      <section class="panel" aria-labelledby="retrieve-heading">
+      <section id="client-retrieve" class="panel" aria-labelledby="retrieve-heading">
         <div class="panel-heading">
           <span>03</span>
           <div>
-            <h2 id="retrieve-heading">Retrieve and verify</h2>
+            <h2 id="retrieve-heading" tabindex="-1">Retrieve and verify</h2>
             <p>Look up a signed event on your relays or verify a saved event locally, then choose how to fetch the file.</p>
           </div>
         </div>
@@ -753,7 +793,7 @@
         <div class="actions">
           <button id="resolve-event" type="button">Resolve signed event</button>
         </div>
-        <details>
+        <details id="saved-recovery">
           <summary>Use a saved signed event without a relay</summary>
           <p>Load the signed file event you saved or received, or paste its JSON below. Verification checks its signature and file information locally. Check the author or retained event ID before fetching; a valid signature alone does not identify someone you trust.</p>
           <label>
