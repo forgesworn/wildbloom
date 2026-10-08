@@ -370,10 +370,21 @@ async function assertMarketingJourney(page, browserName) {
   // Use actual user activation under the production autoplay policy.
   await page.locator("#play-recovery-film").focus();
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => {
-    const film = document.getElementById("recovery-film");
-    return film instanceof HTMLVideoElement && !film.paused && film.currentTime > 0;
-  }, undefined, { timeout: 15_000 });
+  try {
+    await page.waitForFunction(() => {
+      const film = document.getElementById("recovery-film");
+      return film instanceof HTMLVideoElement && !film.paused && film.currentTime > 0;
+    }, undefined, { timeout: 15_000 });
+  } catch (error) {
+    const state = await film.evaluate((video) => ({
+      paused: video.paused, currentTime: video.currentTime, readyState: video.readyState,
+      networkState: video.networkState, error: video.error?.message, errorCode: video.error?.code,
+      sourceAttached: Boolean(video.getAttribute("src")), hidden: document.hidden,
+      canPlay: video.canPlayType('video/mp4; codecs="avc1.64001f"'),
+      status: document.getElementById("film-status")?.textContent,
+    }));
+    throw new Error(`Film playback failed: ${JSON.stringify(state)}`, { cause: error });
+  }
   if (!(await film.evaluate((video) => video.videoWidth === 1280 && video.videoHeight === 720 && Math.abs(video.duration - 32) < 0.1))) throw new Error("The explainer did not decode at its expected dimensions and duration.");
   await film.evaluate((video) => { video.currentTime = 20; });
   await page.waitForFunction(() => {
