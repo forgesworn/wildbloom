@@ -52,6 +52,7 @@ const offers: Offers = {
       mint_pubkey: "02" + "ab".repeat(32),
     },
   ],
+  features: ["lnurlcash_refunds_v1"],
 };
 function order(lnurl = false): Order {
   const now = Math.floor(Date.now() / 1000);
@@ -86,6 +87,9 @@ const options = (value: unknown) => ({
 describe("paid storage contracts", () => {
   it("reads offers and binds a quote to the reviewed offer and issuer", async () => {
     expect(await fetchOffers(origin, options(offers))).toEqual(offers);
+    expect(validateOffers({ ...offers, features: undefined }, origin).features).toEqual(
+      [],
+    );
     for (const note of [false, true]) {
       const q = order(note);
       expect(

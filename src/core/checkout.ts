@@ -36,6 +36,7 @@ export interface Offers {
   offers: Offer[];
   rails: ("lightning" | "lnurlcash")[];
   issuers: Issuer[];
+  features: "lnurlcash_refunds_v1"[];
 }
 export interface Quote {
   version: 1;
@@ -169,7 +170,8 @@ export function validateOffers(
     !v.rails.length ||
     v.rails.length > 2 ||
     !Array.isArray(v.issuers) ||
-    v.issuers.length > 32
+    v.issuers.length > 32 ||
+    (v.features !== undefined && (!Array.isArray(v.features) || v.features.length > 16))
   )
     throw new Error("Invalid service offers.");
   const result: Offers = {
@@ -181,10 +183,19 @@ export function validateOffers(
     offers: v.offers.map(offer),
     rails: v.rails.map(rail),
     issuers: v.issuers.map(issuer),
+    features:
+      v.features === undefined
+        ? []
+        : v.features.map((feature) => {
+            if (feature !== "lnurlcash_refunds_v1")
+              throw new Error("Invalid service feature.");
+            return feature;
+          }),
   };
   if (
     new Set(result.offers.map((o) => o.id)).size !== result.offers.length ||
-    new Set(result.issuers.map((i) => i.id)).size !== result.issuers.length
+    new Set(result.issuers.map((i) => i.id)).size !== result.issuers.length ||
+    new Set(result.features).size !== result.features.length
   )
     throw new Error("Invalid service duplicate identifiers.");
   return result;
@@ -360,7 +371,11 @@ export async function createOrder(
     (method === "lightning" && issuerId !== null)
   )
     throw new Error("Choose an offered payment method and storage plan.");
-  if (refundTo !== null && !LIGHTNING_ADDRESS.test(refundTo))
+  if (
+    refundTo !== null &&
+    (!offers.features.includes("lnurlcash_refunds_v1") ||
+      !LIGHTNING_ADDRESS.test(refundTo))
+  )
     throw new Error("Enter a valid Lightning refund address.");
   const order = validateOrder(
     await requestJson(
@@ -372,7 +387,7 @@ export async function createOrder(
         rail: method,
         issuer_id: issuerId,
         renews: renews === null ? null : id(renews),
-        refund_to: refundTo,
+        ...(refundTo === null ? {} : { refund_to: refundTo }),
       },
       buyer,
       options,

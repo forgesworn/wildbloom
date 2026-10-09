@@ -145,7 +145,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     output(
       "checkout-offer-details",
       selected
-        ? `${offers!.seller_name} (${offers!.seller_id})\n${offers!.node_origin}\n${terms(selected)}`
+        ? `${offers!.seller_name} (${offers!.seller_id})\n${offers!.node_origin}\n${terms(selected)}\nLNURLcash failed-fulfilment refund: ${offers!.features.includes("lnurlcash_refunds_v1") ? "private bound Lightning Address supported" : "manual operator process"}`
         : "",
     );
   };
@@ -329,8 +329,9 @@ export function mountNodeServices(context: Context): { reset(): void } {
   action("checkout-quote", async (options, current) => {
     if (!offers) throw new Error("Load offers first.");
     const rail = method.value as "lightning" | "lnurlcash";
-    const refundAddress = refundTo.value.trim() || null;
-    if (rail === "lnurlcash" && refundAddress === null)
+    const supportsRefunds = offers.features.includes("lnurlcash_refunds_v1");
+    const refundAddress = supportsRefunds ? refundTo.value.trim() || null : null;
+    if (rail === "lnurlcash" && supportsRefunds && refundAddress === null)
       throw new Error(
         "Enter a Lightning refund address so the operator can return a failed LNURLcash purchase.",
       );
