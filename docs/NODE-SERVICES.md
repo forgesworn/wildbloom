@@ -30,12 +30,17 @@ receipts or payment records are placed in this list.
 
 1. Select a node, connect NIP-07 or an external signer and load its offers.
 2. Review seller, capacity, term, price, recovery grace, delivery and refund terms.
-   Request a private quote; capacity is reserved before a payment is offered.
+   For LNURLcash, enter a Lightning refund address. It is bound privately into
+   the quote and sent only to this node. Request a private quote; capacity is
+   reserved before a payment is offered.
 3. Save the private order-reference JSON. Confirm the quote and create a
    Lightning invoice or submit one exact-value LNURLcash note.
 4. Pay in your wallet, then explicitly check the same payment. LNURLcash may
    activate immediately after certificate-verified rotation. There is no polling.
-5. After activation, select and upload the file in the normal publishing flow.
+5. Save the customer storage receipt after activation or refund. It contains the
+   seller, purchase, allowance deadlines, renewal target and refund status, but
+   no note, invoice, preimage or recovery key. Then select and upload the file
+   in the normal publishing flow.
    Paid nodes may return opaque MIME descriptors; signed MIME, exact byte hash
    and size remain bound to the locally inspected payload.
 
@@ -61,8 +66,12 @@ After a timeout, reload or cancellation, use **Recover order with its original
 signer**, review the original terms, then check that same order. Do not create a
 second payment to resolve uncertainty. A pending invoice creation may require
 the operator's original-invoice recovery tool. `refund_required` means the
-operator received payment but must resolve fulfilment or refund directly; it is
-not an automatic refund. Save the reference before changing file/profile.
+operator received payment but storage could not activate. For an LNURLcash order
+with a bound refund address, the operator can run the local idempotent refund
+command. The customer then recovers the same order to see pending or completed
+status and save the receipt. It is an explicit seller action rather than a
+background payout; Lightning-rail and address-free orders remain manual. Save
+the reference before changing file/profile.
 
 Use the [live acceptance runbook](LIVE-CHECKOUT-ACCEPTANCE.md) and read-only
 `npm run preflight:checkout` before an agreed real-money test. A passing preflight

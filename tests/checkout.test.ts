@@ -2,6 +2,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { describe, expect, it, vi } from "vitest";
 import {
   createOrder,
+  customerReceipt,
   fetchOffers,
   orderAction,
   orderReference,
@@ -51,6 +52,7 @@ const offers: Offers = {
       mint_pubkey: "02" + "ab".repeat(32),
     },
   ],
+  features: ["lnurlcash_refunds_v1"],
 };
 function order(lnurl = false): Order {
   const now = Math.floor(Date.now() / 1000);
@@ -70,11 +72,13 @@ function order(lnurl = false): Order {
       created_at: now,
       expires_at: now + 600,
       renews: null,
+      refund_to: null,
     },
     quote_digest: "ab".repeat(32),
     state: "quoted",
     invoice: null,
     receipt: null,
+    refund: null,
   };
 }
 const options = (value: unknown) => ({
@@ -83,6 +87,9 @@ const options = (value: unknown) => ({
 describe("paid storage contracts", () => {
   it("reads offers and binds a quote to the reviewed offer and issuer", async () => {
     expect(await fetchOffers(origin, options(offers))).toEqual(offers);
+    expect(validateOffers({ ...offers, features: undefined }, origin).features).toEqual(
+      [],
+    );
     for (const note of [false, true]) {
       const q = order(note);
       expect(
@@ -170,6 +177,64 @@ describe("paid storage contracts", () => {
         "old",
       ),
     ).toEqual(renewed);
+  });
+  it("binds a private refund address and exports customer allowance and refund receipts", async () => {
+    const q = order(true);
+    q.quote.refund_to = "buyer@example.com";
+    expect(
+      await createOrder(
+        offers,
+        "small",
+        "lnurlcash",
+        "mint",
+        buyer,
+        "refund-request",
+        options(q),
+        null,
+        "buyer@example.com",
+      ),
+    ).toEqual(q);
+    const pending = {
+      ...q,
+      state: "refund_required",
+      refund: {
+        status: "pending" as const,
+        amount_msat: 10000,
+        payment_hash: "cd".repeat(32),
+        refunded_at: null,
+      },
+    };
+    expect(validateOrder(pending, origin, buyer.pubkey)).toEqual(pending);
+    const completed = {
+      ...pending,
+      state: "refunded",
+      refund: {
+        ...pending.refund,
+        status: "completed" as const,
+        refunded_at: q.quote.created_at + 30,
+      },
+    };
+    expect(validateOrder(completed, origin, buyer.pubkey)).toEqual(completed);
+    expect(customerReceipt(completed)).toMatchObject({
+      type: "wildbloom.storage-receipt",
+      version: 1,
+      state: "refunded",
+      refund: { status: "completed", amount_msat: 10000 },
+      purchase: { offer_id: "small", renews: null },
+    });
+    await expect(
+      createOrder(
+        offers,
+        "small",
+        "lnurlcash",
+        "mint",
+        buyer,
+        "bad-refund",
+        options(q),
+        null,
+        "not an address",
+      ),
+    ).rejects.toThrow(/valid Lightning/u);
   });
   it("fails closed for Tor, changed orders, wrong buyers, expired quotes and missing notes", async () => {
     await expect(fetchOffers(origin, { profile: "tor" })).rejects.toThrow(

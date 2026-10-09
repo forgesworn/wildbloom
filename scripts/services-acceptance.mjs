@@ -339,6 +339,13 @@ try {
   await fetch(mintOrigin + "/fixture/pay", { method: "POST" });
   await action(page, "#checkout-check");
   await wait(page, "active");
+  const activeReceipt = JSON.parse(
+    (await download(page, "#checkout-receipt-links a:nth-of-type(2)")).toString(),
+  );
+  assert.equal(activeReceipt.type, "wildbloom.storage-receipt");
+  assert.equal(activeReceipt.state, "active");
+  assert.equal(activeReceipt.allowance.capacity_bytes, 1_048_576);
+  assert.equal(activeReceipt.purchase.renews, null);
   assert.equal(
     (await (await fetch(mintOrigin)).json()).invoice_creations,
     1,
@@ -414,6 +421,7 @@ try {
   await page.click("#checkout-offers");
   await wait(page, "Offers loaded");
   await page.selectOption("#checkout-rail", "lnurlcash");
+  await page.fill("#checkout-refund-to", "buyer@example.com");
   await page.fill("#checkout-renews", reference.order_id);
   await page.locator("#checkout-renews").dispatchEvent("change");
   await action(page, "#checkout-quote");
@@ -423,6 +431,15 @@ try {
   await page.fill("#checkout-note", mintOrigin + "/w?k1=" + "06".repeat(32));
   await action(page, "#checkout-pay");
   await wait(page, "active");
+  const renewalReceipt = JSON.parse(
+    (await download(page, "#checkout-receipt-links a:nth-of-type(2)")).toString(),
+  );
+  assert.equal(renewalReceipt.state, "active");
+  assert.equal(renewalReceipt.purchase.renews, reference.order_id);
+  assert.equal(
+    renewalReceipt.allowance.allowance_id,
+    activeReceipt.allowance.allowance_id,
+  );
   assert.equal(await page.inputValue("#checkout-note"), "");
   assert.equal((await (await fetch(mintOrigin)).json()).note_rotations, 1);
   assert.equal(publications.length, 1, "No payment or proof events published");
@@ -450,6 +467,7 @@ try {
           "fresh full-read proof",
           "corruption refusal",
           "LNURLcash exact-value rotation and activation",
+          "private customer allowance and renewal receipts",
           "no payment/proof relay publication",
           "no browser persistence",
           "service controls accessibility",

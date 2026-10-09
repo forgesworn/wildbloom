@@ -316,6 +316,8 @@
           <label>Payment method<select id="checkout-rail"><option value="lightning">Lightning</option><option value="lnurlcash">LNURLcash</option></select></label>
           <label>LNURLcash issuer<select id="checkout-issuer" aria-label="LNURLcash issuer"></select></label>
           <label>Renew allowance (optional)<input id="checkout-renews" maxlength="128" autocomplete="off" spellcheck="false" /></label>
+          <label>Lightning refund address<input id="checkout-refund-to" maxlength="320" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="you@example.com" /></label>
+          <p>When the selected node advertises refund support, this address is bound privately into the quote and lets the operator return the exact LNURLcash price if paid storage cannot be activated. It is sent only to that node, never to discovery relays. Older nodes keep their manual refund process.</p>
           <div id="checkout-offer-details"></div>
           <button id="checkout-quote" type="button">Request a private quote</button>
           <div id="checkout-quote-details"></div>
