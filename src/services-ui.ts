@@ -1,5 +1,6 @@
 import {
   createOrder,
+  customerReceipt,
   fetchOffers,
   orderAction,
   orderReference,
@@ -37,6 +38,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
   const note = el<HTMLInputElement>("checkout-note");
   const consent = el<HTMLInputElement>("checkout-consent");
   const reference = el<HTMLTextAreaElement>("checkout-reference");
+  const refundTo = el<HTMLInputElement>("checkout-refund-to");
   let offers: Offers | null = null;
   let order: Order | null = null;
   let requestId = crypto.randomUUID();
@@ -79,7 +81,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     if (!order) return;
     output(
       "checkout-quote-details",
-      `${order.quote.seller_name}\n${order.quote.node_origin}\n${terms(order.quote.offer)}\nQuote expires: ${new Date(order.quote.expires_at * 1000).toISOString()}\nState: ${order.state}` +
+      `${order.quote.seller_name}\n${order.quote.node_origin}\n${terms(order.quote.offer)}\nQuote expires: ${new Date(order.quote.expires_at * 1000).toISOString()}\nRefund destination: ${order.quote.refund_to ?? "manual contact with operator"}\nState: ${order.state}` +
         (order.receipt
           ? `\nAllowance: ${order.receipt.allowance_id}; writes until ${new Date(order.receipt.writes_until * 1000).toISOString()}`
           : ""),
@@ -90,6 +92,12 @@ export function mountNodeServices(context: Context): { reset(): void } {
       "wildbloom-order.json",
       orderReference(order),
     );
+    if (order.receipt || order.refund)
+      download(
+        "checkout-receipt-links",
+        "wildbloom-storage-receipt.json",
+        customerReceipt(order),
+      );
     output("checkout-payment", "");
     if (
       order.invoice &&
@@ -104,10 +112,22 @@ export function mountNodeServices(context: Context): { reset(): void } {
       a.textContent = "Open invoice in my wallet";
       el("checkout-payment").append(a);
     }
-    if (order.state === "refund_required")
+    if (order.state === "refund_required" && order.refund?.status === "pending")
       output(
         "checkout-payment",
-        "Payment received but storage could not be activated. Contact this operator for fulfilment or refund; do not pay again.",
+        "Your full refund is pending. Keep this order reference and check the same order; do not submit another payment.",
+      );
+    else if (order.state === "refund_required")
+      output(
+        "checkout-payment",
+        order.quote.refund_to
+          ? `Payment received but storage could not be activated. The operator can send the full refund to ${order.quote.refund_to}; check this order again and do not pay again.`
+          : "Payment received but storage could not be activated. Contact this operator for fulfilment or refund; do not pay again.",
+      );
+    if (order.state === "refunded")
+      output(
+        "checkout-payment",
+        `Full refund completed${order.refund ? ` at ${new Date(order.refund.refunded_at! * 1000).toISOString()}` : ""}. Save the customer receipt with this order reference.`,
       );
     if (["invoice_pending", "lnurl_pending", "settled"].includes(order.state))
       output(
@@ -139,6 +159,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
     note.value = "";
     consent.checked = false;
     reference.value = "";
+    refundTo.value = "";
     el<HTMLTextAreaElement>("discovery-keys").value = "";
     el<HTMLInputElement>("checkout-renews").value = "";
     el<HTMLInputElement>("proof-consent").checked = false;
@@ -200,7 +221,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
         });
     });
   };
-  for (const input of [plan, method, issuer, el("checkout-renews")])
+  for (const input of [plan, method, issuer, el("checkout-renews"), refundTo])
     input.addEventListener("change", () => {
       revision++;
       controller?.abort();
@@ -308,6 +329,11 @@ export function mountNodeServices(context: Context): { reset(): void } {
   action("checkout-quote", async (options, current) => {
     if (!offers) throw new Error("Load offers first.");
     const rail = method.value as "lightning" | "lnurlcash";
+    const refundAddress = refundTo.value.trim() || null;
+    if (rail === "lnurlcash" && refundAddress === null)
+      throw new Error(
+        "Enter a Lightning refund address so the operator can return a failed LNURLcash purchase.",
+      );
     const result = await createOrder(
       offers,
       plan.value,
@@ -317,6 +343,7 @@ export function mountNodeServices(context: Context): { reset(): void } {
       requestId,
       options,
       el<HTMLInputElement>("checkout-renews").value.trim() || null,
+      refundAddress,
     );
     current();
     // Keep the identifier stable while the outcome is unknown so a timeout can

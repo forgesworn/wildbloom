@@ -52,6 +52,7 @@ export interface Quote {
   created_at: number;
   expires_at: number;
   renews: string | null;
+  refund_to: string | null;
 }
 export interface Order {
   quote: Quote;
@@ -65,6 +66,12 @@ export interface Order {
     writes_until: number;
     retains_until: number;
   } | null;
+  refund: {
+    status: "pending" | "completed";
+    amount_msat: number;
+    payment_hash: string;
+    refunded_at: number | null;
+  } | null;
 }
 export interface OrderReference {
   type: "wildbloom.order";
@@ -75,6 +82,7 @@ export interface OrderReference {
   quote_digest: string;
 }
 const ID = /^[a-zA-Z0-9_-]{1,128}$/u;
+const LIGHTNING_ADDRESS = /^[^\s@]{1,64}@[a-zA-Z0-9](?:[a-zA-Z0-9.-]{0,251}[a-zA-Z0-9])?$/u;
 function id(value: unknown): string {
   const result = text(value, 128);
   if (!ID.test(result)) throw new Error("Invalid service identifier.");
@@ -84,6 +92,10 @@ function timestamp(value: unknown): number {
   const result = integer(value);
   if (result > 253402300799) throw new Error("Invalid service timestamp.");
   return result;
+}
+function refundStatus(value: unknown): "pending" | "completed" {
+  if (value === "pending" || value === "completed") return value;
+  throw new Error("Invalid refund status.");
 }
 function endpoint(origin: string, options: ServiceOptions): string {
   if (options.profile === "tor")
@@ -223,6 +235,15 @@ export function validateOrder(
     created_at: timestamp(q.created_at),
     expires_at: timestamp(q.expires_at),
     renews: q.renews === null ? null : id(q.renews),
+    refund_to:
+      q.refund_to === null || q.refund_to === undefined
+        ? null
+        : (() => {
+            const value = text(q.refund_to, 320);
+            if (!LIGHTNING_ADDRESS.test(value))
+              throw new Error("Invalid refund address.");
+            return value;
+          })(),
   };
   if (
     quote.expires_at <= quote.created_at ||
@@ -246,6 +267,7 @@ export function validateOrder(
       "settled",
       "active",
       "refund_required",
+      "refunded",
     ].includes(state)
   )
     throw new Error("Invalid service order state.");
@@ -283,12 +305,38 @@ export function validateOrder(
         parsed.retains_until < parsed.writes_until))
   )
     throw new Error("Invalid service allowance receipt.");
+  const refundValue = v.refund === null || v.refund === undefined ? null : record(v.refund);
+  const refund =
+    refundValue === null
+      ? null
+      : {
+          status: refundStatus(refundValue.status),
+          amount_msat: integer(refundValue.amount_msat, 1),
+          payment_hash: assertHex64(
+            text(refundValue.payment_hash, 64),
+            "Refund payment hash",
+          ),
+          refunded_at:
+            refundValue.refunded_at === null
+              ? null
+              : timestamp(refundValue.refunded_at),
+        };
+  if (
+    (refund &&
+      (quote.refund_to === null ||
+        refund.amount_msat !== quote.offer.price_msat ||
+        (refund.status === "pending" && refund.refunded_at !== null) ||
+        (refund.status === "completed" && refund.refunded_at === null))) ||
+    (state === "refunded" && refund?.status !== "completed")
+  )
+    throw new Error("Invalid refund receipt.");
   return {
     quote,
     quote_digest: assertHex64(text(v.quote_digest, 64), "Quote commitment"),
     state,
     invoice,
     receipt: parsed,
+    refund,
   };
 }
 export async function createOrder(
@@ -300,6 +348,7 @@ export async function createOrder(
   requestId: string,
   options: ServiceOptions = {},
   renews: string | null = null,
+  refundTo: string | null = null,
 ): Promise<Order> {
   endpoint(offers.node_origin, options);
   const selected = offers.offers.find((o) => o.id === offerId);
@@ -311,6 +360,8 @@ export async function createOrder(
     (method === "lightning" && issuerId !== null)
   )
     throw new Error("Choose an offered payment method and storage plan.");
+  if (refundTo !== null && !LIGHTNING_ADDRESS.test(refundTo))
+    throw new Error("Enter a valid Lightning refund address.");
   const order = validateOrder(
     await requestJson(
       offers.node_origin,
@@ -321,6 +372,7 @@ export async function createOrder(
         rail: method,
         issuer_id: issuerId,
         renews: renews === null ? null : id(renews),
+        refund_to: refundTo,
       },
       buyer,
       options,
@@ -341,12 +393,37 @@ export async function createOrder(
     order.quote.rail !== method ||
     order.quote.issuer_id !== issuerId ||
     order.quote.renews !== renews ||
+    order.quote.refund_to !== refundTo ||
     JSON.stringify(order.quote.offer) !== JSON.stringify(selected)
   )
     throw new Error(
       "Service quote changed; reload offers and review the new terms.",
     );
   return order;
+}
+export function customerReceipt(order: Order): object {
+  if (!order.receipt && !order.refund)
+    throw new Error("This order has no allowance or refund receipt yet.");
+  return {
+    type: "wildbloom.storage-receipt",
+    version: 1,
+    order: orderReference(order),
+    seller: {
+      id: order.quote.seller_id,
+      name: order.quote.seller_name,
+      origin: order.quote.node_origin,
+    },
+    purchase: {
+      offer_id: order.quote.offer.id,
+      offer_revision: order.quote.offer.revision,
+      price_msat: order.quote.offer.price_msat,
+      ordered_capacity_bytes: order.quote.offer.capacity_bytes,
+      renews: order.quote.renews,
+    },
+    state: order.state,
+    allowance: order.receipt,
+    refund: order.refund,
+  };
 }
 export async function orderAction(
   order: Order,

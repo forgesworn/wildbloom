@@ -221,9 +221,10 @@ torrent web seeds otherwise make costs and recovery difficult to predict.
   no clearnet redirects, discovery or fallback. Disable a payment method if
   its required application endpoints cannot meet this policy. External wallet
   transport is separate and must not be advertised as verified Tor-only.
-- Allow a private receipt export and a separately authorised order-status
-  recovery journey without persistent browser state. Do not export bearer
-  payment secrets as receipts. Design receipt authentication before shipping.
+- Export the private customer receipt only after the buyer re-authorises the
+  order or completes the live checkout. It includes the immutable order
+  reference, reviewed purchase, allowance deadlines, renewal link and bounded
+  refund status. It contains no bearer payment secret and is never published.
 - Payment proves neither storage nor replication. Verify uploaded bytes and
   each purchased replica independently; retain timestamps and scope in evidence.
 
