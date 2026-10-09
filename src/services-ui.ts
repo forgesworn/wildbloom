@@ -319,6 +319,11 @@ export function mountNodeServices(context: Context): { reset(): void } {
       el<HTMLInputElement>("checkout-renews").value.trim() || null,
     );
     current();
+    // Keep the identifier stable while the outcome is unknown so a timeout can
+    // safely recover the same order. Once the node has returned a quote, the
+    // next explicit quote request must create a new order instead of reviving
+    // this one after it expires.
+    requestId = crypto.randomUUID();
     order = result;
     consent.checked = false;
     renderOrder();

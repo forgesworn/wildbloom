@@ -263,10 +263,23 @@ try {
   activePage = page;
   page.setDefaultTimeout(20000);
   const requests = [];
+  const orderRequestIds = [];
+  let abortSecondQuote = false;
   page.on("pageerror", (e) => faults.push(e.message));
   await page.route("**/*", async (route) => {
     const u = new URL(route.request().url());
     requests.push(u.href);
+    if (
+      u.origin === nodeOrigin &&
+      u.pathname === "/checkout/v1/orders" &&
+      route.request().method() === "POST"
+    ) {
+      orderRequestIds.push(JSON.parse(route.request().postData()).request_id);
+      if (abortSecondQuote && orderRequestIds.length === 2) {
+        await route.abort();
+        return;
+      }
+    }
     if (![appOrigin, nodeOrigin].includes(u.origin)) {
       faults.push("Unexpected browser origin");
       await route.abort();
@@ -305,6 +318,15 @@ try {
   const reference = JSON.parse(
     (await download(page, "#checkout-receipt-links a")).toString(),
   );
+  abortSecondQuote = true;
+  await action(page, "#checkout-quote");
+  await wait(page, "Service action failed");
+  assert.notEqual(
+    orderRequestIds[1],
+    orderRequestIds[0],
+    "A new explicit quote request must not reuse the previous request ID",
+  );
+  abortSecondQuote = false;
   await page.check("#checkout-consent");
   await action(page, "#checkout-pay");
   await wait(page, "awaiting_payment");
@@ -421,6 +443,7 @@ try {
           "public list exact signing",
           "unpaid upload refused",
           "Lightning quote-invoice-check-activation",
+          "new explicit quote uses a fresh order",
           "one invoice across checks",
           "daemon restart and private order recovery",
           "paid encrypted upload",
