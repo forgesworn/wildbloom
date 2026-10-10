@@ -33,8 +33,8 @@ recovery keys or private keys. -->
 
 ## 3. What we do not collect
 
-- **Your files.** Encryption and upload happen in your browser, direct to the
-  Blossom server you choose. We never receive the file, the encrypted
+- **Your files.** Encryption (on by default) and upload happen in your
+  browser, direct to the Blossom server you choose. We never receive the file, the encrypted
   envelope, or the recovery key.
 - **Your Nostr private key.** No private key enters Wildbloom. Signing
   happens through an injected NIP-07 extension, or by an external
@@ -69,19 +69,51 @@ We do not add our own analytics, cookies, or tracking scripts on top of this.
 When you publish or retrieve a file with Wildbloom, your browser talks
 directly to:
 
-- **A Blossom server** you name, to upload or fetch the encrypted envelope.
-  That server sees your connection (including your IP address) and the file's
-  hash, but not the plaintext or the recovery key, because encryption is
-  client-side.
+- **A Blossom server** you name, to upload or fetch the file. That server
+  sees your connection (including your IP address) and the file's hash. With
+  encryption on, which is the default, it receives the encrypted envelope and
+  never the recovery key. If you turn encryption off, it receives the
+  plaintext file, its filename and its type, and so does anyone it serves
+  them to.
+  <!-- index.html:352 (protect-file checked by default); src/main.ts:531-533
+  (consent text for each case); index.html:163. -->
 - **Nostr relays** you name, if you publish or look up a signed event. Those
   relays see your connection and the signed event you send them.
 - **BitTorrent trackers and peers**, only if you choose optional WebTorrent
   seeding. Peers and trackers can see your IP address, as is normal for
   BitTorrent.
+- **Your relays, if you look for recommended nodes.** "Find nodes on my
+  relays" opens a connection to each relay you named and asks for the
+  Blossom server lists (Nostr kind 10063) published by the public keys you
+  typed in. Each relay learns your connection (your IP address in direct
+  mode) and which keys' server lists you asked for. No signed event and no
+  key of yours is sent for this lookup, and no discovered node is contacted
+  until you choose an action.
+  <!-- index.html:303-308; src/core/discovery.ts:78-127, 165-186;
+  src/services-ui.ts:268-286. -->
+- **Your relays, if you publish your server list.** Only after you tick the
+  consent box, Wildbloom asks your signer to sign a kind 10063 server list
+  naming the selected node, and sends it to your relays. That publicly and
+  lastingly links the node's address to your public key.
+  <!-- index.html:309-310; src/core/discovery.ts:62-76;
+  src/services-ui.ts:287-305. -->
+- **The node you select, if you buy storage.** The checkout panel talks
+  only to the node you selected, and you pay its operator directly, not us.
+  Each order request is signed with your Nostr key, so the node learns your
+  public key, your connection, the plan, payment method and any renewal
+  reference you choose, and for LNURLcash the note you submit. If the node
+  advertises refund support and you enter a Lightning refund address, that
+  address is sent to that node only, bound into your quote; it is never
+  sent to your relays.
+  <!-- index.html:312-332; src/services-ui.ts:333; src/core/checkout.ts:356-396,
+  443-465; src/core/services-http.ts:69-113 (signed Authorization header,
+  fixed checkout paths on the selected origin only). -->
 
 None of these are servers this project operates or names by default. You
-choose every one of them. See `docs/PRIVACY.md` in this repository for the
-full technical privacy and threat-model discussion, including Tor-only mode.
+choose every one of them. Each is run by its own operator under its own
+terms, and what it receives is not covered by this notice. See
+`docs/PRIVACY.md` in this repository for the full technical privacy and
+threat-model discussion, including Tor-only mode.
 
 ## 6. Cookies and local storage
 
@@ -105,8 +137,16 @@ Cloudflare-level logs identify you and you want to ask about them, write to
 `[contact address]` and we will help you raise it with Cloudflare or point you
 to their own privacy notice.
 
-You can complain to the Information Commissioner's Office (ico.org.uk) at any
-time.
+You have the right to complain to us about how we handle personal data.
+Write to `[contact address]`. We will acknowledge your complaint within 30
+days and respond without undue delay.
+`[DECISION: confirm the contact address accepts complaints electronically
+and is easy to use.]`
+
+You can also complain to the Information Commissioner's Office
+(ico.org.uk). We would like the chance to put things right first, but you
+do not have to come to us before going to the ICO.
+`[LEGAL REVIEW: confirm this complaints wording.]`
 
 ## 9. Changes
 
@@ -122,3 +162,5 @@ history.
 2. Confirm the exact Cloudflare Pages configuration in use (section 4) and
    whether a data processing agreement or further disclosure is needed.
 3. Confirm the exact browser storage keys in use (section 6).
+4. The complaint route under section 8, and the wording of its order
+   relative to the ICO.
