@@ -42,6 +42,43 @@ the site from looking like a hosted upload service matters because how a
 service presents itself can shape how users, abuse reporters and a regulator
 characterise it.
 
+**Node discovery and checkout (10 October 2026, from `main` d7dfadb).** The
+client can look up recommended storage nodes and buy storage from one. Both
+run in the visitor's browser. Discovery asks only the relays the visitor
+named, for server lists signed by public keys the visitor typed in; the app
+ships no relay and no trusted key for it. Checkout talks only to the node
+the visitor selected, and payment goes to that node's operator. ForgeSworn
+runs no part of either. `[LEGAL REVIEW: the note lists adding discovery as
+a reason to revisit the software-or-service reading (section 2.2, marked
+unchecked); confirm that client-side discovery against user-chosen relays
+and keys leaves it unchanged.]`
+<!-- index.html:303-332; src/core/discovery.ts:165-186;
+src/services-ui.ts:268-286, 333; src/core/services-http.ts:76-83. -->
+
+## What ForgeSworn runs
+
+<!-- Law: jurisdiction-kit law/gb/online-services.md, verified 2026-09-28,
+sections 1 and 2.2. -->
+
+ForgeSworn publishes software: this static client, and the Wildbloom Node
+binaries and source. It does not host user content. It runs no relay, no
+Blossom server, no public node and no managed storage tier. Its intended
+income is support, sponsorship, a paid app, or a deploy kit that customers
+run in their own cloud account; none of these has ForgeSworn running a node.
+
+ForgeSworn does not control who can use any node, relay or server a visitor
+points this client at, including a node someone runs from a ForgeSworn
+deploy kit in their own cloud account. That is the basis on which ForgeSworn
+treats itself as not the provider of those services (the Act's test of who
+the provider is turns on control over who can use the service, section
+226). Whoever runs such a node, and anyone with root on its host, can read
+what it stores: an upload sent with encryption turned off arrives as
+plaintext, with its filename and type.
+<!-- index.html:352; src/main.ts:531-533. -->
+
+This document records ForgeSworn's own position. It is not advice to anyone
+who runs a node or uses the software.
+
 ## The Online Safety Act 2023 question
 
 The Online Safety Act 2023 regulates, among other things, "user-to-user
@@ -118,6 +155,8 @@ if any of the following happen:
   nothing" notice is removed or moved below the upload controls;
 - ForgeSworn runs a public relay, Blossom server, index, search feature or
   crawler that this app points at or that surfaces files published with it;
+- a paid app or deploy kit ships a default that points at a server
+  ForgeSworn runs, or ForgeSworn runs or manages a node for a customer;
 - any feature is added that lets one visitor encounter another visitor's
   content, activity or metadata through the site itself (comments, a
   directory, a feed, presence, chat);
