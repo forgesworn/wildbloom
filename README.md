@@ -31,9 +31,11 @@ The [signed Mac 0.3.5 preview](https://github.com/forgesworn/wildbloom-node/rele
 includes the opt-in daemon services; Windows and Linux downloads remain at 0.3.3.
 Live wallet/issuer acceptance and physical multi-device custody remain separate.
 
-The hardened production-candidate build is deployed at
-[wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/).  It is not yet
-declared a production service.  It currently supports source files up to 256
+The hardened production-candidate browser build is deployed at
+[wildbloom.forgesworn.dev](https://wildbloom.forgesworn.dev/). ForgeSworn
+provides the software and static browser client; it does not operate a storage
+service or marketplace. The software is not yet declared a general-availability
+release. It currently supports source files up to 256
 MiB. [Independent cryptographic and browser security
 review](docs/SECURITY-REVIEW-BRIEF.md), live human Tor Browser usability review,
 and a completed physical-device packet-evidence run remain release gates.
