@@ -222,3 +222,10 @@ footer p { margin: 0.45rem 0; }
   #client :where(input, textarea, select, .profile-option) { border-color: CanvasText; }
   #client :where(input, textarea)::placeholder { color: GrayText; }
 }
+/* Signed operator text remains plain text and wraps at narrow viewports. */
+.storage-service-listing,
+#storage-service-selection,
+#storage-service-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

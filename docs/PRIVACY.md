@@ -94,6 +94,14 @@ cannot make a reused Nostr key or the signer's own network activity anonymous.
 
 ## Browser state
 
+Public storage discovery is an explicit relay query. Relays learn the query and
+its timing; signed listings disclose the operator's dedicated public key,
+origins, service terms and coarse availability. Selecting a listing makes no
+node request. Explicit inspection discloses a request for `/services/v1` to the
+chosen node. It uses no signer, credentials or referrer. Public listings carry
+no buyer identities, payment records, file hashes or recovery keys. Latest
+signed listing watermarks stay only in page memory and disappear on reload.
+
 Wildbloom does not persist application data in cookies, local or session
 storage, IndexedDB, Cache Storage, the origin-private file system or a service
 worker. WebTorrent would otherwise keep torrent pieces in the origin-private

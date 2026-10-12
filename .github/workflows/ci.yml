@@ -91,6 +91,7 @@ jobs:
       - run: npm exec --offline -- playwright-core install --with-deps ${{ matrix.browser }}
       - run: npm run build
       - run: npm run smoke:browser:${{ matrix.browser }}
+      - run: npm run acceptance:storage-discovery -- --browser ${{ matrix.browser }}
 
   peer-swarm:
     name: browser (two-peer swarm on ubuntu-latest)

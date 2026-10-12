@@ -58,6 +58,11 @@ delivery. It is interoperability work, not a new storage network.
 - NIP-35 kind `2003` for torrent indexing.
 - BUD-01/02/10/11 for Blossom retrieval, upload, references and authorisation.
 - BUD-03 kind `10063` for explicitly requested trusted server-list discovery.
+- Kind `31402` with `forgesworn-storage-service-v1` for opt-in public service
+  discovery. Use `402-announce/storage` for signature/schema validation and
+  latest-event selection before expiry/availability filtering. Keep signed
+  withdrawal watermarks in page memory; never infer a direct upload allowance
+  from free mirror shelter or reuse checkout consent after terms change.
 - NIP-98 kind `27235` for private exact-URL/method/body checkout and audit requests.
   Never publish these authorisations or payment/audit records to relays.
 - The documented `encryption` tag value
