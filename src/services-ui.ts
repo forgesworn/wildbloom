@@ -16,6 +16,9 @@ import { auditFailure, auditStoredBlob, type StorageAudit } from "./core/storage
 import type { Buyer } from "./core/services-http.js";
 import type { PoolReceipt } from "./core/pool.js";
 import type { NetworkProfile, ResolvedHybridEvent } from "./core/types.js";
+import { StorageDirectory, fetchServiceDescription, matchDiscoveredOffers, selectableService, serviceOrigins } from "./core/storage-discovery.js";
+import type { ParsedStorageAnnouncement } from "402-announce/storage";
+import type { StorageServiceDescription } from "402-announce";
 
 interface Context {
   profile(): NetworkProfile;
@@ -44,9 +47,15 @@ export function mountNodeServices(context: Context): { reset(): void } {
   let requestId = crypto.randomUUID();
   let controller: AbortController | null = null;
   let revision = 0;
+  const storageDirectory = new StorageDirectory();
+  let selectedService: { announcement: ParsedStorageAnnouncement; origin: string } | null = null;
+  let checkedService: StorageServiceDescription | null = null;
   const urls = new Set<string>();
   const buttons = [
     "discover-nodes",
+    "discover-storage-services",
+    "inspect-storage-service",
+    "use-storage-service",
     "publish-server-list",
     "checkout-offers",
     "checkout-quote",
@@ -155,6 +164,8 @@ export function mountNodeServices(context: Context): { reset(): void } {
     controller = null;
     offers = null;
     order = null;
+    selectedService = null;
+    checkedService = null;
     requestId = crypto.randomUUID();
     note.value = "";
     consent.checked = false;
@@ -169,6 +180,9 @@ export function mountNodeServices(context: Context): { reset(): void } {
     issuer.replaceChildren();
     for (const id of [
       "discovery-results",
+      "storage-service-results",
+      "storage-service-selection",
+      "storage-service-description",
       "checkout-offer-details",
       "checkout-quote-details",
       "checkout-receipt-links",
@@ -284,6 +298,87 @@ export function mountNodeServices(context: Context): { reset(): void } {
     }
     status.textContent = `Found ${results.length} nodes. No discovered node has been contacted.`;
   });
+  action("discover-storage-services", async (options, current) => {
+    selectedService = null;
+    checkedService = null;
+    offers = null;
+    order = null;
+    consent.checked = false;
+    note.value = "";
+    plan.replaceChildren();
+    for (const id of ["storage-service-selection", "storage-service-description", "checkout-offer-details", "checkout-quote-details", "checkout-payment", "checkout-receipt-links"]) output(id, "");
+    const results = await storageDirectory.discover(context.relays(), options);
+    current();
+    output("storage-service-results", "");
+    let listed = 0;
+    for (const announcement of results) {
+      const origins = serviceOrigins(announcement, options.profile);
+      if (!origins.length) continue;
+      const d = announcement.description;
+      for (const origin of origins) {
+        const row = document.createElement("p");
+        row.className = "storage-service-listing";
+        const labels = d.services.map(service => service.type === "free-mirror"
+          ? `Free mirror shelter: ${service.availability}`
+          : `${service.id}: ${service.capacity_bytes} bytes for ${service.price_msat / 1000} sats, ${service.availability}`);
+        row.textContent = `${d.name} · ${origin}\n${labels.join("; ")}\nListing: ${d.state}, ${announcement.freshness}; expires ${new Date(d.expires_at * 1000).toISOString()}. Service key: ${d.service_pubkey}. `;
+        const choose = document.createElement("button");
+        choose.type = "button";
+        choose.textContent = "Select service to review";
+        choose.disabled = !selectableService(announcement);
+        choose.addEventListener("click", () => {
+          if (controller) return;
+          if (!selectableService(announcement)) {
+            choose.disabled = true;
+            status.textContent = "This listing expired or is unavailable. Find storage services again.";
+            return;
+          }
+          context.cancelSigning();
+          reset();
+          selectedService = { announcement, origin };
+          output("storage-service-selection", `${d.name}\n${origin}\nService key: ${d.service_pubkey}\nListing: ${d.identifier}`);
+          status.textContent = "Service selected. Load its current terms separately to contact this operator.";
+        });
+        row.append(choose);
+        el("storage-service-results").append(row);
+        listed++;
+      }
+    }
+    status.textContent = `Found ${listed} service listings for this network profile. No storage node has been contacted. Signed listings are operator claims; review current terms separately.`;
+  });
+  action("inspect-storage-service", async (options, current) => {
+    if (!selectedService) throw new Error("Select a current storage service first.");
+    const selected = selectedService;
+    offers = null;
+    order = null;
+    consent.checked = false;
+    note.value = "";
+    plan.replaceChildren();
+    for (const id of ["checkout-offer-details", "checkout-quote-details", "checkout-payment", "checkout-receipt-links"]) output(id, "");
+    checkedService = null;
+    output("storage-service-description", "");
+    const result = await fetchServiceDescription(selected.announcement, selected.origin, options);
+    current();
+    checkedService = result;
+    const descriptions = result.services.map(service => service.type === "free-mirror"
+      ? `Free mirror shelter (${service.availability}). Signed mirrors only; direct unknown uploads are refused. Best-effort, evictable retention. ${service.eviction_policy}`
+      : `Paid storage (${service.availability}): ${terms(service)}`);
+    output("storage-service-description", `${result.name}\n${selected.origin}\n${result.about}\nState: ${result.state}. Maximum blob: ${result.max_blob_bytes} bytes.\n${descriptions.join("\n\n")}\n${result.checkout ? `Payment flow: Wildbloom checkout; network ${result.checkout.network}; ${result.checkout.rails.join(", ")}. Pay this operator directly.` : "This is free mirror shelter, not a direct upload allowance."}`);
+    status.textContent = "Current service identity and terms checked. A signed listing and an HTTP response do not prove operator trust or durable retention. Choosing paid storage and requesting a quote are separate actions.";
+  });
+  action("use-storage-service", async (_options, current) => {
+    if (!selectedService || !checkedService || checkedService.state !== "published" || checkedService.expires_at <= Date.now() / 1000
+      || !checkedService.services.some(service => service.type === "paid-storage" && service.availability === "accepting"))
+      throw new Error("Load current terms for an accepting paid service first. Free shelter supports signed mirroring only.");
+    const selected = selectedService;
+    const checked = checkedService;
+    current();
+    context.selectOrigin(selected.origin); // Normal endpoint changes invalidate all prior consents.
+    selectedService = selected;
+    checkedService = checked;
+    output("storage-service-selection", `${checked.name}\n${selected.origin}\nService key: ${checked.service_pubkey}\nListing: ${checked.identifier}`);
+    status.textContent = "Paid node selected. Load its offers and request a fresh private quote before paying; no payment or upload has started.";
+  });
   action("publish-server-list", async (options, current) => {
     if (!el<HTMLInputElement>("list-public-consent").checked)
       throw new Error("Confirm public replacement of your server list first.");
@@ -304,8 +399,20 @@ export function mountNodeServices(context: Context): { reset(): void } {
     status.textContent = `Server list accepted by ${results.filter((r) => r.ok).length}/${results.length} relays.`;
   });
   action("checkout-offers", async (options, current) => {
-    const result = await fetchOffers(context.origin(), options);
+    if (selectedService && !checkedService)
+      throw new Error("Load the selected service’s current terms before loading checkout offers.");
+    offers = null;
+    order = null;
+    consent.checked = false;
+    note.value = "";
+    plan.replaceChildren();
+    for (const id of ["checkout-offer-details", "checkout-quote-details", "checkout-payment", "checkout-receipt-links"]) output(id, "");
+    let result = await fetchOffers(context.origin(), options);
     current();
+    if (selectedService && checkedService && checkedService.checkout?.origin === result.node_origin) {
+      result = matchDiscoveredOffers(checkedService, result);
+    } else if (selectedService)
+      throw new Error("Select the checked paid node before loading its offers.");
     offers = result;
     order = null;
     consent.checked = false;
@@ -328,6 +435,8 @@ export function mountNodeServices(context: Context): { reset(): void } {
   });
   action("checkout-quote", async (options, current) => {
     if (!offers) throw new Error("Load offers first.");
+    if (selectedService && (!checkedService || checkedService.expires_at <= Date.now() / 1000))
+      throw new Error("The checked service terms expired. Load current terms and offers before requesting a new quote.");
     const rail = method.value as "lightning" | "lnurlcash";
     const supportsRefunds = offers.features.includes("lnurlcash_refunds_v1");
     const refundAddress = supportsRefunds ? refundTo.value.trim() || null : null;

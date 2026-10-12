@@ -75,7 +75,7 @@ export async function requestJson(
 ): Promise<unknown> {
   const base = normaliseBlossomServer(origin, options.profile ?? "direct");
   if (
-    !/^\/(?:checkout\/v1\/(?:offers|orders(?:\/[a-zA-Z0-9_-]{1,128}(?:\/(?:lightning|lnurlcash|check))?)?)|storage\/v1\/proof)$/u.test(
+    !/^\/(?:services\/v1|checkout\/v1\/(?:offers|orders(?:\/[a-zA-Z0-9_-]{1,128}(?:\/(?:lightning|lnurlcash|check))?)?)|storage\/v1\/proof)$/u.test(
       path,
     )
   )
@@ -93,6 +93,12 @@ export async function requestJson(
   if (options.signal?.aborted) abort();
   const timer = setTimeout(abort, timeout);
   const audit = path === "/storage/v1/proof";
+  const discovery = path === "/services/v1";
+  if (discovery && (body !== undefined || buyer !== undefined)) {
+    clearTimeout(timer);
+    options.signal?.removeEventListener("abort", abort);
+    throw new Error("Public service inspection must be an unsigned GET.");
+  }
   let phase: ServicePhase = "request";
   try {
     controller.signal.throwIfAborted();
@@ -139,6 +145,7 @@ export async function requestJson(
         "http",
         audit
           ? `Service request failed (HTTP ${response.status}); the storage audit was not verified.`
+          : discovery ? `Service description request failed (HTTP ${response.status}).`
           : `Service request failed (${response.status}); no payment outcome can be inferred.`,
         response.status,
       );
@@ -179,6 +186,7 @@ export async function requestJson(
         "cancelled",
         audit
           ? "Storage audit cancelled or timed out; retry when the signer and node are ready."
+          : discovery ? "Service description inspection cancelled or timed out."
           : "Service action cancelled or timed out. A pending payment may still need reconciliation.",
       );
     // Only our own typed failures are safe to display. Signers and fetch may
@@ -192,6 +200,7 @@ export async function requestJson(
       "network",
       audit
         ? "Storage audit request failed; check node connectivity and browser access."
+        : discovery ? "Service description request failed; check node connectivity and browser access."
         : "Service action failed; check the same order before attempting another payment.",
     );
   } finally {

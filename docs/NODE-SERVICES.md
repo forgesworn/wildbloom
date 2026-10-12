@@ -26,6 +26,51 @@ public list with the selected node after disclosure and consent. It permanently
 links the node address to that public key. No private storage offers, file
 receipts or payment records are placed in this list.
 
+## Find public paid storage and free shelter
+
+**Find storage services on my relays** queries only your explicitly configured
+relays for kind 31402 events carrying the versioned
+[`forgesworn-storage-service-v1` profile](https://github.com/forgesworn/402-announce/blob/main/docs/storage-service-v1.md).
+It is separate from trusted BUD-03 server lists. A valid signature identifies the
+service key; it does not recommend the operator or prove uptime or retention.
+Private owner/friend nodes have no public listing by default.
+
+The browser verifies signatures and the closed shared schema, then selects the
+latest valid event per service key and listing identifier **before** considering
+expiry, withdrawal or availability. Equal timestamps choose the lowest event
+ID. Signed watermarks remain in page memory across lookups, so a relay cannot
+resurrect an older listing after this page has seen its withdrawal. Reloading
+clears that memory; a relay can still omit a newer event from a fresh client.
+Each lookup allows eight relays, 64 events per relay, 128 messages, bounded
+frames and ten seconds. At most 512 listing watermarks fit in one page session;
+the browser refuses further entries instead of silently evicting a withdrawal.
+
+Selecting a service makes no HTTP request. **Load selected service's current
+terms** performs one bounded unsigned `GET /services/v1`, with no credentials,
+referrer or redirect, and checks that its key, listing identifier and origin
+match the signed announcement. Current terms may differ from the announcement.
+The network profile filters origins after latest-event selection: Tor-only
+requires a valid v3 onion endpoint and has no direct fallback.
+
+Free/open shelter accepts authorised **mirrors** of existing blobs, not direct
+uploads from unknown users. Its retention is best-effort and evictable. This UI
+lets you discover and review that service; it does not submit a mirror request
+or turn free shelter into a paid upload allowance. Coarse `accepting` status is
+an operator snapshot, not a reservation or promise that a particular blob fits.
+
+For paid storage, **Use checked node for paid storage** selects the endpoint
+without buying anything. Load offers separately; the browser checks all prices,
+revisions, terms, rails, network and enabled issuers against the inspected
+description. A changed offer clears quote/payment consent and requires another
+inspection. Request a fresh private quote to reserve actual capacity, then
+approve payment through the existing checkout flow below. No payment, customer,
+file or recovery metadata is published in the service listing.
+
+Native publication stays opt-in through an explicit service profile, dedicated
+external signer and relay configuration. See the
+[operator runbook](https://github.com/forgesworn/wildbloom-node/blob/main/docs/SERVICE-DISCOVERY.md).
+Shipping browser code does not publish any operator node.
+
 ## Buy directly from an operator
 
 1. Select a node, connect NIP-07 or an external signer and load its offers.
@@ -110,6 +155,14 @@ not a server-signed attestation. The [wire contract](https://github.com/forgeswo
 includes the byte-level digest and precise limits.
 
 ## Validation
+
+`npm run acceptance:storage-discovery` runs the production browser against a
+synthetic signed relay and controlled HTTP fixtures. On 12 October 2026 it
+passed in system Chromium, Firefox and WebKit: no load/selection probes, exact key/origin binding,
+changed-price consent reset, identity rejection, remembered withdrawal despite
+relay omission, plain-text remote strings, accessibility, narrow viewport and
+no browser persistence. This is controlled browser evidence, separate from
+native admission tests, real Tor/relay acknowledgement and live payment.
 
 `npm run ci` covers the existing browser journey and the new contract, discovery,
 transport and audit tests. `npm run acceptance:services` additionally uses a real

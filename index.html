@@ -310,6 +310,16 @@
           <label class="consent"><input id="list-public-consent" type="checkbox" /><span>I want to replace my public Blossom server list with the selected node. This permanently links its address to my public key.</span></label>
           <button id="publish-server-list" type="button">Sign and publish my server list</button>
         </details>
+        <details><summary>Find public paid storage and free shelter</summary>
+          <p>Your chosen relays learn that you are looking for storage services. Listings are signed operator claims, not recommendations or proof of uptime. Storage nodes are contacted only when you load a selected service’s current terms.</p>
+          <button id="discover-storage-services" type="button">Find storage services on my relays</button>
+          <div id="storage-service-results"></div>
+          <div id="storage-service-selection"></div>
+          <button id="inspect-storage-service" type="button">Load selected service’s current terms</button>
+          <div id="storage-service-description"></div>
+          <button id="use-storage-service" type="button">Use checked node for paid storage</button>
+          <p>Free shelter accepts signed mirrors from an existing source. It is best effort and evictable; it does not permit unknown direct uploads. Paid storage still requires a fresh private quote and separate payment consent.</p>
+        </details>
         <details><summary>Buy storage directly from this node</summary>
           <p>Uses the Blossom server selected above. Lightning and LNURLcash are paid directly to its operator. Checkout is currently available in direct mode only; external wallets have their own network behaviour.</p>
           <button id="checkout-offers" type="button">Load this node’s offers</button>
