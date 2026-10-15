@@ -55,7 +55,19 @@ async function ready(child, origin) {
     try { if ((await fetch(`${origin}/healthz`, { signal: AbortSignal.timeout(500) })).ok) return; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("Node failed to become ready");
+  throw new Error(`Node failed to become ready: ${origin}`);
+}
+// Pick a loopback port, launch and confirm readiness, retrying on the small
+// race between the port probe closing and the daemon binding it.
+async function launchReady(command, argsFor) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const origin = `http://127.0.0.1:${await port()}`;
+    const child = launch(command, argsFor(origin));
+    try { await ready(child, origin); return { origin, child }; }
+    catch (error) { lastError = error; await stop(child); }
+  }
+  throw lastError;
 }
 async function status(page, selector, text) {
   await page.locator(selector).filter({ hasText: text }).waitFor({ timeout: operationTimeout });
@@ -119,14 +131,10 @@ async function pageAt(origin, allowed) {
 try {
   const nodes = [];
   for (let i = 0; i < 6; i++) {
-    const origin = `http://127.0.0.1:${await port()}`;
-    const child = launch(binary, ["--no-tor", "--bind", new URL(origin).host, "--public-url", origin,
-      "--allow-pubkey", owner, "--data-dir", join(root, `node-${i}`), "--repair-interval", "0"]);
-    await ready(child, origin); nodes.push({ origin, child });
+    nodes.push(await launchReady(binary, (nodeOrigin) => ["--no-tor", "--bind", new URL(nodeOrigin).host, "--public-url", nodeOrigin,
+      "--allow-pubkey", owner, "--data-dir", join(root, `node-${i}`), "--repair-interval", "0"]));
   }
-  const origin = `http://127.0.0.1:${await port()}`;
-  const app = launch(process.execPath, ["scripts/serve-production.mjs", "--port", new URL(origin).port]);
-  await ready(app, origin);
+  const { origin } = await launchReady(process.execPath, (appOrigin) => ["scripts/serve-production.mjs", "--port", new URL(appOrigin).port]);
   browser = await (browserName === "firefox" ? firefox : browserName === "webkit" ? webkit : chromium).launch({ headless: true,
     ...(browserName === "system-chromium" ? { executablePath: process.env.WILDBLOOM_BROWSER_EXECUTABLE
       ?? (process.platform === "darwin" ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : process.platform === "win32" ? join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe") : "/usr/bin/google-chrome") } : {}) });
@@ -150,11 +158,17 @@ try {
   assert.equal(manifest.required, 2); assert.equal(manifest.total, 4);
   assert.ok(!receiptBytes.includes(Buffer.from(key)) && !receiptBytes.includes(Buffer.from("pool-proof.bin")));
   assert.ok(await p.isDisabled("#sign-events")); assert.ok(await p.isDisabled("#publish-events"));
+  // Editing any pool layout control invalidates a completed upload's consents.
+  await p.fill("#pool-nodes", `${await p.inputValue("#pool-nodes")}\n`);
+  await status(p, "#publish-status", "Storage layout changed");
+  assert.equal(await p.isChecked("#upload-consent"), false, "Layout edit revokes upload consent");
+  assert.equal(await p.isChecked("#key-saved-consent"), false, "Layout edit revokes key acknowledgement");
+  assert.ok(await p.isDisabled("#upload-file"));
   const violations = (await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze()).violations;
   assert.deepEqual(violations, []);
   const receiptPath = join(root, "receipt.json"); writeFileSync(receiptPath, receiptBytes, { mode: 0o600 });
   const templates = spawnSync(binary, ["replicas", "pool-template", "--receipt", receiptPath, "--owner", owner,
-    "--revision", "1", "--expires-at", String(Math.floor(Date.now() / 1000) + 3600), "--permit-loopback-development"], { encoding: "utf8" });
+    "--revision", "1", "--expires-at", String(Math.floor(Date.now() / 1000) + 3600), "--permit-loopback-development"], { encoding: "utf8", timeout: operationTimeout });
   assert.equal(templates.status, 0, templates.stderr);
   const imported = JSON.parse(templates.stdout);
   assert.equal(imported.reconstructs_ciphertext, false); assert.equal(imported.unsigned_policies.length, 4);
@@ -189,7 +203,12 @@ try {
   assert.equal(hash(readFileSync(await (await download).path())), hash(source));
   // Repair needs the owner signer, but no decryption key. Missing data parts
   // regenerate in the client and go only to their pre-approved spare nodes.
-  await externalSigner(r); await r.check("#pool-repair-consent"); await r.click("#repair-pool");
+  // Repair stays disabled until the receipt author's signer is connected.
+  await r.check("#pool-repair-consent");
+  assert.ok(await r.isDisabled("#repair-pool"), "Repair must wait for the receipt author's signer");
+  await externalSigner(r);
+  await r.waitForFunction(() => { const button = document.querySelector("#repair-pool"); return button !== null && !button.disabled; });
+  await r.click("#repair-pool");
   await signUntil(r, "#retrieve-status", "Requested layout verified");
   assert.equal(await r.inputValue("#recovery-key-input"), "");
   for (const part of manifest.parts.slice(0, 2)) {
@@ -205,11 +224,9 @@ try {
   // after their selection here, never through implicit discovery.
   const replacements = [];
   for (let i = 0; i < 2; i++) {
-    const replacementOrigin = `http://127.0.0.1:${await port()}`;
-    const child = launch(binary, ["--no-tor", "--bind", new URL(replacementOrigin).host, "--public-url", replacementOrigin,
+    const replacement = await launchReady(binary, (next) => ["--no-tor", "--bind", new URL(next).host, "--public-url", next,
       "--allow-pubkey", owner, "--data-dir", join(root, `replacement-${i}`), "--repair-interval", "0"]);
-    await ready(child, replacementOrigin);
-    allowed.add(replacementOrigin); replacements.push({ origin: replacementOrigin, child });
+    allowed.add(replacement.origin); replacements.push(replacement);
   }
   await r.fill("#pool-replacements", replacements.map((node, i) => `${i + 3} ${node.origin} replacement-site-${i}`).join("\n"));
   assert.equal(await r.isChecked("#pool-repair-consent"), false);
@@ -244,9 +261,29 @@ try {
   const requestsAtCancellation = fresh.requests.length;
   await r.setInputFiles("#publish-file", { name: "changed.bin", mimeType: "application/octet-stream", buffer: Buffer.from("changed source") });
   await r.locator("#external-signing-panel").waitFor({ state: "hidden" });
-  await r.waitForTimeout(150);
+  // A delayed continuation must surface within a bounded quiescent window
+  // rather than escaping a single fixed sleep.
+  const settleDeadline = Date.now() + 2000;
+  while (Date.now() < settleDeadline && fresh.requests.length === requestsAtCancellation) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   assert.equal(await r.isChecked("#pool-repair-consent"), false);
   assert.equal(fresh.requests.length, requestsAtCancellation, "File change cannot continue a pending repair");
+  // Changing the signing method mid-repair aborts the transfer as well.
+  await r.check("#pool-repair-consent");
+  assert.ok(!(await r.isDisabled("#repair-pool")), "Signer remains connected before the method change");
+  await r.click("#repair-pool");
+  await r.locator("#external-signing-panel").waitFor({ state: "visible" });
+  const requestsAtMethodChange = fresh.requests.length;
+  await r.check('input[name="signing-method"][value="nip07"]');
+  await r.locator("#external-signing-panel").waitFor({ state: "hidden" });
+  const methodDeadline = Date.now() + 2000;
+  while (Date.now() < methodDeadline && fresh.requests.length === requestsAtMethodChange) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(await r.isChecked("#pool-repair-consent"), false, "Signing-method change revokes repair consent");
+  assert.equal(fresh.requests.length, requestsAtMethodChange, "Signing-method change cannot continue a pending repair");
+  await status(r, "#publish-status", "Signing method changed");
   await assertNoBrowserPersistence(r, fresh.context, "pool recovery");
   await fresh.context.close();
   // No browser is open during native owner repair. Both systematic parts have

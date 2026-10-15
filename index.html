@@ -238,15 +238,15 @@
         <p id="storage-layout-summary" class="layout-summary" aria-live="polite">One node holds the encrypted file. Keep a separate backup: this layout has no redundancy.</p>
         <div id="pool-settings" hidden>
           <p class="privacy-boundary">Pool files are always encrypted. Split mode sends each node only one coded part; reconstruction and repair happen in your browser or an explicitly configured owner repair service. Operators may collude or fetch other parts if they learn their addresses. Encryption protects the contents. Keep the signed pool receipt privately alongside a separate recovery key; pool receipts are not published to relays or swarms.</p>
-          <label>Pool nodes <small>One URL, failure group and optional capacity weight per line. Nodes at the same site should share a group. Weights are relative allocations, not measured free space.</small>
-            <textarea id="pool-nodes" rows="5" maxlength="8192" placeholder="https://a.example site-a 1&#10;https://b.example site-b 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+          <label>Pool nodes <small id="pool-nodes-hint">One URL, failure group and optional capacity weight per line. Nodes at the same site should share a group. Weights are relative allocations, not measured free space.</small>
+            <textarea id="pool-nodes" rows="5" maxlength="8192" placeholder="https://a.example site-a 1&#10;https://b.example site-b 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" aria-describedby="pool-nodes-hint pool-layout-help"></textarea>
           </label>
           <div class="grid three">
-            <label id="pool-copies-field">Complete copies <input id="pool-copies" type="number" min="2" max="3" value="2" /></label>
-            <label id="pool-required-field">Parts needed to recover <input id="pool-required" type="number" min="2" max="15" value="2" /></label>
-            <label id="pool-total-field">Total coded parts <input id="pool-total" type="number" min="3" max="16" value="4" /></label>
+            <label id="pool-copies-field">Complete copies <input id="pool-copies" type="number" min="2" max="3" value="2" aria-describedby="pool-layout-help" /></label>
+            <label id="pool-required-field">Parts needed to recover <input id="pool-required" type="number" min="2" max="15" value="2" aria-describedby="pool-layout-help" /></label>
+            <label id="pool-total-field">Total coded parts <input id="pool-total" type="number" min="3" max="16" value="4" aria-describedby="pool-layout-help" /></label>
           </div>
-          <p id="pool-layout-help" class="hint">Inspect the file to validate placement. Extra failure groups provide spare destinations. A signed receipt describes intended placement; only verified reads count as stored parts. Keep the receipt even if an upload is interrupted.</p>
+          <p id="pool-layout-help" class="hint" aria-live="polite">Inspect the file to validate placement. Extra failure groups provide spare destinations. A signed receipt describes intended placement; only verified reads count as stored parts. Keep the receipt even if an upload is interrupted.</p>
         </div>
 
         <div class="grid three">
@@ -492,8 +492,8 @@
         <div id="resolved-event-links" class="downloads"></div>
         <div id="pool-repair-panel" class="gate" hidden>
           <p>Repair reconstructs ciphertext locally without a recovery key, then uploads only the intended parts to their approved nodes. Connect the receipt author’s signer first. The browser must remain open.</p>
-          <label>Replacement nodes (optional) <small>One part number (starting at 1), URL, failure group and optional weight per line. Adding nodes requires a new signed receipt; save it before closing the page. Existing nodes cannot be reassigned to a different part.</small>
-            <textarea id="pool-replacements" rows="3" maxlength="8192" placeholder="1 https://replacement.example new-site 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no"></textarea>
+          <label>Replacement nodes (optional) <small id="pool-replacements-hint">One part number (starting at 1), URL, failure group and optional weight per line. Adding nodes requires a new signed receipt; save it before closing the page. Existing nodes cannot be reassigned to a different part.</small>
+            <textarea id="pool-replacements" rows="3" maxlength="8192" placeholder="1 https://replacement.example new-site 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" aria-describedby="pool-replacements-hint"></textarea>
           </label>
           <label class="check"><input id="pool-repair-consent" type="checkbox" /><span>I approve reading this receipt’s nodes, reconstructing ciphertext here, and signing uploads to restore its storage layout.</span></label>
           <button id="repair-pool" type="button" disabled>Verify and repair pool</button>

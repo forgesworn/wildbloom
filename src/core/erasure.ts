@@ -9,7 +9,11 @@ for (let i = 0, value = 1; i < 255; i += 1) {
   if (value & 256) value ^= 0x11d;
 }
 for (let i = 255; i < 510; i += 1) EXP[i] = EXP[i - 255]!;
-const mul = (a: number, b: number): number => a === 0 || b === 0 ? 0 : EXP[LOG[a]! + LOG[b]!]!;
+// Full multiplication table: hot loops index it directly instead of composing
+// two EXP/LOG lookups per byte. Encoding operates on ciphertext, not secrets.
+const MUL = new Uint8Array(256 * 256);
+for (let a = 1; a < 256; a += 1) for (let b = 1; b < 256; b += 1) MUL[a * 256 + b] = EXP[LOG[a]! + LOG[b]!]!;
+const mul = (a: number, b: number): number => MUL[a * 256 + b]!;
 const inverse = (a: number): number => EXP[255 - LOG[a]!]!;
 type Matrix = number[][];
 
@@ -56,7 +60,8 @@ function combine(coefficients: number[], inputs: Uint8Array[], size: number): Ui
     const coefficient = coefficients[i]!;
     if (!coefficient) continue;
     const input = inputs[i]!;
-    for (let pos = 0; pos < input.length; pos += 1) output[pos] = output[pos]! ^ mul(coefficient, input[pos]!);
+    const times = MUL.subarray(coefficient * 256, coefficient * 256 + 256);
+    for (let pos = 0; pos < input.length; pos += 1) output[pos] = output[pos]! ^ times[input[pos]!]!;
   }
   return output;
 }

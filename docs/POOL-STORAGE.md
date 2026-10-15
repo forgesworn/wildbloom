@@ -281,3 +281,16 @@ signing fixtures belong to the disposable test directory.
 
 The new workflow has not been run remotely. No deployment, physical-node
 custody, branded Tor Browser, iPhone or Android acceptance is implied.
+
+### Recorded local validation — 15 October 2026
+
+Independent security review follow-up: a multiplication-table coding loop,
+earlier parameter validation, a decode-side known-answer vector, repair-button
+signer gating, repair-scoped replacement aborts, page-session field resets,
+hint associations for pool inputs, acceptance-harness launch retries with
+bounded quiescent waits and added UI consent checks.
+
+- `npm run check`: 254 tests, coverage gates, encryption vectors, production
+  build, production browser acceptance and secret scan passed.
+- `npm run acceptance:pool` passed in system Chromium on macOS against a
+  locally built debug daemon at commit `3da0293`.

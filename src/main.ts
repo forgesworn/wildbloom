@@ -117,6 +117,9 @@ const swarmFetchButton = element<HTMLButtonElement>("fetch-swarm");
 const cancelDownloadButton = element<HTMLButtonElement>("cancel-download");
 
 let pubkey: string | null = null;
+// True only while a pool repair transfer is active, so replacement edits
+// cancel in-progress repairs without aborting an unrelated plain fetch.
+let poolRepairInProgress = false;
 let sourceInspected: InspectedFile | null = null;
 let inspected: InspectedFile | null = null;
 let protectedEnvelope: EncryptedEnvelope | null = null;
@@ -405,6 +408,7 @@ function resetResolution(): void {
   downloadController?.abort();
   downloadController = null;
   downloadTransport = null;
+  poolRepairInProgress = false;
   cancelDownloadButton.disabled = true;
   if (downloadSession) confirmPeerStoppedInBackground(downloadSession, retrieveStatus, "retrieval");
   downloadSession = null;
@@ -458,7 +462,8 @@ function seedStartAllowed(): boolean {
 function updateRetrievalButtons(): void {
   const busy = downloadController !== null;
   blossomFetchButton.disabled = busy || (!resolved && !resolvedPool);
-  repairPoolButton.disabled = busy || uploadController !== null || !resolvedPool || !repairPoolConsent.checked;
+  repairPoolButton.disabled = busy || uploadController !== null || !resolvedPool || !repairPoolConsent.checked
+    || pubkey !== resolvedPool.event.pubkey;
   swarmFetchButton.disabled = busy || pendingPeerStops.retrieval > 0 || !(profile() === "direct" && swarmConsent.checked && resolved?.magnetUri);
   cancelDownloadButton.disabled = !busy;
 }
@@ -716,6 +721,7 @@ connectSignerButton.addEventListener("click", () => guard(publishStatus, async (
   pubkey = candidate;
   signerStatus.textContent = candidate;
   updateUploadButton();
+  updateRetrievalButtons();
   if (signingMethod() === "external") {
     setStatus(
       publishStatus,
@@ -1135,6 +1141,7 @@ async function retrievePool(repair: boolean): Promise<void> {
   const controller = new AbortController();
   downloadController = controller;
   downloadTransport = "blossom";
+  poolRepairInProgress = repair;
   updateRetrievalButtons();
   updateUploadButton();
   clearDownloads(retrieveLinks);
@@ -1166,7 +1173,7 @@ async function retrievePool(repair: boolean): Promise<void> {
       setStatus(retrieveStatus, "Pool parts, reconstructed ciphertext and AES-GCM authentication verified. Save the locally decrypted file.");
     }
   } finally {
-    if (downloadController === controller) { downloadController = null; downloadTransport = null; }
+    if (downloadController === controller) { downloadController = null; downloadTransport = null; poolRepairInProgress = false; }
     updateRetrievalButtons();
     updateUploadButton();
   }
@@ -1177,8 +1184,10 @@ repairPoolConsent.addEventListener("change", () => {
   updateRetrievalButtons();
 });
 poolReplacements.addEventListener("input", () => {
-  downloadController?.abort();
-  abandonExternalSigning("Replacement destinations changed.");
+  if (poolRepairInProgress) {
+    downloadController?.abort();
+    abandonExternalSigning("Replacement destinations changed.");
+  }
   repairPoolConsent.checked = false;
   updateRetrievalButtons();
 });
@@ -1368,6 +1377,10 @@ function endPageSession(): void {
   pubkey = null;
   fileInput.value = "";
   poolNodes.value = "";
+  storageMode.value = "single";
+  poolCopies.value = "2";
+  poolRequired.value = "2";
+  poolTotal.value = "4";
   blossomInput.value = "";
   replicaInput.value = "";
   relayInput.value = "";
