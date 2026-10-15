@@ -122,6 +122,38 @@ or configure them before uploading to also prepare torrent metadata. Seeding
 still requires a separate consent and action. Wildbloom deliberately carries
 no endorsed network defaults.
 
+### First run
+
+No npm script starts a Blossom server, relay or tracker for development. The
+acceptance scripts start disposable ones internally and do not expose them, so
+bring your own. In the direct profile (the default):
+
+1. **Blossom server:** one origin with no path, query, fragment or credentials.
+   Use `https://` for a real server, or `http://localhost:3000`,
+   `http://127.0.0.1:3000` or `http://[::1]:3000` for local development (the
+   port is only an example). A locally run
+   [Wildbloom Node](docs/NODE.md) is the usual local endpoint.
+2. **Nostr relays:** one URL per line (commas also split), at most eight. Use
+   `wss://relay.example.com`, or `ws://localhost:7777` or `ws://127.0.0.1:7777`
+   for a local relay.
+3. **WebSocket trackers:** optional, same rules as relays. Leave them blank for
+   Blossom delivery without a torrent.
+4. **Signing method:** *NIP-07 browser signer* is selected by default. Install
+   a NIP-07 extension and choose **Connect NIP-07 signer**; without a
+   `window.nostr` signer the page reports "No NIP-07 signer is available in
+   this browser." To use no extension, choose *External signer handoff*,
+   enter the signer's public key as 64 lowercase hexadecimal characters (never
+   an `nsec`), choose **Use external signer public key**, then follow the
+   copy, sign and paste steps in
+   [`docs/EXTERNAL-SIGNING.md`](docs/EXTERNAL-SIGNING.md).
+5. Choose a file of up to 256 MiB and select **Inspect locally**, acknowledge
+   the recovery key and upload disclosure, then **Upload prepared payload**,
+   **Review and sign events** and **Publish signed events**. Each is a separate
+   action.
+
+Outside localhost, endpoints must use `https://` and `wss://`. Tor-only mode
+accepts only checksum-valid v3 onion hostnames.
+
 ## Verify it
 
 ```sh
@@ -138,11 +170,23 @@ npm run acceptance:tor-browser
 npm run acceptance:maximum
 ```
 
-`check` verifies the published one- and two-record encryption known-answer
-vectors, runs strict TypeScript, coverage-gated unit and adversarial tests, a
-production build,
-adversarial deployment acceptance, a real headless-browser acceptance path and
-the local secret scanner. The deployment gate verifies the
+These are the commonly used gates. Every script in `package.json`, with its
+purpose and the environment variables, binaries and flags it needs, is listed
+in the [script table in `AGENTS.md`](AGENTS.md#all-npm-scripts).
+
+`check` runs these steps in order and stops at the first failure:
+`install:policy`, `encryption:vector`, `encryption:semantic-vectors`,
+`acceptance:cross-device:self-test`, `test:checkout-preflight`, `typecheck`,
+`test:coverage`, `build`, `acceptance:deployment`, `smoke:browser`,
+`acceptance:storage-discovery` and `secrets`. It therefore verifies the install
+policy (npm controls, pinned Node, npm and Wrangler versions, and reviewed
+workflow installs and action pins), the published encryption known-answer
+vectors and the committed semantic vectors across all three envelope versions,
+the cross-device evidence self-test and the checkout-preflight tests, strict
+TypeScript, coverage-gated unit and adversarial tests, a production build,
+adversarial deployment acceptance, a real headless-browser acceptance path, the
+production storage-discovery UI against a synthetic relay and intercepted HTTP
+fixtures, and the local secret scanner. The deployment gate verifies the
 exact served build hashes, strict immutable asset names, no-store HTML, health
 and error responses, exact fail-closed response security headers and hostile
 configuration, host, method, path, query-string and request-body rejection. It
@@ -185,12 +229,14 @@ acceptance clears secrets, signer state, object URLs and network authority on
 navigation, proves an active downloader leaves the tracker, and prevents a
 back-forward-cache return from reviving the old heap. See
 [`docs/ACCESSIBILITY.md`](docs/ACCESSIBILITY.md) for the remaining human review.
-`ci` additionally audits dependencies. The audit script has one fail-closed
-exception for an `ip` advisory reachable only from WebTorrent's Node UDP-tracker
-parser: Wildbloom imports the prebuilt browser bundle, and the exception fails
-if the package exclusions, Wildbloom's exact import or the browser-bundle
-contents change. Vite also rejects that Node code from the actual production
-module graph. Every other advisory still fails CI.
+`ci` runs `check` and then `audit`, which runs `npm audit --json` over every
+dependency, production and development, at every severity. The audit script has
+one fail-closed exception for the `ip` advisory `GHSA-2p57-rm9w-gvfp`, reachable
+only from WebTorrent's Node UDP-tracker parser: Wildbloom imports the prebuilt
+browser bundle, and the exception fails if the package exclusions, Wildbloom's
+exact import or the browser-bundle contents change. Vite also rejects that Node
+code from the actual production module graph. Every other advisory still fails
+CI.
 
 Miniflare's Sharp dependency is overridden to patched `0.35.5` for
 [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w).
@@ -232,13 +278,23 @@ packet capture and emits a redacted, schema-versioned result. The tooling does
 not automate signing or weaken HTTPS/WSS, and its presence is not evidence that
 the physical-device run has passed.
 
-`acceptance:tor` requires a local Tor executable and system Chrome or Chromium.
-It creates fresh disposable v3 onion services for the app, Blossom and a Nostr
-relay, then performs encrypted publication and exact recovery through a real
-Tor daemon after `NEWNYM`. Stock Chromium needs a harness-only secure-origin
-override for Web Crypto on HTTP onion origins. The extended
-`acceptance:tor-browser` gate rotates identity again and drives a signed Tor
-Project Firefox build through a disposable profile and loopback WebDriver BiDi.
+`acceptance:tor` requires a local Tor executable (`tor` on the usual paths, or
+`WILDBLOOM_TOR_PATH`) and system Chrome or Chromium. It creates fresh
+disposable v3 onion services for the app, Blossom and a Nostr relay, then
+performs encrypted publication and exact recovery through a real Tor daemon
+after `NEWNYM`. Stock Chromium needs a harness-only secure-origin override for
+Web Crypto on HTTP onion origins. The extended `acceptance:tor-browser` script
+is `acceptance:tor --browser system-chromium --branded-tor-browser`. The
+`--browser` flag accepts only `system-chromium`, which is also its default, and
+selects the system Chrome or Chromium that runs the Chromium onion journey
+first. The `--branded-tor-browser` flag adds the second stage: it rotates
+identity again and drives a branded Tor Project Firefox build through a
+disposable profile and loopback WebDriver BiDi. The build is taken from
+`WILDBLOOM_TOR_BROWSER_PATH`, else `/Applications/Tor Browser.app` on macOS or
+`.artifacts/tor-browser/Browser/firefox` on Linux (Windows is unsupported), and
+is refused unless its `--version` output reports `Tor Project Firefox`. The
+script checks only that version string; the signature check on the download
+belongs to the on-demand `tor-browser-acceptance` workflow.
 With no signer extension, one profile encrypts, externally signs, uploads and
 publishes through the controlled onions. After `NEWNYM`, a second fresh profile
 proves signer-free exact retrieval, relay timeout, partial-download
@@ -289,9 +345,13 @@ is in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).  Non-sensitive questions use
 [`SUPPORT.md`](SUPPORT.md); security-sensitive reports use GitHub's private
 vulnerability reporting and never a public issue.
 
-`npm run release:evidence -- --require-clean` emits the full source commit,
-package-lock hash, aggregate build hash and the SHA-256 and length of every
-served file. Record that JSON beside the deployment and rollback evidence.
+`npm run release:evidence -- --require-clean --output ../wildbloom-release-evidence.json`
+writes the full source commit, package-lock hash, aggregate build hash and the
+SHA-256 and length of every served file to that path. Record that JSON beside
+the deployment and rollback evidence. Without `--output` the JSON goes to
+standard output, and a shell redirect around `npm run` would also capture npm's
+own banner line, so use `--output`. The command refuses to overwrite an existing
+file or to write inside `dist/`, and creates the file with mode `0600`.
 
 After deployment, `verify:deployment` performs an explicit read-only probe of
 the chosen origin. It refuses redirects, verifies `/healthz`, HSTS on HTTPS,
@@ -303,7 +363,19 @@ security-header boundary before emitting a timestamped verification record.
 - [NIP-07: browser signer](https://github.com/nostr-protocol/nips/blob/master/07.md)
 - [NIP-35: torrents](https://github.com/nostr-protocol/nips/blob/master/35.md)
 - [NIP-94: file metadata](https://github.com/nostr-protocol/nips/blob/master/94.md)
-- [Blossom BUDs](https://github.com/hzrd149/blossom/tree/master/buds)
+- [NIP-98: HTTP auth](https://github.com/nostr-protocol/nips/blob/master/98.md),
+  kind `27235`, for private checkout and storage-audit requests. These
+  authorisations are never published to relays.
+- [Blossom BUDs](https://github.com/hzrd149/blossom/tree/master/buds):
+  BUD-01 and BUD-02 for retrieval and upload, BUD-11 (kind `24242`) for upload
+  authorisation, and
+  [BUD-03](https://github.com/hzrd149/blossom/blob/master/buds/03.md)
+  (kind `10063`) for trusted server-list discovery. Mirroring between nodes
+  uses [BUD-04](https://github.com/hzrd149/blossom/blob/master/buds/04.md),
+  which Wildbloom Node performs; this browser app does not call it.
+- Kind `31402` with the
+  [`forgesworn-storage-service-v1` profile](https://github.com/forgesworn/402-announce/blob/main/docs/storage-service-v1.md)
+  from `402-announce`, for opt-in public storage-service discovery.
 
 These specifications are draft/optional where they say so. Compatibility is
 therefore tested against the documented shapes, not promised forever.

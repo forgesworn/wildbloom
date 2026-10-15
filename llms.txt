@@ -1,0 +1,45 @@
+# Wildbloom
+
+> Wildbloom is a local-first production-candidate browser application, not a library or SDK, that makes one file available through Nostr (signed discovery), Blossom (content-addressed HTTP storage) and optional BitTorrent/WebTorrent peer delivery. No private key ever enters it: signatures come from an injected NIP-07 signer or an exact copy, sign and paste handoff to an external signer. Content, filename and MIME type are encrypted in the browser by default, so Blossom stores only an encrypted envelope and the recovery key never leaves page memory. Nothing touches the network on page load. Files up to 256 MiB. It supplies no Blossom server, relay, tracker or network defaults; bring your own. It is not a general-availability release.
+
+## Docs
+
+- [README](https://github.com/forgesworn/wildbloom/blob/main/README.md): status, network profiles, first run, verification gates, specifications
+- [AGENTS.md](https://github.com/forgesworn/wildbloom/blob/main/AGENTS.md): security rules, protocol scope and a table of every npm script with its required environment variables and binaries
+- [Architecture](https://github.com/forgesworn/wildbloom/blob/main/docs/ARCHITECTURE.md): components, data flow and protocol boundaries
+- [Encryption](https://github.com/forgesworn/wildbloom/blob/main/docs/ENCRYPTION.md): chunked AES-256-GCM envelope and recovery key
+- [Node services](https://github.com/forgesworn/wildbloom/blob/main/docs/NODE-SERVICES.md): node discovery, paid storage and private storage audits
+- [External signing](https://github.com/forgesworn/wildbloom/blob/main/docs/EXTERNAL-SIGNING.md): the copy, sign and paste handoff
+- [Threat model](https://github.com/forgesworn/wildbloom/blob/main/docs/THREAT-MODEL.md) and [privacy](https://github.com/forgesworn/wildbloom/blob/main/docs/PRIVACY.md)
+
+## Run it
+
+- Node.js 24 and npm 11. `npm ci`, then `npm run dev` for the Vite dev server; `npm run check` for the local verification gate.
+- Blossom server: one origin, `https://` or `http://localhost`, `http://127.0.0.1`, `http://[::1]` for development. Relays and optional trackers: `wss://`, or `ws://` on the same localhost names; one per line, at most eight.
+- Tor-only mode accepts only checksum-valid v3 onion hostnames and disables WebTorrent.
+
+## Event kinds and tags
+
+Published, each after an explicit user action:
+
+- Kind `1063` (NIP-94 file event, content is the file name): tags `url`, `m`, `x`, `ox`, `size`, `alt`; with trackers configured also `magnet` and `i` (info hash); when encrypted also `encryption`. Encrypted events describe the public envelope: `x` and `ox` are the envelope SHA-256, file name `wildbloom.wbenc`, MIME `application/vnd.forgesworn.encrypted`.
+- Kind `2003` (NIP-35 torrent index, direct mode with trackers only): tags `title`, `x` (info hash), `file` (name, size), one `tracker` per tracker.
+- Kind `10063` (BUD-03 Blossom server list, only on explicit consent): one `server` tag per origin.
+
+Signed for a single HTTP request, never published:
+
+- Kind `24242` (BUD-11 Blossom upload authorisation): tags `t` = `upload`, `expiration`, `server` (hostname), `x` (blob SHA-256). Default lifetime 90 seconds, between 30 and 300 permitted.
+- Kind `27235` (NIP-98 HTTP auth for checkout and storage audits): tags `u`, `method`, and `payload` (SHA-256 of the body) on POST.
+
+Read only or kept locally:
+
+- Kind `31402` storage-service announcements, queried with `#t` = `forgesworn-storage-service-v1` and validated through `402-announce/storage`.
+- Kind `30078` pool receipt, saved as JSON and not published by the app: tag `d` = `wildbloom.pool.v1:<encrypted-envelope-sha256>`.
+
+Encryption tag values: `forgesworn-aes-256-gcm-chunked-v2` (current); `wildbloom-aes-256-gcm-chunked-v1` (historical, read only).
+
+## Optional
+
+- [Wildbloom Node](https://github.com/forgesworn/wildbloom-node): companion operator-owned persistent Blossom storage and replication (BUD-04 mirroring)
+- [Production deployment](https://github.com/forgesworn/wildbloom/blob/main/docs/DEPLOYMENT.md) and [operations](https://github.com/forgesworn/wildbloom/blob/main/docs/OPERATIONS.md)
+- [Acceptance gates](https://github.com/forgesworn/wildbloom/blob/main/docs/ACCEPTANCE.md)
