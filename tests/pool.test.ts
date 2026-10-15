@@ -4,6 +4,8 @@ import { extendPool, fetchPool, parsePoolNodes, poolTemplate, preparePool, prepa
 import type { SignerPort } from "../src/core/types.js";
 import { sha256Hex } from "../src/core/crypto.js";
 
+// Deterministic throwaway test key used only with the injected signer; it is
+// never a real identity and never leaves the test process.
 const secret = new Uint8Array(32).fill(42);
 const owner = getPublicKey(secret);
 const signer: SignerPort = { getPublicKey: async () => owner, signEvent: async (template) => finalizeEvent(template, secret) };

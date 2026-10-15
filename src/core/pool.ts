@@ -88,8 +88,8 @@ export function validateManifest(value: unknown, profile: NetworkProfile): PoolM
     || typeof value.payload.size !== "number" || value.payload.encryption !== WILDBLOOM_ENCRYPTION_V2) throw new Error("Invalid encrypted pool payload.");
   assertPrototypeTransferSize(value.payload.size);
   if (!Number.isInteger(value.copies) || Number(value.copies) < 1 || Number(value.copies) > 3) throw new Error("Choose 1–3 copies.");
-  const required = Number(value.required), total = Number(value.total);
   if (typeof value.required !== "number" || typeof value.total !== "number") throw new Error("Invalid coding parameters.");
+  const required = Number(value.required), total = Number(value.total);
   if (value.mode === "erasure") {
     codingBounds(required, total);
     if (value.copies !== 1 || value.payload.size < required) throw new Error("Invalid erasure copy count or size.");
@@ -226,6 +226,9 @@ export async function uploadPool(prepared: PreparedPool, receipt: PoolReceipt, s
   const inspected = await Promise.all(prepared.files.map((file) => inspectFile(file, "transfer", request.signal)));
   if (inspected.some((file, i) => file.sha256 !== receipt.manifest.parts[i]!.sha256 || file.size !== receipt.manifest.parts[i]!.size)) throw new Error("Prepared pool bytes do not match the manifest.");
   const counts: number[] = [];
+  // Parts upload strictly one at a time: every write needs its own scoped,
+  // short-lived signature and the external-signing handoff is single-flight,
+  // so concurrent part uploads would race the custody boundary.
   for (const part of receipt.manifest.parts) {
     const groups = new Set<string>();
     for (const node of part.targets) {

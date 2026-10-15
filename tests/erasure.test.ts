@@ -17,6 +17,14 @@ describe("version 1 systematic erasure layout", () => {
     ]);
   });
 
+  it("decodes the documented vector back to bytes 0–10 from parity-only parts", async () => {
+    // Decode-side known answer for the documented 11-byte vector: only the two
+    // parity parts plus the final (zero-padded) data part are available.
+    const parts = await encodeParts(new Blob([new Uint8Array(Array.from({ length: 11 }, (_, i) => i))]), 3, 5);
+    const recovered = await decodeParts([2, 3, 4].map((index) => ({ index, blob: parts[index]! })), 3, 5, 11);
+    expect(await bytes(recovered)).toEqual(Array.from({ length: 11 }, (_, i) => i));
+  });
+
   it("recovers every threshold subset, including parity-only recovery", async () => {
     for (const [required, total] of [[2, 4], [3, 6], [4, 7], [7, 8], [15, 16]]) {
       const original = new Uint8Array(Array.from({ length: 137 }, (_, i) => (i * 73) % 256));
