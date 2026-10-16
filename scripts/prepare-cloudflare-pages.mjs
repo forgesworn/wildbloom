@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { CONTENT_SECURITY_POLICY, PERMISSIONS_POLICY } from "./http-security.mjs";
+import { CONTENT_SECURITY_POLICY, GET_CONTENT_SECURITY_POLICY, PERMISSIONS_POLICY } from "./http-security.mjs";
 import { loadProductionBuild } from "./production-build.mjs";
 
 const root = resolve(process.cwd(), "dist");
@@ -24,6 +24,16 @@ const headers = [
   "  Cache-Control: no-store",
   "/index.html",
   "  Cache-Control: no-store",
+  // Rules merge on Cloudflare Pages, so the recipient page detaches the global
+  // policy before setting its own. Only /get gains 'wasm-unsafe-eval'.
+  "/get",
+  "  ! Content-Security-Policy",
+  `  Content-Security-Policy: ${GET_CONTENT_SECURITY_POLICY}`,
+  "  Cache-Control: no-store",
+  "/get.html",
+  "  ! Content-Security-Policy",
+  `  Content-Security-Policy: ${GET_CONTENT_SECURITY_POLICY}`,
+  "  Cache-Control: no-store",
   "/healthz",
   "  Cache-Control: no-store",
   "  Content-Type: application/json; charset=utf-8",
@@ -34,5 +44,6 @@ const headers = [
 
 await Promise.all([
   writeFile(resolve(root, "_headers"), headers, { encoding: "utf8", flag: "wx" }),
+  writeFile(resolve(root, "_redirects"), "/get/  /get  301\n", { encoding: "utf8", flag: "wx" }),
   writeFile(resolve(root, "healthz"), '{"status":"ok"}\n', { encoding: "utf8", flag: "wx" }),
 ]);

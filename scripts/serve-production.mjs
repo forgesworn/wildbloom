@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
-import { SECURITY_HEADERS } from "./http-security.mjs";
-import { isProductionAssetPath, loadProductionBuild } from "./production-build.mjs";
+import { GET_SECURITY_HEADERS, SECURITY_HEADERS } from "./http-security.mjs";
+import { isProductionAssetPath, isProductionDocumentPath, loadProductionBuild } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
 function argumentsFrom(argv) {
@@ -57,6 +57,7 @@ const contentTypes = new Map([
   [".js", "text/javascript; charset=utf-8"],
   [".mp4", "video/mp4"],
   [".png", "image/png"],
+  [".wasm", "application/wasm"],
 ]);
 
 function hostAllowed(request) {
@@ -137,14 +138,21 @@ const server = createServer({
     return;
   }
 
+  // The trailing-slash form would break the relative asset paths, so it redirects.
+  if (url.pathname === "/get/") {
+    respond(response, 301, { Location: "/get" });
+    return;
+  }
+
   let relative;
   try {
-    relative = decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname.slice(1));
+    relative = decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname === "/get" ? "get.html" : url.pathname.slice(1));
   } catch {
     respond(response, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
     return;
   }
-  if (relative !== "index.html" && !isProductionAssetPath(relative)) {
+  // get.html is reachable only as /get, never by its file name.
+  if (url.pathname === "/get.html" || (!isProductionDocumentPath(relative) && !isProductionAssetPath(relative))) {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
@@ -157,8 +165,8 @@ const server = createServer({
   // Ignore multipart or malformed syntax, and all HEAD/conditional ranges.
   const isFilm = relative.endsWith(".mp4");
   const headers = {
-    ...SECURITY_HEADERS,
-    "Cache-Control": relative === "index.html" ? "no-store" : "public, max-age=31536000, immutable",
+    ...(relative === "get.html" ? GET_SECURITY_HEADERS : SECURITY_HEADERS),
+    "Cache-Control": isProductionDocumentPath(relative) ? "no-store" : "public, max-age=31536000, immutable",
     "Content-Length": String(file.bytes),
     "Content-Type": contentTypes.get(extname(relative)) ?? "application/octet-stream",
     ...(isFilm ? { "Accept-Ranges": "bytes" } : {}),

@@ -19,6 +19,7 @@ function buildFixture() {
   const root = mkdtempSync(join(tmpdir(), "wildbloom-production-build-"));
   mkdirSync(join(root, "assets"));
   writeFileSync(join(root, "index.html"), "index-v1");
+  writeFileSync(join(root, "get.html"), "get-v1");
   writeFileSync(join(root, "assets", "app-abcdefgh.js"), "app-v1");
   return root;
 }

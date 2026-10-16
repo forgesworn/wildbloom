@@ -22,6 +22,14 @@ export const META_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY
   .filter((directive) => !directive.startsWith("frame-ancestors "))
   .join("; ");
 
+// The recipient page loads the pairing module's WebAssembly, which needs
+// 'wasm-unsafe-eval'. It is granted to /get only; the main client keeps its policy.
+const WASM_SCRIPT_SOURCE = "script-src 'self' 'wasm-unsafe-eval'";
+
+export const GET_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.replace("script-src 'self'", WASM_SCRIPT_SOURCE);
+
+export const GET_META_CONTENT_SECURITY_POLICY = META_CONTENT_SECURITY_POLICY.replace("script-src 'self'", WASM_SCRIPT_SOURCE);
+
 export const DENIED_PERMISSION_FEATURES = Object.freeze([
   "accelerometer",
   "ambient-light-sensor",
@@ -80,4 +88,9 @@ export const SECURITY_HEADERS = Object.freeze({
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
+});
+
+export const GET_SECURITY_HEADERS = Object.freeze({
+  ...SECURITY_HEADERS,
+  "Content-Security-Policy": GET_CONTENT_SECURITY_POLICY,
 });

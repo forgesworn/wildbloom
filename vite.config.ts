@@ -1,4 +1,4 @@
-import type { Plugin } from "vite";
+import type { Connect, Plugin, Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 
 const BROWSER_WEBTORRENT_MODULE = "/node_modules/webtorrent/dist/webtorrent.min.js";
@@ -26,6 +26,53 @@ export function productionChunkContainsNodeIp(code: string): boolean {
   return code.includes("Invalid ip address:");
 }
 
+/** True when any chunk statically or dynamically reachable from the entry holds a WebTorrent module. */
+export function entryReachesWebTorrent(bundle: Rollup.OutputBundle, entryName: string): boolean {
+  const chunks = Object.values(bundle).filter((output): output is Rollup.OutputChunk => output.type === "chunk");
+  const entry = chunks.find((chunk) => chunk.isEntry && chunk.name === entryName);
+  if (!entry) return false;
+  const seen = new Set<string>([entry.fileName]);
+  const queue = [entry];
+  while (queue.length > 0) {
+    const chunk = queue.pop()!;
+    if (chunk.moduleIds.some((id) => normaliseModuleIdentifier(id).includes("/node_modules/webtorrent/"))) return true;
+    for (const name of [...chunk.imports, ...chunk.dynamicImports]) {
+      const next = chunks.find((candidate) => candidate.fileName === name);
+      if (next && !seen.has(name)) {
+        seen.add(name);
+        queue.push(next);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Serve the recipient page at /get in dev and preview. Without this the SPA
+ * fallback answers with the main client, and /get/ would break relative assets.
+ */
+function serveRecipientRoute(): Plugin {
+  const middleware: Connect.NextHandleFunction = (request, response, next) => {
+    const url = request.url ?? "";
+    const queryStart = url.indexOf("?");
+    const path = (queryStart < 0 ? url : url.slice(0, queryStart)).split("#")[0];
+    const query = queryStart < 0 ? "" : url.slice(queryStart);
+    if (path === "/get/") {
+      response.statusCode = 301;
+      response.setHeader("Location", `/get${query}`);
+      response.end();
+      return;
+    }
+    if (path === "/get") request.url = `/get.html${query}`;
+    next();
+  };
+  return {
+    name: "wildbloom-recipient-route",
+    configureServer(server) { server.middlewares.use(middleware); },
+    configurePreviewServer(server) { server.middlewares.use(middleware); },
+  };
+}
+
 function enforceBrowserWebTorrentBoundary(): Plugin {
   let browserBundleLoaded = false;
   return {
@@ -38,6 +85,7 @@ function enforceBrowserWebTorrentBoundary(): Plugin {
     },
     generateBundle(_options, bundle) {
       if (!browserBundleLoaded) this.error("Production did not include the expected WebTorrent browser bundle.");
+      if (entryReachesWebTorrent(bundle, "get")) this.error("The recipient page must never include WebTorrent.");
       for (const output of Object.values(bundle)) {
         if (output.type === "chunk" && productionChunkContainsNodeIp(output.code)) {
           this.error(`Production chunk ${output.fileName} contains the vulnerable Node ip implementation.`);
@@ -49,7 +97,7 @@ function enforceBrowserWebTorrentBoundary(): Plugin {
 
 export default defineConfig({
   base: "./",
-  plugins: [enforceBrowserWebTorrentBoundary()],
+  plugins: [serveRecipientRoute(), enforceBrowserWebTorrentBoundary()],
   resolve: {
     // create-torrent and parse-torrent expose browser implementations for
     // filesystem access but still use POSIX path operations for metadata.
@@ -57,6 +105,7 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    rollupOptions: { input: { main: "index.html", get: "get.html" } },
   },
   test: {
     coverage: {
