@@ -3,6 +3,8 @@ import { lstatSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   isProductionAssetPath,
+  isProductionDocumentPath,
+  PRODUCTION_DOCUMENTS,
   MAX_PRODUCTION_BUILD_BYTES,
   MAX_PRODUCTION_FILE_BYTES,
   MAX_PRODUCTION_FILES,
@@ -45,7 +47,7 @@ export function validateReleaseEvidence(value) {
   for (const file of value.files) {
     expect(file && typeof file === "object" && !Array.isArray(file), "Release evidence contains an invalid file entry.");
     expect(objectKeys(file) === "bytes,path,sha256", "Release evidence file entry has an unexpected shape.");
-    expect(file.path === "index.html" || isProductionAssetPath(file.path), `Release evidence contains an unsafe file path: ${String(file.path)}`);
+    expect(isProductionDocumentPath(file.path) || isProductionAssetPath(file.path), `Release evidence contains an unsafe file path: ${String(file.path)}`);
     expect(!paths.has(file.path), `Release evidence contains a duplicate file path: ${file.path}`);
     expect(
       Number.isSafeInteger(file.bytes) && file.bytes > 0 && file.bytes <= MAX_PRODUCTION_FILE_BYTES,
@@ -56,7 +58,9 @@ export function validateReleaseEvidence(value) {
     paths.add(file.path);
   }
   expect(buildBytes <= MAX_PRODUCTION_BUILD_BYTES, "Release evidence exceeds the deployment verification byte budget.");
-  expect(paths.has("index.html"), "Release evidence does not contain index.html.");
+  for (const document of PRODUCTION_DOCUMENTS) {
+    expect(paths.has(document), `Release evidence does not contain ${document}.`);
+  }
   expect(
     JSON.stringify(value.files.map((file) => file.path))
       === JSON.stringify([...value.files.map((file) => file.path)].sort()),

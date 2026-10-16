@@ -3,8 +3,9 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha3_256 } from "@noble/hashes/sha3.js";
-import { SECURITY_HEADERS } from "./http-security.mjs";
+import { GET_SECURITY_HEADERS, SECURITY_HEADERS } from "./http-security.mjs";
 import { privateRecordOutput } from "./private-record.mjs";
+import { PRODUCTION_DOCUMENTS } from "./production-build.mjs";
 import { readReleaseEvidence, validateReleaseEvidence } from "./release-evidence-format.mjs";
 
 const V3_ONION = /^([a-z2-7]{56})\.onion$/u;
@@ -73,8 +74,8 @@ export function normaliseDeploymentOrigin(value, { allowLoopback = false } = {})
 
 export { validateReleaseEvidence };
 
-export function assertSecurityHeaders(headers, label) {
-  for (const [name, expected] of Object.entries(SECURITY_HEADERS)) {
+export function assertSecurityHeaders(headers, label, required = SECURITY_HEADERS) {
+  for (const [name, expected] of Object.entries(required)) {
     expect(headers.get(name) === expected, `${label} changed required ${name}.`);
   }
 }
@@ -93,6 +94,7 @@ async function requestExact(url, {
   expectedContentType,
   requireContentLength = true,
   method = "GET",
+  securityHeaders = SECURITY_HEADERS,
   label,
 }) {
   const controller = new AbortController();
@@ -118,7 +120,7 @@ async function requestExact(url, {
     if (requireContentLength || contentLength !== null) {
       expect(contentLength === String(expectedBytes), `${label} has an unexpected Content-Length.`);
     }
-    assertSecurityHeaders(response.headers, label);
+    assertSecurityHeaders(response.headers, label, securityHeaders);
     if (url.startsWith("https://")) assertHsts(response.headers);
     if (method === "HEAD") {
       expect(response.body === null, `${label} returned a body for HEAD.`);
@@ -188,10 +190,24 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
     label: "Deployment index HEAD",
   });
 
-  for (const file of validatedEvidence.files.filter((item) => item.path !== "index.html")) {
+  // The recipient page is the only document with its own policy ('wasm-unsafe-eval').
+  const recipient = validatedEvidence.files.find((file) => file.path === "get.html");
+  expect(recipient, "Release evidence does not contain get.html.");
+  const recipientRequest = {
+    expectedBytes: recipient.bytes,
+    expectedCacheControl: "no-store",
+    expectedContentType: "text/html; charset=utf-8",
+    requireContentLength: false,
+    securityHeaders: GET_SECURITY_HEADERS,
+  };
+  await requestExact(`${origin}/get`, { ...recipientRequest, expectedHash: recipient.sha256, label: "Deployment recipient page" });
+  await requestExact(`${origin}/get`, { ...recipientRequest, method: "HEAD", label: "Deployment recipient page HEAD" });
+
+  for (const file of validatedEvidence.files.filter((item) => !PRODUCTION_DOCUMENTS.includes(item.path))) {
     const contentType = file.path.endsWith(".mp4") ? "video/mp4"
       : file.path.endsWith(".png") ? "image/png"
         : file.path.endsWith(".css") ? "text/css; charset=utf-8"
+          : file.path.endsWith(".wasm") ? "application/wasm"
           : ["text/javascript; charset=utf-8", "application/javascript"];
     await requestExact(`${origin}/${file.path}`, {
       expectedBytes: file.bytes,

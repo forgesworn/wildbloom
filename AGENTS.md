@@ -24,6 +24,7 @@ delivery. It is interoperability work, not a new storage network.
 - `npm run smoke:browser:firefox`: the production journey in installed Playwright Firefox
 - `npm run smoke:browser:webkit`: the production journey in installed Playwright WebKit
 - `npm run smoke:swarm`: two isolated Chromium contexts transferring through a controlled TLS WebSocket tracker
+- `npm run acceptance:get`: recipient page `/get` in Chromium against a real pairing service and synthetic storage; requires `FOREGATHER_SERVER_BIN`
 - `npm run acceptance:recovery`: fresh-browser recovery from a restarted real Node replica after the original node stops; requires `WILDBLOOM_NODE_BIN`
 - `npm run acceptance:pool:quick`: disposable local nodes, threshold recovery and repeated automatic owner repair; requires a production build and `WILDBLOOM_NODE_BIN`
 - `npm run dev`: local Vite development server
@@ -108,6 +109,13 @@ flags as `npm run <script> -- <flags>`.
 - Keep the core framework-free and inject network primitives in tests.
 - Use British English in prose. Use ESM and explicit `.js` extensions for
   relative TypeScript imports.
+
+## Recipient page
+
+- `/get` is its own entry (`get.html`, `src/get/`). It must never include WebTorrent; the build fails if it does.
+- It alone gets `'wasm-unsafe-eval'` (response headers and its meta policy). Do not widen the main policy.
+- All recipient strings live in `src/get/copy.ts`. The pairing service origin is a build-time constant
+  (`VITE_WILDBLOOM_PAIR_RELAY`), never read from a link.
 
 ## Protocol scope
 

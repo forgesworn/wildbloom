@@ -2,10 +2,17 @@ import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const HASHED_ASSET = /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:css|js|mp4|png)$/u;
+const HASHED_ASSET = /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(?:css|js|mp4|png|wasm)$/u;
 export const MAX_PRODUCTION_FILES = 64;
 export const MAX_PRODUCTION_FILE_BYTES = 32 * 1024 * 1024;
 export const MAX_PRODUCTION_BUILD_BYTES = 64 * 1024 * 1024;
+
+/** HTML entries served without caching. get.html is the recipient page at /get. */
+export const PRODUCTION_DOCUMENTS = Object.freeze(["get.html", "index.html"]);
+
+export function isProductionDocumentPath(relative) {
+  return PRODUCTION_DOCUMENTS.includes(relative);
+}
 
 export function isProductionAssetPath(relative) {
   return HASHED_ASSET.test(relative);
@@ -38,12 +45,12 @@ export function loadProductionBuild(root = resolve(process.cwd(), "dist")) {
   const rootEntries = readdirSync(root, { withFileTypes: true });
   const unexpectedRootEntries = rootEntries
     .map((entry) => entry.name)
-    .filter((name) => name !== "assets" && name !== "index.html");
+    .filter((name) => name !== "assets" && !isProductionDocumentPath(name));
   if (unexpectedRootEntries.length > 0) {
     throw new Error(`Production build contains unexpected root entries: ${unexpectedRootEntries.sort().join(", ")}`);
   }
 
-  regularFile(resolve(root, "index.html"), "Production index.html");
+  for (const document of PRODUCTION_DOCUMENTS) regularFile(resolve(root, document), `Production ${document}`);
   const assetsPath = resolve(root, "assets");
   let assetDirectory;
   try {
@@ -67,7 +74,7 @@ export function loadProductionBuild(root = resolve(process.cwd(), "dist")) {
     }
   }
 
-  const paths = ["index.html", ...assetEntries.map((entry) => `assets/${entry.name}`)].sort();
+  const paths = [...PRODUCTION_DOCUMENTS, ...assetEntries.map((entry) => `assets/${entry.name}`)].sort();
   if (paths.length > MAX_PRODUCTION_FILES) {
     throw new Error(`Production build contains more than ${MAX_PRODUCTION_FILES} files.`);
   }

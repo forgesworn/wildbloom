@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
+  GET_CONTENT_SECURITY_POLICY,
+  GET_META_CONTENT_SECURITY_POLICY,
+  GET_SECURITY_HEADERS,
   META_CONTENT_SECURITY_POLICY,
   PERMISSIONS_POLICY,
   SECURITY_HEADERS,
@@ -56,6 +59,7 @@ function onionHostname() {
 function releaseEvidence() {
   const files = [
     { path: "assets/app-abcdefgh.js", bytes: 3, sha256: sha256("app") },
+    { path: "get.html", bytes: 3, sha256: sha256("get") },
     { path: "index.html", bytes: 5, sha256: sha256("index") },
   ];
   return {
@@ -89,12 +93,16 @@ function stubExactEdge({
       body = "app";
       cacheControl = "public, max-age=31536000, immutable";
       contentType = javascriptContentType;
+    } else if (url.endsWith("/get")) {
+      body = "get";
+      cacheControl = "no-store";
+      contentType = "text/html; charset=utf-8";
     } else {
       body = "index";
       cacheControl = "no-store";
       contentType = "text/html; charset=utf-8";
     }
-    const headers = new Headers(SECURITY_HEADERS);
+    const headers = new Headers(url.endsWith("/get") ? GET_SECURITY_HEADERS : SECURITY_HEADERS);
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     headers.set("Cache-Control", cacheControl);
     headers.set("Content-Type", contentType);
@@ -212,6 +220,16 @@ describe("deployed security-header validation", () => {
     const source = readFileSync(new URL("../index.html", import.meta.url), "utf8");
     const metaPolicy = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/u.exec(source)?.[1];
     expect(metaPolicy).toBe(META_CONTENT_SECURITY_POLICY);
+  });
+
+  it("keeps the recipient page CSP aligned and limits wasm-unsafe-eval to it", () => {
+    const source = readFileSync(new URL("../get.html", import.meta.url), "utf8");
+    const metaPolicy = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/u.exec(source)?.[1];
+    expect(metaPolicy).toBe(GET_META_CONTENT_SECURITY_POLICY);
+    expect(GET_CONTENT_SECURITY_POLICY).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(GET_CONTENT_SECURITY_POLICY.replace(" 'wasm-unsafe-eval'", "")).toBe(CONTENT_SECURITY_POLICY);
+    expect(CONTENT_SECURITY_POLICY).not.toContain("wasm-unsafe-eval");
+    expect(META_CONTENT_SECURITY_POLICY).not.toContain("wasm-unsafe-eval");
   });
 
   it("publishes one exact canonical production origin", () => {

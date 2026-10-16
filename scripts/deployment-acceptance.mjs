@@ -5,10 +5,11 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { inspectProductionBuild } from "./production-build.mjs";
+import { inspectProductionBuild, PRODUCTION_DOCUMENTS } from "./production-build.mjs";
 import { collectReleaseEvidence } from "./release-evidence.mjs";
 import {
   CONTENT_SECURITY_POLICY,
+  GET_CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
   PERMISSIONS_POLICY,
 } from "./http-security.mjs";
@@ -257,9 +258,9 @@ function expectDeploymentVerificationCli(evidence, port) {
   }
 }
 
-function expectSecurityHeaders(response, label) {
+function expectSecurityHeaders(response, label, expectedPolicy = CONTENT_SECURITY_POLICY) {
   const csp = response.headers["content-security-policy"] ?? "";
-  expect(csp === CONTENT_SECURITY_POLICY, `${label} changed the exact production CSP.`);
+  expect(csp === expectedPolicy, `${label} changed the exact production CSP.`);
   for (const directive of [
     "default-src 'none'",
     "base-uri 'none'",
@@ -270,7 +271,7 @@ function expectSecurityHeaders(response, label) {
     "frame-src 'none'",
     "manifest-src 'none'",
     "media-src 'self'",
-    "script-src 'self'",
+    expectedPolicy === CONTENT_SECURITY_POLICY ? "script-src 'self'" : "script-src 'self' 'wasm-unsafe-eval'",
     "connect-src 'self' https: wss:",
     "trusted-types 'none'",
     "require-trusted-types-for 'script'",
@@ -278,6 +279,10 @@ function expectSecurityHeaders(response, label) {
     expect(csp.includes(directive), `${label} omitted CSP directive: ${directive}`);
   }
   expect(!csp.includes("'unsafe-inline'") && !csp.includes("'unsafe-eval'"), `${label} weakened script/style execution policy.`);
+  expect(
+    csp.includes("'wasm-unsafe-eval'") === (expectedPolicy !== CONTENT_SECURITY_POLICY),
+    `${label} has the wrong WebAssembly policy.`,
+  );
   expect(response.headers["cross-origin-opener-policy"] === "same-origin", `${label} omitted the opener boundary.`);
   expect(response.headers["cross-origin-resource-policy"] === "same-origin", `${label} omitted the resource boundary.`);
   expect(response.headers["referrer-policy"] === "no-referrer", `${label} could leak referrers.`);
@@ -370,7 +375,18 @@ try {
   expect(indexHead.status === 200 && indexHead.body.length === 0, "HEAD returned HTML response bytes.");
   expect(indexHead.headers["content-length"] === String(expectedIndex.length), "HEAD did not report the exact HTML length.");
 
-  for (const file of evidence.files.filter((item) => item.path !== "index.html")) {
+  const recipientPage = await exchange(port, { path: "/get" });
+  const expectedRecipient = expectedFiles.get("get.html");
+  expect(recipientPage.status === 200 && recipientPage.body.equals(expectedRecipient), "Production /get did not return exact built recipient bytes.");
+  expect(recipientPage.headers["cache-control"] === "no-store", "Recipient page was cacheable.");
+  expect(recipientPage.headers["content-type"] === "text/html; charset=utf-8", "Recipient page MIME type was not exact.");
+  expectSecurityHeaders(recipientPage, "Recipient page", GET_CONTENT_SECURITY_POLICY);
+  const recipientSlash = await exchange(port, { path: "/get/" });
+  expect(recipientSlash.status === 301 && recipientSlash.headers.location === "/get", "Production /get/ did not redirect to /get.");
+  const recipientFile = await exchange(port, { path: "/get.html" });
+  expect(recipientFile.status === 404, "Production exposed get.html by file name.");
+
+  for (const file of evidence.files.filter((item) => !PRODUCTION_DOCUMENTS.includes(item.path))) {
     const response = await exchange(port, { path: `/${file.path}` });
     expect(response.status === 200, `Hashed asset was not served: ${file.path}`);
     expect(response.headers["cache-control"] === "public, max-age=31536000, immutable", `Hashed asset was not immutable: ${file.path}`);
@@ -411,7 +427,7 @@ try {
   }
   writeFileSync(join(deploymentRoot, "dist", "assets", "injected-abcdefgh.js"), "injected after startup");
   for (const file of evidence.files) {
-    const response = await exchange(port, { path: file.path === "index.html" ? "/" : `/${file.path}` });
+    const response = await exchange(port, { path: file.path === "index.html" ? "/" : file.path === "get.html" ? "/get" : `/${file.path}` });
     expect(response.status === 200 && response.body.equals(expectedFiles.get(file.path)), `Production server did not retain its startup snapshot: ${file.path}`);
     expect(createHash("sha256").update(response.body).digest("hex") === file.sha256, `Startup snapshot hash drifted: ${file.path}`);
   }
@@ -431,7 +447,7 @@ try {
     { path: "http://attacker.invalid/", status: 400, label: "absolute-form target" },
     { path: "/?private-query-marker", status: 400, label: "root query string" },
     { path: "/healthz?private-query-marker", status: 400, label: "health query string" },
-    { path: `/${evidence.files.find((item) => item.path !== "index.html").path}?private-query-marker`, status: 400, label: "asset query string" },
+    { path: `/${evidence.files.find((item) => !PRODUCTION_DOCUMENTS.includes(item.path)).path}?private-query-marker`, status: 400, label: "asset query string" },
   ];
   for (const probe of rejected) {
     const response = await exchange(port, { path: probe.path });

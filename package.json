@@ -45,6 +45,7 @@
     "check": "npm run install:policy && npm run encryption:vector && npm run encryption:semantic-vectors && npm run acceptance:cross-device:self-test && npm run test:checkout-preflight && npm run typecheck && npm run test:coverage && npm run build && npm run acceptance:deployment && npm run smoke:browser && npm run acceptance:storage-discovery && npm run secrets",
     "ci": "npm run check && npm run audit",
     "acceptance:recovery": "node scripts/recovery-acceptance.mjs",
+    "acceptance:get": "node scripts/get-acceptance.mjs",
     "acceptance:pool": "node scripts/pool-acceptance.mjs",
     "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick",
     "acceptance:services": "node scripts/services-acceptance.mjs",
@@ -54,6 +55,7 @@
     "test:checkout-preflight": "node --test scripts/test-checkout-preflight.mjs"
   },
   "dependencies": {
+    "@forgesworn/foregather-kit": "0.4.1",
     "@noble/hashes": "2.4.0",
     "402-announce": "2.3.0",
     "create-torrent": "6.1.3",
