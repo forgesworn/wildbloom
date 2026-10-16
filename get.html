@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; font-src 'none'; frame-src 'none'; manifest-src 'none'; media-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:* http://*.onion ws://*.onion; worker-src 'self' blob:; trusted-types 'none'; require-trusted-types-for 'script'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f3eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0d0b" media="(prefers-color-scheme: dark)" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="data:," />
+    <title>Get your file · Wildbloom</title>
+  </head>
+  <body>
+    <div class="page">
+      <header class="brand">
+        <svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true" focusable="false"><path d="M14 24V12M14 17C3 18 3 7 3 7s11-1 11 10ZM14 12C14 2 25 3 25 3s1 10-11 9Z" /></svg>
+        <span class="brand-name">Wildbloom</span>
+      </header>
+      <p id="offline" class="banner" role="status"></p>
+      <main id="main">
+        <noscript>
+          <h1>Get your file</h1>
+          <p>This page needs JavaScript to open the file. Turn it on, or try another browser.</p>
+        </noscript>
+        <h1 id="title" tabindex="-1"></h1>
+        <div id="view"></div>
+      </main>
+      <footer class="footer"></footer>
+      <div id="live" class="visually-hidden" role="status" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/get/main.ts"></script>
+  </body>
+</html>

@@ -4,6 +4,9 @@ import {
   assertHex64,
   assertPrototypeFileSize,
   assertPrototypeTransferSize,
+  MAX_PROTOTYPE_FILE_BYTES,
+  MAX_PROTOTYPE_TRANSFER_BYTES,
+  HEX_64,
   fileExtension,
   normaliseBlossomServer,
   normaliseBlossomUrl,
@@ -26,7 +29,24 @@ export interface BlossomRequestOptions {
 export interface BlossomRetrievalOptions extends BlossomRequestOptions {
   /** Explicitly chosen replica origin; never discovered or tried automatically. */
   readonly replicaServer?: string;
+  /** Called after each received chunk with the running byte count and the signed total. */
+  readonly onProgress?: (received: number, total: number) => void;
 }
+
+/** Failure of a retrieval, so callers can tell a missing object from damaged bytes. */
+export class BlossomRetrievalError extends Error {
+  constructor(
+    message: string,
+    readonly kind: "http" | "integrity",
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "BlossomRetrievalError";
+  }
+}
+
+/** The fields a retrieval needs, so a share descriptor needs no signed event. */
+export type VerifiableBlob = Pick<ResolvedHybridEvent, "url" | "sha256" | "size" | "mimeType">;
 
 function requestDeadline(options: BlossomRequestOptions, operation: "upload" | "retrieval") {
   const timeoutMs = options.timeoutMs ?? BLOSSOM_OPERATION_TIMEOUT_MS;
@@ -196,7 +216,7 @@ async function readTextCapped(response: Response, maximumBytes: number, signal: 
 }
 
 export async function fetchVerifiedBlob(
-  resolved: ResolvedHybridEvent,
+  resolved: VerifiableBlob,
   options: BlossomRetrievalOptions = {},
 ): Promise<Blob> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -216,12 +236,18 @@ export async function fetchVerifiedBlob(
       redirect: "error",
       signal: deadline.signal,
     }), deadline.signal);
-    if (!response.ok) throw new Error(`Blossom retrieval failed: ${safeDiagnostic(response.statusText || `HTTP ${response.status}`)}`);
+    if (!response.ok) {
+      throw new BlossomRetrievalError(
+        `Blossom retrieval failed: ${safeDiagnostic(response.statusText || `HTTP ${response.status}`)}`,
+        "http",
+        response.status,
+      );
+    }
     if (response.url && response.url !== url) throw new Error("Blossom retrieval changed URL unexpectedly.");
 
     const advertisedLength = response.headers.get("Content-Length");
     if (advertisedLength !== null && Number(advertisedLength) !== resolved.size) {
-      throw new Error("Blossom advertised a byte count that differs from the signed event.");
+      throw new BlossomRetrievalError("Blossom advertised a byte count that differs from the signed event.", "integrity");
     }
     if (!response.body) throw new Error("Blossom response has no readable body.");
 
@@ -236,18 +262,21 @@ export async function fetchVerifiedBlob(
         received += value.byteLength;
         if (received > resolved.size) {
           await reader.cancel("response larger than signed size");
-          throw new Error("Blossom returned more bytes than the signed event permits.");
+          throw new BlossomRetrievalError("Blossom returned more bytes than the signed event permits.", "integrity");
         }
         chunks.push(value);
+        options.onProgress?.(received, resolved.size);
       }
     } catch (error) {
       if (deadline.signal.aborted) await reader.cancel(deadline.signal.reason).catch(() => undefined);
       throw error;
     }
-    if (received !== resolved.size) throw new Error("Blossom returned fewer bytes than the signed event declares.");
+    if (received !== resolved.size) {
+      throw new BlossomRetrievalError("Blossom returned fewer bytes than the signed event declares.", "integrity");
+    }
     const blob = new Blob(chunks as BlobPart[], { type: resolved.mimeType });
     if (await abortable(sha256Hex(blob, deadline.signal), deadline.signal) !== resolved.sha256) {
-      throw new Error("Blossom bytes failed SHA-256 verification.");
+      throw new BlossomRetrievalError("Blossom bytes failed SHA-256 verification.", "integrity");
     }
     return blob;
   } catch (error) {
@@ -255,4 +284,90 @@ export async function fetchVerifiedBlob(
   } finally {
     deadline.dispose();
   }
+}
+
+/** What the sender hands over inside the encrypted pairing channel (design spec 11.2). */
+export interface ShareDescriptor {
+  readonly v: "wildbloom-share/1";
+  readonly url: string;
+  readonly sha256: string;
+  /** Ciphertext bytes, as stored. */
+  readonly size: number;
+  readonly key: string;
+  /** Display only; the real name comes from the encrypted metadata. */
+  readonly name: string;
+  /** Plaintext bytes, for display only. */
+  readonly bytes: number;
+  readonly expires: number;
+}
+
+/** `too-large` is kept apart from `invalid` because the page words them differently. */
+export class ShareDescriptorError extends Error {
+  constructor(message: string, readonly reason: "invalid" | "too-large") {
+    super(message);
+    this.name = "ShareDescriptorError";
+  }
+}
+
+export const SHARE_DESCRIPTOR_MAX_BYTES = 16_364;
+const SHARE_DESCRIPTOR_KEYS = "bytes,expires,key,name,sha256,size,url,v";
+const SHARE_KEY = /^wbk1_[A-Za-z0-9_-]{43}$/u;
+
+function invalidDescriptor(message: string): never {
+  throw new ShareDescriptorError(message, "invalid");
+}
+
+/** Strict validation of untrusted descriptor bytes. Never fetches anything. */
+export function parseShareDescriptor(payload: Uint8Array, profile: NetworkProfile = "direct"): ShareDescriptor {
+  if (payload.byteLength === 0 || payload.byteLength > SHARE_DESCRIPTOR_MAX_BYTES) invalidDescriptor("The share details have an unexpected size.");
+  let value: unknown;
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload));
+  } catch {
+    return invalidDescriptor("The share details are not valid JSON.");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) invalidDescriptor("The share details have the wrong shape.");
+  const candidate = value as Record<string, unknown>;
+  if (Object.keys(candidate).sort().join(",") !== SHARE_DESCRIPTOR_KEYS) invalidDescriptor("The share details have unexpected fields.");
+  if (candidate.v !== "wildbloom-share/1") invalidDescriptor("The share details have an unsupported version.");
+  const { url, sha256, size, key, name, bytes, expires } = candidate;
+  if (typeof sha256 !== "string" || !HEX_64.test(sha256)) invalidDescriptor("The share details have an invalid SHA-256.");
+  if (typeof url !== "string") invalidDescriptor("The share details have an invalid address.");
+  let normalised: string;
+  try {
+    normalised = normaliseBlossomUrl(url, sha256, profile);
+  } catch {
+    return invalidDescriptor("The share details have an invalid address.");
+  }
+  const parsedUrl = new URL(normalised);
+  if (normalised !== url || parsedUrl.pathname.split("/").at(-1) !== sha256) invalidDescriptor("The share address must end with the SHA-256.");
+  if (typeof key !== "string" || !SHARE_KEY.test(key)) invalidDescriptor("The share details have an invalid key.");
+  if (typeof name !== "string" || name.length === 0 || sanitiseFileName(name) !== name) invalidDescriptor("The share details have an invalid name.");
+  for (const count of [size, bytes]) {
+    if (typeof count !== "number" || !Number.isSafeInteger(count) || count <= 0) invalidDescriptor("The share details have an invalid size.");
+  }
+  if (typeof expires !== "number" || !Number.isSafeInteger(expires) || expires <= 0) invalidDescriptor("The share details have an invalid expiry.");
+  if ((size as number) > MAX_PROTOTYPE_TRANSFER_BYTES || (bytes as number) > MAX_PROTOTYPE_FILE_BYTES) {
+    throw new ShareDescriptorError("The shared file is larger than this browser accepts.", "too-large");
+  }
+  return Object.freeze({
+    v: "wildbloom-share/1",
+    url: normalised,
+    sha256,
+    size: size as number,
+    key,
+    name,
+    bytes: bytes as number,
+    expires,
+  });
+}
+
+/** Maps a share descriptor onto the verified retrieval path; no check is relaxed. */
+export function fetchVerifiedShare(descriptor: ShareDescriptor, options: BlossomRetrievalOptions = {}): Promise<Blob> {
+  return fetchVerifiedBlob({
+    url: descriptor.url,
+    sha256: descriptor.sha256,
+    size: descriptor.size,
+    mimeType: "application/vnd.forgesworn.encrypted",
+  }, options);
 }
