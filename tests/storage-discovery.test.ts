@@ -113,7 +113,7 @@ describe("explicit public storage discovery", () => {
     d.accept(Array.from({length:512},(_,i) => signed({...base,identifier:`service-${i}`})),now);
     expect(() => d.accept([signed({...base,identifier:"extra"})],now)).toThrow(/memory limit/u);
     expect(d.current(now)).toHaveLength(512);
-  }, 30_000); // 512 independent Schnorr signatures and re-verification under coverage on hosted Windows/macOS.
+  }, 120_000); // 513 distinct Schnorr signatures plus ~1,600 verifications are CPU-bound (~5 s of CPU); 30 s timed out on a loaded host.
   it("fetches only the selected origin with a bounded unsigned GET and binds the HTTP identity", async () => {
     const f = fixture("paid"), a = parseStorageAnnouncement(f.signed_event,{now});
     const fresh = {...f.description,observed_at:now,expires_at:now+7200};
