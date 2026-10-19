@@ -55,7 +55,8 @@ describe("recipient copy", () => {
 
   it("writes the saved-file screen with the file name", () => {
     expect(COPY.screens.r18.body("holiday-photos.zip")).toBe(
-      "Your browser has saved holiday-photos.zip. If you can't find it, look in your downloads or save it again. You can close this page.",
+      "Your browser has saved holiday-photos.zip. If you can't find it, look in your downloads or save it again. "
+        + "Keep this page open until the file has finished saving. Then you can close this page.",
     );
   });
 });

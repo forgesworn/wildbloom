@@ -265,6 +265,7 @@ async function openRecipient(link, { colorScheme = "light", viewport = { width: 
   const requests = [];
   page.on("request", (request) => requests.push(request.url()));
   const consoleProblems = [];
+  const pageErrors = [];
   // The shared Permissions-Policy header lists features this Chrome does not know; that is not this page.
   page.on("console", (message) => {
     if (!["error", "warning"].includes(message.type()) || message.text().includes("Permissions-Policy header")) return;
@@ -272,9 +273,9 @@ async function openRecipient(link, { colorScheme = "light", viewport = { width: 
     if (message.text().includes("status of 404") && message.location().url.startsWith(fixtures.relayOrigin)) return;
     consoleProblems.push(message.text());
   });
-  page.on("pageerror", (error) => consoleProblems.push(String(error)));
+  page.on("pageerror", (error) => { pageErrors.push(String(error)); consoleProblems.push(String(error)); });
   await page.goto(link);
-  return { context, page, requests, consoleProblems };
+  return { context, page, requests, consoleProblems, pageErrors };
 }
 
 const title = (page) => page.locator("#title").textContent();
@@ -294,8 +295,29 @@ async function submitWords(page, words) {
   await page.getByRole("button", { name: "Continue" }).click();
 }
 
-/** Words entered, three words shown, Yes pressed, details sent. Leaves the page at "Your file is ready". */
-async function toReady(share, recipient, { send = true } = {}) {
+const DOWNLOADED_REPLY = '{"v":1,"event":"downloaded"}';
+const within = (promise, ms) => Promise.race([promise, new Promise((done) => setTimeout(() => done(undefined), ms))]);
+
+/** The sender's side of the one reply: resolves with the bytes, or with undefined if none arrives in time. */
+async function expectReply(share) {
+  assert.ok(share.reply, "The share must be set up with keepOpen to listen for a reply.");
+  const outcome = await within(share.reply, 10_000);
+  assert.ok(outcome, "The sender should hear back once the file is saved.");
+  assert.ok(outcome.ok, `The reply should reach the sender: ${outcome.error}`);
+  assert.equal(Buffer.from(outcome.bytes).toString("utf8"), DOWNLOADED_REPLY, "The reply is exactly the downloaded message.");
+  assert.equal(outcome.bytes.length, 28);
+}
+
+async function expectNoReply(share, reason) {
+  assert.ok(share.reply, "The share must be set up with keepOpen to listen for a reply.");
+  assert.equal(await within(share.reply, 1_500), undefined, reason);
+}
+
+/**
+ * Words entered, three words shown, Yes pressed, details sent. Leaves the page at "Your file is ready".
+ * With keepOpen the sender holds the channel and listens for the recipient's one reply in share.reply.
+ */
+async function toReady(share, recipient, { send = true, keepOpen = false } = {}) {
   const { page } = recipient;
   await submitWords(page, share.words);
   await expectTitle(page, "Check these words with the sender");
@@ -308,8 +330,9 @@ async function toReady(share, recipient, { send = true } = {}) {
   await page.getByRole("button", { name: "Yes, they match" }).click();
   await expectTitle(page, "Waiting for the sender");
   if (send) {
-    const receipt = await share.inviter.send({ payload: share.payload });
+    const receipt = await share.inviter.send({ payload: share.payload, keepOpen });
     assert.equal(receipt.decrypted, true, "The receipt proves the recipient decrypted the details.");
+    if (keepOpen) share.reply = share.inviter.awaitReply().then((bytes) => ({ ok: true, bytes }), (error) => ({ ok: false, error }));
     await expectTitle(page, "Your file is ready");
   }
 }
@@ -413,18 +436,29 @@ try {
     await share.inviter.cancel();
   });
 
-  await step("journey: correct words, matching check words, download, saved bytes equal the source", async () => {
+  await step("journey: correct words, matching check words, download, saved bytes equal the source, the sender hears once", async () => {
     blossomMode = "slow";
     const share = await newShare();
     const recipient = await openRecipient(share.link);
-    await toReady(share, recipient);
+    await toReady(share, recipient, { keepOpen: true });
     const { page, context, consoleProblems } = recipient;
     assert.equal(await page.locator(".file-name").innerText(), vector.source.name);
     assert.match(await page.locator(".file-size").innerText(), /^43 B$/u);
     await shot(page, "r15-ready");
+    const relayBefore = relayLog.length;
     const bytes = await downloadAndRead(page);
     assert.deepEqual(bytes, sourceBytes, "The saved file is byte for byte the source.");
     await expectTitle(page, "Downloaded");
+    await expectReply(share);
+    const sent = relayLog.slice(relayBefore);
+    assert.equal(sent.length, 1, `Saving the file sends one message to the sender and nothing else: ${JSON.stringify(sent)}`);
+    assert.match(await page.locator("#view").innerText(), /Keep this page open until the file has finished saving\./u);
+    // Save again works from the copy in memory: no new fetch, and the sender is not told a second time.
+    const settled = { relay: relayLog.length, blossom: blossomLog.length };
+    const [again] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Save again" }).click()]);
+    assert.deepEqual(readFileSync(await again.path()), sourceBytes, "Save again gives the same file.");
+    await new Promise((done) => setTimeout(done, 500));
+    assert.deepEqual({ relay: relayLog.length, blossom: blossomLog.length }, settled, "Save again uses the copy in memory and sends nothing.");
     const titles = await page.evaluate(() => window.__titles);
     for (const expected of ["Downloading", "Checking the file", "Downloaded"]) assert.ok(titles.includes(expected), `Saw ${expected} in ${JSON.stringify(titles)}`);
     assert.ok(titles.indexOf("Downloading") < titles.indexOf("Downloaded"));
@@ -486,21 +520,23 @@ try {
     share.inviter.cancel();
   });
 
-  await step("R20: a 404 at Download shows the no-longer-shared screen", async () => {
+  await step("R20: a 404 at Download shows the no-longer-shared screen and the sender hears nothing", async () => {
     const share = await newShare();
     const recipient = await openRecipient(share.link);
-    await toReady(share, recipient);
+    await toReady(share, recipient, { keepOpen: true });
     blossomMode = "404";
     await recipient.page.getByRole("button", { name: "Download" }).click();
     await expectTitle(recipient.page, "This file is no longer shared");
     await shot(recipient.page, "r20-no-longer-shared");
+    await expectNoReply(share, "A file that was never saved is never reported as saved.");
+    share.inviter.dispose();
     blossomMode = "ok";
   });
 
-  await step("R21: a one-byte change of the same size is rejected and nothing is saved", async () => {
+  await step("R21: a one-byte change of the same size is rejected, nothing is saved and the sender is not told", async () => {
     const share = await newShare();
     const recipient = await openRecipient(share.link);
-    await toReady(share, recipient);
+    await toReady(share, recipient, { keepOpen: true });
     let downloads = 0;
     recipient.page.on("download", () => { downloads += 1; });
     blossomMode = "flip";
@@ -509,17 +545,33 @@ try {
     await shot(recipient.page, "r21-failed-check");
     await new Promise((done) => setTimeout(done, 500));
     assert.equal(downloads, 0, "A tampered blob never triggers a download.");
+    await expectNoReply(share, "A file that fails its check is never reported as saved.");
     blossomMode = "ok";
     const relayBefore = relayLog.length;
     const bytes = await downloadAndRead(recipient.page);
     assert.deepEqual(bytes, sourceBytes, "Try again after a damaged copy saves the right file.");
-    assert.equal(relayLog.length, relayBefore, "Retrying needs no new pairing.");
+    await expectReply(share);
+    assert.equal(relayLog.length - relayBefore, 1, "Retrying needs no new pairing; the only request is the reply.");
+  });
+
+  await step("R21: a file whose size differs from the share details is rejected, nothing is saved and the sender is not told", async () => {
+    const share = await newShare();
+    share.payload = Buffer.from(JSON.stringify({ ...JSON.parse(share.payload), bytes: vector.source.bytes + 1 }));
+    const recipient = await openRecipient(share.link);
+    await toReady(share, recipient, { keepOpen: true });
+    let downloads = 0;
+    recipient.page.on("download", () => { downloads += 1; });
+    await recipient.page.getByRole("button", { name: "Download" }).click();
+    await expectTitle(recipient.page, "This file didn't pass its check");
+    await expectNoReply(share, "A file of the wrong size is never reported as saved.");
+    assert.equal(downloads, 0, "A file of the wrong size is never handed to the browser.");
+    share.inviter.dispose();
   });
 
   await step("R19: an unreachable node shows the unavailable screen; Try again works once it returns, with no re-pairing", async () => {
     const share = await newShare();
     const recipient = await openRecipient(share.link);
-    await toReady(share, recipient);
+    await toReady(share, recipient, { keepOpen: true });
     blossomMode = "drop";
     await recipient.page.getByRole("button", { name: "Download" }).click();
     await expectTitle(recipient.page, "The file isn't available right now");
@@ -527,11 +579,51 @@ try {
     blossomMode = "503";
     await recipient.page.getByRole("button", { name: "Try again" }).click();
     await expectTitle(recipient.page, "The file isn't available right now");
+    await expectNoReply(share, "A file that could not be fetched is never reported as saved.");
     blossomMode = "ok";
     const relayBefore = relayLog.length;
     const bytes = await downloadAndRead(recipient.page);
     assert.deepEqual(bytes, sourceBytes);
-    assert.equal(relayLog.length, relayBefore, "Try again does not pair again.");
+    await expectReply(share);
+    assert.equal(relayLog.length - relayBefore, 1, "Try again does not pair again; the only request is the reply.");
+  });
+
+  await step("R23: a save the browser refuses sends no reply until Save again works, then exactly one", async () => {
+    const share = await newShare();
+    const recipient = await openRecipient(share.link);
+    await toReady(share, recipient, { keepOpen: true });
+    const { page } = recipient;
+    await page.evaluate(() => {
+      const original = URL.createObjectURL.bind(URL);
+      let calls = 0;
+      URL.createObjectURL = (blob) => {
+        calls += 1;
+        if (calls === 1) throw new Error("save refused");
+        return original(blob);
+      };
+    });
+    await page.getByRole("button", { name: "Download" }).click();
+    await expectTitle(page, "Your browser didn't save the file");
+    await shot(page, "r23-save-failed");
+    await expectNoReply(share, "A save the browser refused is never reported as saved.");
+    const relayBefore = relayLog.length;
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Save again" }).click()]);
+    assert.deepEqual(readFileSync(await download.path()), sourceBytes, "Save again saves the file from memory.");
+    await expectTitle(page, "Downloaded");
+    await expectReply(share);
+    assert.equal(relayLog.length - relayBefore, 1, "Save again fetches nothing; the only request is the reply.");
+  });
+
+  await step("compat: a sender that does not hold the channel open still gets a normal download and the page stays quiet", async () => {
+    const share = await newShare();
+    const recipient = await openRecipient(share.link);
+    await toReady(share, recipient);
+    const bytes = await downloadAndRead(recipient.page);
+    assert.deepEqual(bytes, sourceBytes);
+    await expectTitle(recipient.page, "Downloaded");
+    await new Promise((done) => setTimeout(done, 1_000));
+    assert.equal(await title(recipient.page), "Downloaded", "The late or refused reply never changes the screen.");
+    assert.deepEqual(recipient.pageErrors, [], "The best-effort reply raises no unhandled error.");
   });
 
   await step("offline: the banner shows, the words are kept and nothing is sent", async () => {
