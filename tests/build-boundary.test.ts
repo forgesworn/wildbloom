@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   entryReachesWebTorrent,
@@ -38,30 +39,38 @@ describe("production WebTorrent build boundary", () => {
     expect(productionChunkContainsNodeIp("const peerAddress = 'example';")).toBe(false);
   });
 
-  describe("recipient entry", () => {
-    function chunk(name: string, moduleIds: string[], imports: string[] = [], isEntry = false, entryName = name) {
-      return { type: "chunk", fileName: `assets/${name}.js`, name: entryName, isEntry, moduleIds, imports, dynamicImports: [] };
+  describe.each([["get", "recipient"], ["send", "sender"]] as const)("%s entry (%s page)", (name, _role) => {
+    function chunk(chunkName: string, moduleIds: string[], imports: string[] = [], isEntry = false, entryName = chunkName) {
+      return { type: "chunk", fileName: `assets/${chunkName}.js`, name: entryName, isEntry, moduleIds, imports, dynamicImports: [] };
     }
     const bundle = (chunks: ReturnType<typeof chunk>[]) => Object.fromEntries(chunks.map((item) => [item.fileName, item])) as never;
 
-    it("passes when the recipient entry and its imports hold no WebTorrent", () => {
+    it("passes when the entry and its imports hold no WebTorrent", () => {
       expect(entryReachesWebTorrent(bundle([
-        chunk("get", ["/src/get/main.ts"], ["assets/shared.js"], true),
+        chunk(name, [`/src/${name}/main.ts`], ["assets/shared.js"], true),
         chunk("shared", ["/node_modules/nostr-tools/index.js"]),
         chunk("main", ["/node_modules/webtorrent/dist/webtorrent.min.js"], [], true),
-      ]), "get")).toBe(false);
+      ]), name)).toBe(false);
     });
 
     it("fails when WebTorrent is reachable through a shared chunk", () => {
       expect(entryReachesWebTorrent(bundle([
-        chunk("get", ["/src/get/main.ts"], ["assets/shared.js"], true),
+        chunk(name, [`/src/${name}/main.ts`], ["assets/shared.js"], true),
         chunk("shared", ["/node_modules/webtorrent/dist/webtorrent.min.js"]),
-      ]), "get")).toBe(true);
+      ]), name)).toBe(true);
     });
 
     it("fails when WebTorrent is in the entry chunk itself, and ignores a missing entry", () => {
-      expect(entryReachesWebTorrent(bundle([chunk("get", ["C:\\workspace\\node_modules\\webtorrent\\index.js"], [], true)]), "get")).toBe(true);
-      expect(entryReachesWebTorrent(bundle([chunk("main", ["/src/main.ts"], [], true)]), "get")).toBe(false);
+      expect(entryReachesWebTorrent(bundle([chunk(name, ["C:\\workspace\\node_modules\\webtorrent\\index.js"], [], true)]), name)).toBe(true);
+      expect(entryReachesWebTorrent(bundle([chunk("main", ["/src/main.ts"], [], true)]), name)).toBe(false);
     });
+  });
+
+  it("builds the sender page as its own entry and guards both pairing pages", () => {
+    const config = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    expect(config).toContain('send: "send.html"');
+    expect(config).toContain('const PAIRING_PAGES = ["get", "send"] as const;');
+    expect(config).toContain("entryReachesWebTorrent(bundle, page)");
+    expect(readFileSync(new URL("../send.html", import.meta.url), "utf8")).toContain('src="/src/send/main.ts"');
   });
 });

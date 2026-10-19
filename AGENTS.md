@@ -25,6 +25,7 @@ delivery. It is interoperability work, not a new storage network.
 - `npm run smoke:browser:webkit`: the production journey in installed Playwright WebKit
 - `npm run smoke:swarm`: two isolated Chromium contexts transferring through a controlled TLS WebSocket tracker
 - `npm run acceptance:get`: recipient page `/get` in Chromium against a real pairing service and synthetic storage; requires `FOREGATHER_SERVER_BIN`
+- `npm run acceptance:send`: sender page `/send` in Chromium emulating Android Chrome, against a real pairing service and a real local `wildbloomd` run with `--device-grants --request-grants`; requires `FOREGATHER_SERVER_BIN` and `WILDBLOOM_NODE_BIN`
 - `npm run acceptance:recovery`: fresh-browser recovery from a restarted real Node replica after the original node stops; requires `WILDBLOOM_NODE_BIN`
 - `npm run acceptance:pool:quick`: disposable local nodes, threshold recovery and repeated automatic owner repair; requires a production build and `WILDBLOOM_NODE_BIN`
 - `npm run dev`: local Vite development server
@@ -61,6 +62,7 @@ flags as `npm run <script> -- <flags>`.
 | `acceptance:cross-device:verify` | verifies the service record against a `tcpdump` capture and writes a redacted result | flags `--service-evidence`, `--capture`, `--publisher-ip`, `--downloader-ip`, `--coordinator-ip`, `--coordinator-port`, `--recovered-sha256`, `--recovered-size`, `--output`, repeatable `--dns-ip`; see the ceremony document |
 | `acceptance:cross-device:self-test` | self-test of the evidence and packet-classification contract | nothing |
 | `acceptance:recovery` | fresh-browser recovery from a restarted real Node replica after the original node stops | a build; `WILDBLOOM_NODE_BIN` (the `wildbloomd` executable); optional `WILDBLOOM_BROWSER_EXECUTABLE`, `WILDBLOOM_NODE_SOURCE_COMMIT`, `WILDBLOOM_RECOVERY_EVIDENCE` (output path) |
+| `acceptance:send` | sender page `/send` as Android Chrome (Pixel 7 profile, touch, both orientations) with a real pairing service and a real `wildbloomd --device-grants --request-grants`; the harness plays Drop (owner-signed device grant, NIP-98 request grant, invitation, listing, independent decryption) and a proxy that can cut an upload off | a build is not needed (it builds its own); `FOREGATHER_SERVER_BIN`, `WILDBLOOM_NODE_BIN` (built from the request-grants branch) and Chrome or Chromium; optional `WILDBLOOM_BROWSER_EXECUTABLE`, `SEND_SCREENS_DIR`, `SEND_ACCEPTANCE_ONLY` |
 | `acceptance:pool` | six real local nodes plus two replacements: erasure-coded and replicated pools, repair and recovery | a build; `WILDBLOOM_NODE_BIN`; optional `WILDBLOOM_BROWSER` (`system-chromium`, `chromium`, `firefox`, `webkit`) and `WILDBLOOM_BROWSER_EXECUTABLE`; flag `--maximum` for 256 MiB; flag `--tor` also needs `WILDBLOOM_TEST_TOR_BIN` |
 | `acceptance:pool:quick` | `acceptance:pool --quick`: threshold recovery and repeated automatic owner repair on a small file | a build; `WILDBLOOM_NODE_BIN`; optional `WILDBLOOM_POOL_EVIDENCE` (output path); cannot combine with `--maximum` or `--tor` |
 | `acceptance:services` | production UI against a real Node and a checkout fixture for node services | a build; `WILDBLOOM_NODE_BIN` and `WILDBLOOM_CHECKOUT_FIXTURE` (executables); optional `WILDBLOOM_BROWSER_EXECUTABLE` |
@@ -88,6 +90,9 @@ flags as `npm run <script> -- <flags>`.
   Signing uses either an injected NIP-07 signer after a user action or an exact
   unsigned-event JSON handoff to an external signer. The handoff accepts only
   the returned signed event and must never contact the signer automatically.
+  The one exception is the sender page `/send`: the authenticated invitation
+  hands it a single-use upload key (see "Sender page" below). That key is not an
+  identity, is held in page memory only, and is never shown, logged or stored.
 - No network action may happen on load. Uploading, relay publication, seeding,
   relay lookup and downloading each require a distinct user action.
 - Blossom authorisation events must be short-lived and scoped to the exact
@@ -116,6 +121,17 @@ flags as `npm run <script> -- <flags>`.
 - It alone gets `'wasm-unsafe-eval'` (response headers and its meta policy). Do not widen the main policy.
 - All recipient strings live in `src/get/copy.ts`. The pairing service origin is a build-time constant
   (`VITE_WILDBLOOM_PAIR_RELAY`), never read from a link.
+
+## Sender page
+
+- `/send` is its own entry (`send.html`, `src/send/`), the phone half of "Request a file". It must never include WebTorrent; the build fails if it does.
+- Like `/get`, it alone (with `/get`) gets `'wasm-unsafe-eval'`. It also alone gets `screen-wake-lock=(self)` in `Permissions-Policy` (`SEND_PERMISSIONS_POLICY`), so it can keep the phone awake while a file is locked and sent. Every other path, and every other feature, stays denied. Do not widen the global policy.
+- All sender strings live in `src/send/copy.ts`, in the recipient page's tone: no technical terms, the person who asked is "they".
+- The pairing service origin is the same build-time constant as `/get`. The storage node comes only from the authenticated invitation (`wildbloom-request/1`), never from the link.
+- The invitation holds two secrets: the request key the page signs its BUD-11 upload events with, and the file key it encrypts under. Neither is logged, stored or sent anywhere but as a signature; the request key bytes are zeroed when the request ends. Drop makes both, so the page cannot choose or keep them.
+- `src/send/request.ts` must match `check_invitation` in wildbloom-node (`crates/wildbloomd/src/grants/tests/requests.rs`) rule for rule. `test-vectors/wildbloom-request-v1.json` is an unedited copy of that repository's `vectors/wildbloom-request-v1.json` (PR #72, commit c9e95db); `tests/send-request.test.ts` pins its SHA-256. Copy it again rather than editing it.
+- `test-vectors/fswnenc2-supplied-key.json` holds envelopes this page's encryptor made under a supplied key, for Drop's reader to open. Re-make it only with `WRITE_SEND_ENVELOPE_VECTOR=1` (see `tests/send-envelope-vector.test.ts`).
+- Pairing links for `/send` must use the base `https://<web>/send/` with the trailing slash: the pairing kit refuses a base without one, and `/send/` redirects to `/send` with the fragment kept.
 
 ## Protocol scope
 

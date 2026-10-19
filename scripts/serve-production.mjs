@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
-import { GET_SECURITY_HEADERS, SECURITY_HEADERS } from "./http-security.mjs";
+import { GET_SECURITY_HEADERS, SECURITY_HEADERS, SEND_SECURITY_HEADERS } from "./http-security.mjs";
 import { isProductionAssetPath, isProductionDocumentPath, loadProductionBuild } from "./production-build.mjs";
 
 const args = process.argv.slice(2);
@@ -21,6 +21,11 @@ function argumentsFrom(argv) {
   }
   return values;
 }
+
+// The two standalone pairing pages: their route, their built file and their response headers.
+const PAIRING_PAGES = new Map([["/get", "get.html"], ["/send", "send.html"]]);
+const PAIRING_FILES = new Set(PAIRING_PAGES.values());
+const PAGE_HEADERS = new Map([["get.html", GET_SECURITY_HEADERS], ["send.html", SEND_SECURITY_HEADERS]]);
 
 const options = argumentsFrom(args);
 const host = options.host;
@@ -139,20 +144,20 @@ const server = createServer({
   }
 
   // The trailing-slash form would break the relative asset paths, so it redirects.
-  if (url.pathname === "/get/") {
-    respond(response, 301, { Location: "/get" });
+  if (PAIRING_PAGES.has(url.pathname.slice(0, -1)) && url.pathname.endsWith("/")) {
+    respond(response, 301, { Location: url.pathname.slice(0, -1) });
     return;
   }
 
   let relative;
   try {
-    relative = decodeURIComponent(url.pathname === "/" ? "index.html" : url.pathname === "/get" ? "get.html" : url.pathname.slice(1));
+    relative = decodeURIComponent(url.pathname === "/" ? "index.html" : PAIRING_PAGES.get(url.pathname) ?? url.pathname.slice(1));
   } catch {
     respond(response, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad request\n");
     return;
   }
-  // get.html is reachable only as /get, never by its file name.
-  if (url.pathname === "/get.html" || (!isProductionDocumentPath(relative) && !isProductionAssetPath(relative))) {
+  // The pairing pages are reachable only as /get and /send, never by file name.
+  if (PAIRING_FILES.has(url.pathname.slice(1)) || (!isProductionDocumentPath(relative) && !isProductionAssetPath(relative))) {
     respond(response, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not found\n");
     return;
   }
@@ -165,7 +170,7 @@ const server = createServer({
   // Ignore multipart or malformed syntax, and all HEAD/conditional ranges.
   const isFilm = relative.endsWith(".mp4");
   const headers = {
-    ...(relative === "get.html" ? GET_SECURITY_HEADERS : SECURITY_HEADERS),
+    ...(PAGE_HEADERS.get(relative) ?? SECURITY_HEADERS),
     "Cache-Control": isProductionDocumentPath(relative) ? "no-store" : "public, max-age=31536000, immutable",
     "Content-Length": String(file.bytes),
     "Content-Type": contentTypes.get(extname(relative)) ?? "application/octet-stream",

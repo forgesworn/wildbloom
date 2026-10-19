@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha3_256 } from "@noble/hashes/sha3.js";
-import { GET_SECURITY_HEADERS, SECURITY_HEADERS } from "./http-security.mjs";
+import { GET_SECURITY_HEADERS, SECURITY_HEADERS, SEND_SECURITY_HEADERS } from "./http-security.mjs";
 import { privateRecordOutput } from "./private-record.mjs";
 import { PRODUCTION_DOCUMENTS } from "./production-build.mjs";
 import { readReleaseEvidence, validateReleaseEvidence } from "./release-evidence-format.mjs";
@@ -190,7 +190,7 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
     label: "Deployment index HEAD",
   });
 
-  // The recipient page is the only document with its own policy ('wasm-unsafe-eval').
+  // The pairing pages are the only documents with their own policy ('wasm-unsafe-eval'), and /send alone may keep the screen on.
   const recipient = validatedEvidence.files.find((file) => file.path === "get.html");
   expect(recipient, "Release evidence does not contain get.html.");
   const recipientRequest = {
@@ -202,6 +202,18 @@ export async function verifyDeployment(originInput, evidence, options = {}) {
   };
   await requestExact(`${origin}/get`, { ...recipientRequest, expectedHash: recipient.sha256, label: "Deployment recipient page" });
   await requestExact(`${origin}/get`, { ...recipientRequest, method: "HEAD", label: "Deployment recipient page HEAD" });
+
+  const sender = validatedEvidence.files.find((file) => file.path === "send.html");
+  expect(sender, "Release evidence does not contain send.html.");
+  const senderRequest = {
+    expectedBytes: sender.bytes,
+    expectedCacheControl: "no-store",
+    expectedContentType: "text/html; charset=utf-8",
+    requireContentLength: false,
+    securityHeaders: SEND_SECURITY_HEADERS,
+  };
+  await requestExact(`${origin}/send`, { ...senderRequest, expectedHash: sender.sha256, label: "Deployment sender page" });
+  await requestExact(`${origin}/send`, { ...senderRequest, method: "HEAD", label: "Deployment sender page HEAD" });
 
   for (const file of validatedEvidence.files.filter((item) => !PRODUCTION_DOCUMENTS.includes(item.path))) {
     const contentType = file.path.endsWith(".mp4") ? "video/mp4"

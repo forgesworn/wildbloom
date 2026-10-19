@@ -12,6 +12,8 @@ export const PAIRING_SERVICE: string = import.meta.env.VITE_WILDBLOOM_PAIR_RELAY
 
 export const PAIRING_NAMESPACE = "wildbloom.drop";
 export const PAIRING_PURPOSE = "share";
+/** The sender page (`/send`) pairs under the same namespace with its own purpose. */
+export const REQUEST_PAIRING_PURPOSE = "request";
 
 /** How long to wait after connecting before saying the sender has not answered yet. */
 export const SLOW_SENDER_MS = 5000;

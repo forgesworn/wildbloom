@@ -185,19 +185,67 @@ async function makePlaintextChunk(
   }
 }
 
-export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): Promise<EncryptedEnvelope> {
-  assertActive(signal, "Local encryption");
-  assertPrototypeFileSize(file.size);
-  const metadata: EnvelopeMetadata = {
-    name: sanitiseFileName(file.name),
-    size: file.size,
-    type: normaliseMimeType(file.type),
-  };
+export interface EncryptOptions {
+  /**
+   * A `wbk1_` input key chosen by the receiver, used instead of a fresh random
+   * one. Each envelope still derives its own AES key from it and a fresh header
+   * salt, so one key can never be paired with one salt twice.
+   */
+  readonly key?: string;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * Decodes a `wbk1_` input key to its 32 bytes, refusing anything that is not
+ * the canonical unpadded base64url form. The caller owns, and should zero,
+ * the returned bytes.
+ */
+export function parseInputKey(value: string): Uint8Array<ArrayBuffer> {
+  if (!value.startsWith(RECOVERY_KEY_PREFIX)) throw new Error("The recovery key is not a Wildbloom v1 key.");
+  return base64UrlDecode(value.slice(RECOVERY_KEY_PREFIX.length));
+}
+
+function frameMetadata(name: string, size: number, type: string): { prefix: Uint8Array; metadata: EnvelopeMetadata } {
+  const metadata: EnvelopeMetadata = { name: sanitiseFileName(name), size, type: normaliseMimeType(type) };
   const metadataBytes = new TextEncoder().encode(JSON.stringify(metadata));
   if (metadataBytes.length > MAX_ENVELOPE_METADATA_BYTES) throw new Error("Encrypted file metadata is unexpectedly large.");
   const prefix = new Uint8Array(4 + metadataBytes.length);
   new DataView(prefix.buffer).setUint32(0, metadataBytes.length, false);
   prefix.set(metadataBytes, 4);
+  metadataBytes.fill(0);
+  return { prefix, metadata };
+}
+
+/**
+ * The exact size of the envelope `encryptPrivacyEnvelope` makes for a source of
+ * this name, type and length, without encrypting anything. A page can compare
+ * it with a limit before it spends the time.
+ */
+export function envelopeBytes(name: string, type: string, sourceBytes: number): number {
+  assertPrototypeFileSize(sourceBytes);
+  const { prefix } = frameMetadata(name, sourceBytes, type);
+  const plaintextLength = paddedPlaintextLength(prefix.length + sourceBytes);
+  const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
+  return ENVELOPE_HEADER_BYTES_V2 + plaintextLength + recordCount * ENVELOPE_TAG_BYTES;
+}
+
+export async function encryptPrivacyEnvelope(
+  file: File,
+  options: AbortSignal | EncryptOptions = {},
+): Promise<EncryptedEnvelope> {
+  const { key: suppliedKey, signal } = options instanceof AbortSignal ? { key: undefined, signal: options } : options;
+  assertActive(signal, "Local encryption");
+  assertPrototypeFileSize(file.size);
+  // Validate a supplied key before any work, and never keep its bytes longer than the derivation.
+  const suppliedBytes = suppliedKey === undefined ? undefined : parseInputKey(suppliedKey);
+  let framed: ReturnType<typeof frameMetadata>;
+  try {
+    framed = frameMetadata(file.name, file.size, file.type);
+  } catch (error) {
+    suppliedBytes?.fill(0);
+    throw error;
+  }
+  const { prefix, metadata } = framed;
   try {
     const plaintextLength = paddedPlaintextLength(prefix.length + file.size);
     const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
@@ -217,7 +265,8 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
     header.set(salt, 24);
 
     const rawKey = new Uint8Array(32);
-    fillRandom(rawKey);
+    if (suppliedBytes) rawKey.set(suppliedBytes);
+    else fillRandom(rawKey);
     let key: CryptoKey;
     let recoveryKey: string;
     try {
@@ -275,7 +324,7 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
       sourceType: metadata.type,
     };
   } finally {
-    metadataBytes.fill(0);
+    suppliedBytes?.fill(0);
     prefix.fill(0);
   }
 }
