@@ -23,6 +23,7 @@ function releaseEvidence({
     { path: "assets/app-abcdefgh.js", bytes: Buffer.byteLength(app), sha256: sha256(app) },
     { path: "get.html", bytes: 3, sha256: sha256("get") },
     { path: "index.html", bytes: 5, sha256: sha256("index") },
+    { path: "send.html", bytes: 4, sha256: sha256("send") },
   ];
   return {
     format: "wildbloom-release-evidence-v2",

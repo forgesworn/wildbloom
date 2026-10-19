@@ -8,6 +8,10 @@ import {
   GET_CONTENT_SECURITY_POLICY,
   GET_META_CONTENT_SECURITY_POLICY,
   GET_SECURITY_HEADERS,
+  SEND_CONTENT_SECURITY_POLICY,
+  SEND_META_CONTENT_SECURITY_POLICY,
+  SEND_PERMISSIONS_POLICY,
+  SEND_SECURITY_HEADERS,
   META_CONTENT_SECURITY_POLICY,
   PERMISSIONS_POLICY,
   SECURITY_HEADERS,
@@ -61,6 +65,7 @@ function releaseEvidence() {
     { path: "assets/app-abcdefgh.js", bytes: 3, sha256: sha256("app") },
     { path: "get.html", bytes: 3, sha256: sha256("get") },
     { path: "index.html", bytes: 5, sha256: sha256("index") },
+    { path: "send.html", bytes: 4, sha256: sha256("send") },
   ];
   return {
     format: "wildbloom-release-evidence-v2",
@@ -97,12 +102,16 @@ function stubExactEdge({
       body = "get";
       cacheControl = "no-store";
       contentType = "text/html; charset=utf-8";
+    } else if (url.endsWith("/send")) {
+      body = "send";
+      cacheControl = "no-store";
+      contentType = "text/html; charset=utf-8";
     } else {
       body = "index";
       cacheControl = "no-store";
       contentType = "text/html; charset=utf-8";
     }
-    const headers = new Headers(url.endsWith("/get") ? GET_SECURITY_HEADERS : SECURITY_HEADERS);
+    const headers = new Headers(url.endsWith("/send") ? SEND_SECURITY_HEADERS : url.endsWith("/get") ? GET_SECURITY_HEADERS : SECURITY_HEADERS);
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     headers.set("Cache-Control", cacheControl);
     headers.set("Content-Type", contentType);
@@ -230,6 +239,19 @@ describe("deployed security-header validation", () => {
     expect(GET_CONTENT_SECURITY_POLICY.replace(" 'wasm-unsafe-eval'", "")).toBe(CONTENT_SECURITY_POLICY);
     expect(CONTENT_SECURITY_POLICY).not.toContain("wasm-unsafe-eval");
     expect(META_CONTENT_SECURITY_POLICY).not.toContain("wasm-unsafe-eval");
+  });
+
+  it("keeps the sender page CSP aligned and lets only it keep the screen on", () => {
+    const source = readFileSync(new URL("../send.html", import.meta.url), "utf8");
+    const metaPolicy = /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/u.exec(source)?.[1];
+    expect(metaPolicy).toBe(SEND_META_CONTENT_SECURITY_POLICY);
+    expect(SEND_CONTENT_SECURITY_POLICY).toBe(GET_CONTENT_SECURITY_POLICY);
+    expect(SEND_PERMISSIONS_POLICY).toContain("screen-wake-lock=(self)");
+    expect(SEND_PERMISSIONS_POLICY).not.toContain("screen-wake-lock=()");
+    // Nothing else changes: swapping that one feature back gives the global policy exactly.
+    expect(SEND_PERMISSIONS_POLICY.replace("screen-wake-lock=(self)", "screen-wake-lock=()")).toBe(PERMISSIONS_POLICY);
+    expect(PERMISSIONS_POLICY).toContain("screen-wake-lock=()");
+    expect(GET_SECURITY_HEADERS["Permissions-Policy"]).toBe(PERMISSIONS_POLICY);
   });
 
   it("publishes one exact canonical production origin", () => {

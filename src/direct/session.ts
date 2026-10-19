@@ -162,6 +162,8 @@ class Link {
   /** Sends the next message and returns the index it took. */
   send(message: DirectMessage): Promise<number> {
     if (this.ended) return Promise.reject(new DirectError("expired", "The exchange has ended."));
+    // After a stop, from either end, nothing more is sent.
+    if (this.stopped && message.event !== "stop") return Promise.reject(new DirectError("cancelled", "The exchange has been stopped."));
     if (this.sentCount >= LIMITS.messagesPerSide) return Promise.reject(new DirectError("protocol", "No messages left."));
     const bytes = encodeMessage(message);
     const index = this.sentCount;
@@ -191,6 +193,7 @@ class Link {
       await this.stop(decoded.stop).catch(() => undefined);
       throw new DirectError(decoded.stop === "unsupported" ? "unsupported" : "protocol", decoded.detail);
     }
+    if (decoded.message.event === "stop") this.stopped = true;
     return { message: decoded.message, index };
   }
 

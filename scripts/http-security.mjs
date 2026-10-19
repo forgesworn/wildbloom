@@ -22,8 +22,8 @@ export const META_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY
   .filter((directive) => !directive.startsWith("frame-ancestors "))
   .join("; ");
 
-// The recipient page loads the pairing module's WebAssembly, which needs
-// 'wasm-unsafe-eval'. It is granted to /get only; the main client keeps its policy.
+// The pairing pages load the pairing module's WebAssembly, which needs
+// 'wasm-unsafe-eval'. It is granted to /get and /send only; the main client keeps its policy.
 const WASM_SCRIPT_SOURCE = "script-src 'self' 'wasm-unsafe-eval'";
 
 export const GET_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.replace("script-src 'self'", WASM_SCRIPT_SOURCE);
@@ -93,4 +93,21 @@ export const SECURITY_HEADERS = Object.freeze({
 export const GET_SECURITY_HEADERS = Object.freeze({
   ...SECURITY_HEADERS,
   "Content-Security-Policy": GET_CONTENT_SECURITY_POLICY,
+});
+
+// The sender page (/send) has the same WebAssembly need as /get, so it shares
+// that policy. It also asks the browser to keep the screen on while a file is
+// locked and sent, because a screen that sleeps stops the upload. That is the
+// one permission it gains, and only for its own origin: Permissions-Policy
+// denies screen-wake-lock on every other path.
+export const SEND_CONTENT_SECURITY_POLICY = GET_CONTENT_SECURITY_POLICY;
+
+export const SEND_META_CONTENT_SECURITY_POLICY = GET_META_CONTENT_SECURITY_POLICY;
+
+export const SEND_PERMISSIONS_POLICY = PERMISSIONS_POLICY.replace("screen-wake-lock=()", "screen-wake-lock=(self)");
+
+export const SEND_SECURITY_HEADERS = Object.freeze({
+  ...GET_SECURITY_HEADERS,
+  "Content-Security-Policy": SEND_CONTENT_SECURITY_POLICY,
+  "Permissions-Policy": SEND_PERMISSIONS_POLICY,
 });
