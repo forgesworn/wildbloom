@@ -63,7 +63,7 @@ export const COPY = {
     r18: {
       h1: "Downloaded",
       body: (name: string): string =>
-        `Your browser has saved ${name}. If you can't find it, look in your downloads or save it again. You can close this page.`,
+        `Your browser has saved ${name}. If you can't find it, look in your downloads or save it again. Keep this page open until the file has finished saving. Then you can close this page.`,
     },
     r19: { h1: "The file isn't available right now", body: "The sender's storage didn't respond. Try again in a few minutes." },
     r20: { h1: "This file is no longer shared", body: "Ask the sender to share it again if you still need it." },

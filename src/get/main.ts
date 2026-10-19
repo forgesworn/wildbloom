@@ -12,6 +12,7 @@ import { PAIRING_NAMESPACE, PAIRING_PURPOSE, PAIRING_SERVICE, SLOW_SENDER_MS, al
 import { COPY, formatBytes, formatClock } from "./copy.js";
 import { classifyDownloadFailure, classifyPairingFailure } from "./failure.js";
 import { classifyLinkFailure } from "./link.js";
+import { createDownloadedReply, type DownloadedReply } from "./reply.js";
 import { INITIAL_STATE, reduce, type ScreenId, type ViewEvent, type ViewState } from "./state.js";
 import { applySuggestion, checkWords, REQUIRED_WORDS, parseWords } from "./words.js";
 import "./get.css";
@@ -36,6 +37,8 @@ if (!footerEl) throw new Error("missing footer");
 let state: ViewState = INITIAL_STATE;
 let room: LiveRoom | undefined;
 let flow: PairingFlow | undefined;
+// The channel kept open after the share details arrive, for the one reply.
+let replyFlow: DownloadedReply | undefined;
 let secret: string | undefined;
 let claimed = false;
 let descriptor: ShareDescriptor | undefined;
@@ -323,11 +326,17 @@ function onContinue(): void {
 
 const relay = createLiveRelayClient({ apiUrl: PAIRING_SERVICE, allowLoopbackHttp: allowsLoopbackHttp(PAIRING_SERVICE) });
 
+function closeReply(): void {
+  replyFlow?.dispose();
+  replyFlow = undefined;
+}
+
 function stopFlow(): void {
   clearTimeout(slowTimer);
   controller?.abort();
   flow?.dispose();
   flow = undefined;
+  closeReply();
 }
 
 async function connect(): Promise<void> {
@@ -394,17 +403,24 @@ function onYes(): void {
   dispatch({ type: "yes" });
   void (async () => {
     try {
-      const payload = await active.receive({ signal: run.signal });
+      // keepOpen holds the channel for the one reply sent once the file is saved.
+      const payload = await active.receive({ signal: run.signal, keepOpen: true });
       let parsed: ShareDescriptor;
       try {
         parsed = parseShareDescriptor(payload);
       } finally {
         payload.fill(0);
       }
+      if (run.signal.aborted) {
+        active.dispose();
+        return;
+      }
       descriptor = parsed;
       flow = undefined;
+      replyFlow = createDownloadedReply(active);
       dispatch({ type: "details", name: parsed.name, size: parsed.bytes });
     } catch (error) {
+      active.dispose();
       if (run.signal.aborted) return;
       if (error instanceof ShareDescriptorError) {
         dispatch({ type: error.reason === "too-large" ? "too-big" : "invalid-details" });
@@ -442,6 +458,7 @@ function onDownload(): void {
   dispatch({ type: "download" });
   void (async () => {
     if (share.expires <= nowSeconds()) {
+      closeReply();
       dispatch({ type: "missing" });
       return;
     }
@@ -461,7 +478,10 @@ function onDownload(): void {
       });
     } catch (error) {
       if (run.signal.aborted) return;
-      dispatch({ type: classifyDownloadFailure(error, "fetch") });
+      const failure = classifyDownloadFailure(error, "fetch");
+      // The file is gone, so nothing will be saved and the sender need not wait.
+      if (failure === "missing") closeReply();
+      dispatch({ type: failure });
       return;
     }
     if (run.signal.aborted) return;
@@ -480,6 +500,7 @@ function onDownload(): void {
     if (saveFile()) {
       dispatch({ type: "saved" });
       announce(COPY.announce.saved);
+      tellSenderSaved();
     } else {
       dispatch({ type: "save-failed" });
     }
@@ -503,10 +524,24 @@ function saveFile(): boolean {
   }
 }
 
+/**
+ * Called only once the file has been decrypted, matched its size and been
+ * handed to the browser to save. Fire and forget: the screen never waits for
+ * the sender, and a failed or late reply is not shown.
+ */
+function tellSenderSaved(): void {
+  const pending = replyFlow;
+  if (!pending) return;
+  void pending.send().then(() => {
+    if (replyFlow === pending) replyFlow = undefined;
+  });
+}
+
 function onSaveAgain(): void {
   if (saveFile()) {
     if (state.screen === "r23") dispatch({ type: "save-again" });
     announce(COPY.announce.saved);
+    tellSenderSaved();
   } else {
     dispatch({ type: "save-failed" });
   }
