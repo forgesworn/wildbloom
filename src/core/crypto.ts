@@ -149,118 +149,273 @@ function makeAdditionalData(header: Uint8Array, counter: number): Uint8Array<Arr
   return additionalData;
 }
 
-async function makePlaintextChunk(
-  file: File,
-  prefix: Uint8Array,
-  offset: number,
-  length: number,
-  signal?: AbortSignal,
-): Promise<Uint8Array<ArrayBuffer>> {
-  assertActive(signal, "Local encryption");
-  const chunk = new Uint8Array(length);
-  try {
-    fillRandom(chunk);
-    const prefixStart = Math.max(offset, 0);
-    const prefixEnd = Math.min(offset + length, prefix.length);
-    if (prefixEnd > prefixStart) chunk.set(prefix.subarray(prefixStart, prefixEnd), prefixStart - offset);
-
-    const fileStart = prefix.length;
-    const overlapStart = Math.max(offset, fileStart);
-    const overlapEnd = Math.min(offset + length, fileStart + file.size);
-    if (overlapEnd > overlapStart) {
-      const sourceStart = overlapStart - fileStart;
-      const sourceEnd = overlapEnd - fileStart;
-      const source = new Uint8Array(await file.slice(sourceStart, sourceEnd).arrayBuffer());
-      try {
-        assertActive(signal, "Local encryption");
-        chunk.set(source, overlapStart - offset);
-      } finally {
-        source.fill(0);
-      }
-    }
-    return chunk;
-  } catch (error) {
-    chunk.fill(0);
-    throw error;
-  }
-}
-
-export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): Promise<EncryptedEnvelope> {
-  assertActive(signal, "Local encryption");
-  assertPrototypeFileSize(file.size);
-  const metadata: EnvelopeMetadata = {
-    name: sanitiseFileName(file.name),
-    size: file.size,
-    type: normaliseMimeType(file.type),
-  };
+function frameMetadata(name: string, size: number, type: string): { prefix: Uint8Array<ArrayBuffer>; metadata: EnvelopeMetadata } {
+  const metadata: EnvelopeMetadata = { name: sanitiseFileName(name), size, type: normaliseMimeType(type) };
   const metadataBytes = new TextEncoder().encode(JSON.stringify(metadata));
   if (metadataBytes.length > MAX_ENVELOPE_METADATA_BYTES) throw new Error("Encrypted file metadata is unexpectedly large.");
   const prefix = new Uint8Array(4 + metadataBytes.length);
   new DataView(prefix.buffer).setUint32(0, metadataBytes.length, false);
   prefix.set(metadataBytes, 4);
+  metadataBytes.fill(0);
+  return { prefix, metadata };
+}
+
+function assertSourceSize(size: number): void {
+  if (!Number.isSafeInteger(size) || size < 0 || size > MAX_PROTOTYPE_FILE_BYTES) {
+    throw new Error(`This version is limited to ${MAX_PROTOTYPE_FILE_BYTES / 1024 / 1024} MiB files.`);
+  }
+}
+
+/**
+ * The exact size of the FSWNENC2 envelope for a source of this name, type and
+ * length (which may be zero), without encrypting anything. A sender can compare
+ * it with a limit, and a receiver can know how many bytes to expect from the
+ * manifest alone.
+ */
+export function envelopeBytes(name: string, type: string, sourceBytes: number): number {
+  assertSourceSize(sourceBytes);
+  const { prefix } = frameMetadata(name, sourceBytes, type);
+  const plaintextLength = paddedPlaintextLength(prefix.length + sourceBytes);
+  const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
+  return ENVELOPE_HEADER_BYTES_V2 + plaintextLength + recordCount * ENVELOPE_TAG_BYTES;
+}
+
+/**
+ * A fresh `wbk1_` input key. The envelope's AES key is derived from it and the
+ * header salt, so one key can seal many envelopes without ever pairing with one
+ * salt twice.
+ */
+export function newInputKey(): string {
+  const bytes = new Uint8Array(32);
   try {
-    const plaintextLength = paddedPlaintextLength(prefix.length + file.size);
-    const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
-    const noncePrefix = new Uint8Array(8);
-    fillRandom(noncePrefix);
-    // FSWNENC2: a fresh random 32-byte salt per envelope, carried in a 56-byte
-    // header, from which the AES key is derived, so no two envelopes share a key
-    // even under a reused recovery key.
-    const salt = new Uint8Array(ENVELOPE_SALT_BYTES);
-    fillRandom(salt);
-    const header = new Uint8Array(ENVELOPE_HEADER_BYTES_V2);
-    header.set(ENVELOPE_MAGIC_V2);
-    const headerView = new DataView(header.buffer);
-    headerView.setUint32(8, ENVELOPE_CHUNK_BYTES, false);
-    headerView.setUint32(12, recordCount, false);
-    header.set(noncePrefix, 16);
-    header.set(salt, 24);
+    fillRandom(bytes);
+    return `${RECOVERY_KEY_PREFIX}${base64UrlEncode(bytes)}`;
+  } finally {
+    bytes.fill(0);
+  }
+}
 
-    const rawKey = new Uint8Array(32);
-    fillRandom(rawKey);
-    let key: CryptoKey;
-    let recoveryKey: string;
+/**
+ * Decodes a `wbk1_` input key to its 32 bytes, refusing anything that is not
+ * the canonical unpadded base64url form. The caller owns, and should zero, the
+ * returned bytes.
+ */
+export function parseInputKey(value: string): Uint8Array<ArrayBuffer> {
+  if (!value.startsWith(RECOVERY_KEY_PREFIX)) throw new Error("The recovery key is not a Wildbloom v1 key.");
+  return base64UrlDecode(value.slice(RECOVERY_KEY_PREFIX.length));
+}
+
+/**
+ * Where an encoder gets its randomness. The default is the browser's random
+ * source. A test supplies fixed values to reproduce a known-answer envelope.
+ */
+export interface EnvelopeEntropy {
+  /** The 8-byte nonce prefix. */
+  noncePrefix(): Uint8Array<ArrayBuffer>;
+  /** The 32-byte header salt. */
+  salt(): Uint8Array<ArrayBuffer>;
+  /** A fresh 32-byte input key, asked for only when none was supplied. */
+  inputKey(): Uint8Array<ArrayBuffer>;
+  /** Fills padding: `target` holds the plaintext bytes from `plaintextOffset`. Only padding is ever asked for. */
+  padding(target: Uint8Array<ArrayBuffer>, plaintextOffset: number): void;
+}
+
+const RANDOM_ENTROPY: EnvelopeEntropy = {
+  noncePrefix(): Uint8Array<ArrayBuffer> {
+    const bytes = new Uint8Array(8);
+    fillRandom(bytes);
+    return bytes;
+  },
+  salt(): Uint8Array<ArrayBuffer> {
+    const bytes = new Uint8Array(ENVELOPE_SALT_BYTES);
+    fillRandom(bytes);
+    return bytes;
+  },
+  inputKey(): Uint8Array<ArrayBuffer> {
+    const bytes = new Uint8Array(32);
+    fillRandom(bytes);
+    return bytes;
+  },
+  padding(target): void {
+    fillRandom(target);
+  },
+};
+
+export interface EnvelopeEncoderOptions {
+  /** A `wbk1_` input key; a fresh one is made when absent. */
+  readonly key?: string;
+  readonly signal?: AbortSignal;
+  readonly entropy?: EnvelopeEntropy;
+}
+
+/**
+ * An FSWNENC2 envelope made one record at a time, so a large source never sits
+ * in memory whole: `header`, then each record from `next()`, in order. Memory is
+ * one plaintext record, one ciphertext record and the caller's own buffering,
+ * whatever the source size.
+ */
+export interface EnvelopeEncoder {
+  /** The 56-byte header; it comes before the first record on the wire. */
+  readonly header: Uint8Array<ArrayBuffer>;
+  readonly recordCount: number;
+  /** The whole envelope: header, every record and every tag. */
+  readonly envelopeBytes: number;
+  /** The metadata that is sealed into the envelope, with the name as the sanitiser leaves it. */
+  readonly metadata: Readonly<EnvelopeMetadata>;
+  /** The input key, as it was supplied or made. */
+  readonly inputKey: string;
+  /** The next record (ciphertext and tag), or undefined after the last. Call it once at a time. */
+  next(): Promise<Uint8Array<ArrayBuffer> | undefined>;
+  /** The SHA-256 of the source bytes, once every record has been made. */
+  digest(): Uint8Array<ArrayBuffer>;
+  /** Forgets the key material. Safe to repeat. */
+  dispose(): void;
+}
+
+export async function createEnvelopeEncoder(
+  source: Blob,
+  describe: { readonly name: string; readonly type: string },
+  options: EnvelopeEncoderOptions = {},
+): Promise<EnvelopeEncoder> {
+  const { signal } = options;
+  const entropy = options.entropy ?? RANDOM_ENTROPY;
+  assertActive(signal, "Local encryption");
+  assertSourceSize(source.size);
+  // Validate a supplied key before any work, and never keep its bytes longer than the derivation.
+  const suppliedBytes = options.key === undefined ? undefined : parseInputKey(options.key);
+  let framed: ReturnType<typeof frameMetadata>;
+  try {
+    framed = frameMetadata(describe.name, source.size, describe.type);
+  } catch (error) {
+    suppliedBytes?.fill(0);
+    throw error;
+  }
+  const { prefix, metadata } = framed;
+  const fileStart = prefix.length;
+  const fileEnd = fileStart + source.size;
+  const plaintextLength = paddedPlaintextLength(fileEnd);
+  const recordCount = Math.ceil(plaintextLength / ENVELOPE_CHUNK_BYTES);
+  const noncePrefix = entropy.noncePrefix();
+  const salt = entropy.salt();
+  const header = new Uint8Array(ENVELOPE_HEADER_BYTES_V2);
+  header.set(ENVELOPE_MAGIC_V2);
+  const headerView = new DataView(header.buffer);
+  headerView.setUint32(8, ENVELOPE_CHUNK_BYTES, false);
+  headerView.setUint32(12, recordCount, false);
+  header.set(noncePrefix, 16);
+  header.set(salt, 24);
+
+  // The input key stays the per-file key; the AES key is derived from it and the
+  // header salt with HKDF-SHA256, so no two envelopes share a key.
+  const rawKey = suppliedBytes ?? entropy.inputKey();
+  let key: CryptoKey;
+  let inputKey: string;
+  try {
+    const baseKey = await crypto.subtle.importKey("raw", rawKey, "HKDF", false, ["deriveBits"]);
+    const derived = new Uint8Array(await crypto.subtle.deriveBits(
+      { name: "HKDF", hash: "SHA-256", salt, info: HKDF_INFO_V2 },
+      baseKey,
+      256,
+    ));
     try {
-      // The recovery key stays the raw per-file key; the AES key is derived from
-      // it and the header salt with HKDF-SHA256.
-      const baseKey = await crypto.subtle.importKey("raw", rawKey, "HKDF", false, ["deriveBits"]);
-      const derived = new Uint8Array(await crypto.subtle.deriveBits(
-        { name: "HKDF", hash: "SHA-256", salt, info: HKDF_INFO_V2 },
-        baseKey,
-        256,
-      ));
-      try {
-        key = await crypto.subtle.importKey("raw", derived, "AES-GCM", false, ["encrypt"]);
-      } finally {
-        derived.fill(0);
-      }
-      recoveryKey = `${RECOVERY_KEY_PREFIX}${base64UrlEncode(rawKey)}`;
+      key = await crypto.subtle.importKey("raw", derived, "AES-GCM", false, ["encrypt"]);
     } finally {
-      rawKey.fill(0);
+      derived.fill(0);
     }
-    assertActive(signal, "Local encryption");
+    inputKey = `${RECOVERY_KEY_PREFIX}${base64UrlEncode(rawKey)}`;
+  } catch (error) {
+    prefix.fill(0);
+    throw error;
+  } finally {
+    rawKey.fill(0);
+  }
 
-    const parts: BlobPart[] = [header];
-    for (let counter = 0; counter < recordCount; counter += 1) {
-      assertActive(signal, "Local encryption");
-      const offset = counter * ENVELOPE_CHUNK_BYTES;
-      const length = Math.min(ENVELOPE_CHUNK_BYTES, plaintextLength - offset);
-      const plaintext = await makePlaintextChunk(file, prefix, offset, length, signal);
-      let ciphertext: ArrayBuffer;
-      try {
-        ciphertext = await crypto.subtle.encrypt({
-          name: "AES-GCM",
-          iv: makeNonce(noncePrefix, counter),
-          additionalData: makeAdditionalData(header, counter),
-          tagLength: 128,
-        }, key, plaintext);
-      } finally {
-        plaintext.fill(0);
+  const hasher = sha256.create();
+  let counter = 0;
+  let busy = false;
+  let digest: Uint8Array<ArrayBuffer> | undefined;
+
+  async function plaintextRecord(index: number): Promise<Uint8Array<ArrayBuffer>> {
+    const offset = index * ENVELOPE_CHUNK_BYTES;
+    const length = Math.min(ENVELOPE_CHUNK_BYTES, plaintextLength - offset);
+    const chunk = new Uint8Array(length);
+    try {
+      const prefixEnd = Math.min(offset + length, fileStart);
+      if (prefixEnd > offset) chunk.set(prefix.subarray(offset, prefixEnd), 0);
+      const overlapStart = Math.max(offset, fileStart);
+      const overlapEnd = Math.min(offset + length, fileEnd);
+      if (overlapEnd > overlapStart) {
+        const wanted = overlapEnd - overlapStart;
+        const slice = new Uint8Array(await source.slice(overlapStart - fileStart, overlapEnd - fileStart).arrayBuffer());
+        try {
+          assertActive(signal, "Local encryption");
+          if (slice.length !== wanted) throw new Error("The file changed while it was being read.");
+          hasher.update(slice);
+          chunk.set(slice, overlapStart - offset);
+        } finally {
+          slice.fill(0);
+        }
       }
-      assertActive(signal, "Local encryption");
-      parts.push(ciphertext);
+      // Only the tail past the source is padding; the rest was just written.
+      const paddingStart = Math.max(offset, fileEnd);
+      if (paddingStart < offset + length) entropy.padding(chunk.subarray(paddingStart - offset), paddingStart);
+      return chunk;
+    } catch (error) {
+      chunk.fill(0);
+      throw error;
     }
+  }
 
+  return {
+    header,
+    recordCount,
+    envelopeBytes: ENVELOPE_HEADER_BYTES_V2 + plaintextLength + recordCount * ENVELOPE_TAG_BYTES,
+    metadata,
+    inputKey,
+    async next(): Promise<Uint8Array<ArrayBuffer> | undefined> {
+      if (busy) throw new Error("The encoder makes one record at a time.");
+      if (counter >= recordCount) return undefined;
+      busy = true;
+      try {
+        assertActive(signal, "Local encryption");
+        const index = counter;
+        const plaintext = await plaintextRecord(index);
+        let ciphertext: ArrayBuffer;
+        try {
+          ciphertext = await crypto.subtle.encrypt({
+            name: "AES-GCM",
+            iv: makeNonce(noncePrefix, index),
+            additionalData: makeAdditionalData(header, index),
+            tagLength: 128,
+          }, key, plaintext);
+        } finally {
+          plaintext.fill(0);
+        }
+        assertActive(signal, "Local encryption");
+        counter += 1;
+        if (counter === recordCount) digest = hasher.digest() as Uint8Array<ArrayBuffer>;
+        return new Uint8Array(ciphertext);
+      } finally {
+        busy = false;
+      }
+    },
+    digest(): Uint8Array<ArrayBuffer> {
+      if (!digest) throw new Error("The digest is known only after the last record.");
+      return digest.slice();
+    },
+    dispose(): void {
+      prefix.fill(0);
+    },
+  };
+}
+
+export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): Promise<EncryptedEnvelope> {
+  assertActive(signal, "Local encryption");
+  assertPrototypeFileSize(file.size);
+  const encoder = await createEnvelopeEncoder(file, { name: file.name, type: file.type }, signal ? { signal } : {});
+  try {
+    const parts: BlobPart[] = [encoder.header];
+    for (let record = await encoder.next(); record; record = await encoder.next()) parts.push(record);
     const encrypted = new File(parts, WILDBLOOM_ENCRYPTED_FILE_NAME, {
       type: WILDBLOOM_ENCRYPTED_MIME_TYPE,
       lastModified: 0,
@@ -268,15 +423,14 @@ export async function encryptPrivacyEnvelope(file: File, signal?: AbortSignal): 
     assertPrototypeTransferSize(encrypted.size);
     return {
       file: encrypted,
-      recoveryKey,
+      recoveryKey: encoder.inputKey,
       scheme: WILDBLOOM_ENCRYPTION_V2,
-      sourceName: metadata.name,
-      sourceSize: metadata.size,
-      sourceType: metadata.type,
+      sourceName: encoder.metadata.name,
+      sourceSize: encoder.metadata.size,
+      sourceType: encoder.metadata.type,
     };
   } finally {
-    metadataBytes.fill(0);
-    prefix.fill(0);
+    encoder.dispose();
   }
 }
 
