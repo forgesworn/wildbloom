@@ -18,11 +18,10 @@ trackers, and what you publish does not pass through or stay with us, so we
 do not store or review it. We publish this software as-is and do not run or
 host Wildbloom Nodes for other people. If you run a node or any other server,
 or offer one to other people, you do so at your own responsibility, and you
-should take your own legal advice. `[DECISION: the Share and direct send
-pages (/get, /send) use a node, pairing relay and TURN server that ForgeSworn
-runs for the maintainer's own Drop; reword this once that deployment's
-description is settled. See "Share and direct send" in
-docs/legal/online-safety-position-draft.md.]`
+should take your own legal advice. The Share and direct send pages (`/get`,
+`/send`) use the maintainer's own node, pairing relay and TURN server, on
+which only the maintainer's devices can open a session; we offer them to no
+one as a service.
 
 By using the service you agree to these terms. If we change them, we will say
 so on the service. These terms do not take away any rights you have by law.
@@ -88,7 +87,7 @@ Wildbloom is illegal:
   using that operator's own reporting route; or
 - if it is on a Wildbloom Node, report it to that node's operator.
   ForgeSworn's only Wildbloom Node holds the maintainer's own files and
-  accepts no one else's uploads `[DECISION: as in section 1]`; or
+  accepts no one else's uploads; or
 - write to us at `[contact address]` if you are unsure who to contact, and we
   will help direct your report.
 

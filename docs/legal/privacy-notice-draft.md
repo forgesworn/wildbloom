@@ -165,8 +165,8 @@ history.
 4. The complaint route under section 8, and the wording of its order
    relative to the ICO.
 5. `[LEGAL REVIEW]` This notice does not cover the Share and direct send
-   pages (`/get`, `/send`). They use a pairing relay, a Wildbloom Node and a
-   STUN/TURN server that ForgeSworn runs, which see the IP addresses of both
+   pages (`/get`, `/send`). They use the maintainer's own pairing relay,
+   Wildbloom Node and STUN/TURN server, which see the IP addresses of both
    people, and the TURN server relays the encrypted file when the two ends
    cannot connect directly. See "Share and direct send" in
    `docs/legal/online-safety-position-draft.md`.
