@@ -21,6 +21,8 @@ import { closeControlledServer } from "./controlled-server.mjs";
 //   FOREGATHER_SERVER_BIN          path to a foregather-server executable (required)
 //   WILDBLOOM_BROWSER_EXECUTABLE   Chromium or Chrome (macOS default is Chrome)
 //   COTURN_BIN                     path to turnserver; otherwise it is looked for on PATH
+//   COTURN_DOCKER_IMAGE            a coturn image already on this machine, used when there is no turnserver
+//                                  (default coturn/coturn:4.17.2-r0; it is never pulled). DIRECT_NO_DOCKER=1 skips it
 //   DIRECT_REQUIRE_TURN=1          fail instead of skipping the relay-only case when coturn is missing
 //   DIRECT_ACCEPTANCE_ONLY         run only the journeys whose names contain this text (several, separated by |)
 //   DIRECT_SCREENS_DIR             when set, screenshots of the phone are written there
@@ -205,6 +207,8 @@ async function runVite(args, env, label) {
 // ---------------------------------------------------------------------- TURN
 
 const TURN_SECRET = randomBytes(24).toString("base64url");
+/** The cap KithMoot's coturn puts on each allocation, in bytes a second. The relayed journey runs through it. */
+const TURN_MAX_BPS = 1_000_000;
 
 /** A REST credential in coturn's use-auth-secret form, with a random label as the real mint uses. */
 function turnCredential(label) {
@@ -252,6 +256,7 @@ async function startTurn(binary, port) {
     // coturn refuses peers on 127.0.0.0/8 unless told otherwise; both browsers here are on loopback.
     "allow-loopback-peers",
     "no-multicast-peers",
+    `max-bps=${TURN_MAX_BPS}`,
     `pidfile=${join(temporary, "turn.pid")}`,
     "log-file=stdout",
     "simple-log",
@@ -265,6 +270,44 @@ async function startTurn(binary, port) {
     await sleep(200);
   }
   throw new Error("coturn did not answer a STUN request.");
+}
+
+const dockerContainers = new Set();
+const DOCKER_IMAGE = process.env.COTURN_DOCKER_IMAGE ?? "coturn/coturn:4.17.2-r0";
+
+/** A coturn image that is already here, and Docker to run it. Nothing is pulled or installed. */
+function dockerCoturnAvailable() {
+  if (process.env.DIRECT_NO_DOCKER === "1") return false;
+  try {
+    execFileSync("docker", ["image", "inspect", DOCKER_IMAGE], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The same server in a throwaway container: its relay addresses are published on this machine's loopback. */
+async function startTurnDocker(port) {
+  const name = `wildbloom-direct-turn-${randomBytes(3).toString("hex")}`;
+  const low = 50_000 + Math.floor(Math.random() * 8_000);
+  const high = low + 39;
+  execFileSync("docker", [
+    "run", "-d", "--rm", "--name", name,
+    "-p", `${port}:${port}/udp`, "-p", `${low}-${high}:${low}-${high}/udp`,
+    DOCKER_IMAGE,
+    "-n", "--use-auth-secret", `--static-auth-secret=${TURN_SECRET}`, "--realm=wildbloom.test",
+    `--listening-port=${port}`, `--min-port=${low}`, `--max-port=${high}`,
+    "--external-ip=127.0.0.1", "--allow-loopback-peers", "--no-multicast-peers", "--fingerprint",
+    "--no-tls", "--no-dtls", "--no-tcp-relay", `--max-bps=${TURN_MAX_BPS}`,
+    "--log-file=stdout", "--simple-log",
+  ], { stdio: "ignore" });
+  dockerContainers.add(name);
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    if (await stunAnswers(port)) return name;
+    await sleep(250);
+  }
+  throw new Error("The coturn container did not answer a STUN request.");
 }
 
 // -------------------------------------------------------------------- UDP shim
@@ -529,6 +572,31 @@ async function describeRtc(page) {
   }))).catch(() => []);
 }
 let lastPhonePage;
+
+/** Samples how much the receiver has written, so a send's rate can be read from outside. */
+function watchRate(drop) {
+  const samples = [];
+  const timer = setInterval(() => {
+    snapshot(drop).then((now) => samples.push({ t: Date.now(), written: now.written }), () => undefined);
+  }, 100);
+  return { stop: () => { clearInterval(timer); return samples; } };
+}
+
+/** The average rate from the first byte to the last sample, and the most any one second carried. */
+function ratesOf(samples) {
+  const moving = samples.filter((sample) => sample.written > 0);
+  assert.ok(moving.length > 3, "The send was sampled while it moved.");
+  const first = moving[0];
+  const last = moving.at(-1);
+  const average = ((last.written - first.written) / (last.t - first.t)) * 1000;
+  let busiest = 0;
+  for (let from = 0; from < moving.length; from += 1) {
+    const to = moving.findIndex((sample) => sample.t - moving[from].t >= 1000);
+    if (to > from) busiest = Math.max(busiest, ((moving[to].written - moving[from].written) / (moving[to].t - moving[from].t)) * 1000);
+  }
+  return { average, busiest };
+}
+
 async function waitDrop(drop, predicate, description, timeout = 30_000, argument) {
   try {
     await drop.page.waitForFunction(predicate, argument, { timeout, polling: 100 });
@@ -590,13 +658,24 @@ try {
 
   const coturnBinary = findCoturn();
   const turnPort = await freePort("udp");
+  let relayAvailable = false;
+  let relayHow = "";
   if (coturnBinary) {
     await startTurn(coturnBinary, turnPort);
+    relayAvailable = true;
+    relayHow = "coturn";
+  } else if (dockerCoturnAvailable()) {
+    await startTurnDocker(turnPort);
+    relayAvailable = true;
+    relayHow = `coturn in Docker (${DOCKER_IMAGE})`;
+  }
+  if (relayAvailable) {
     turn = { port: turnPort, urls: [`stun:127.0.0.1:${turnPort}`, `turn:127.0.0.1:${turnPort}?transport=udp`] };
+    process.stdout.write(`    relay: ${relayHow}, each allocation capped at ${TURN_MAX_BPS} bytes a second\n`);
   } else {
     // The protocol wants a TURN URL in every invitation. Nothing listens on this port; the host-candidate journeys do not need it.
     turn = { port: turnPort, urls: [`turn:127.0.0.1:${turnPort}?transport=udp`] };
-    if (process.env.DIRECT_REQUIRE_TURN === "1") throw new Error("DIRECT_REQUIRE_TURN is set but no coturn (turnserver) was found.");
+    if (process.env.DIRECT_REQUIRE_TURN === "1") throw new Error("DIRECT_REQUIRE_TURN is set but no coturn (turnserver, or the Docker image) was found.");
   }
 
   await runVite(["--outDir", join(temporary, "app", "dist"), "--emptyOutDir"], {
@@ -799,7 +878,10 @@ try {
       await waitDrop(drop, () => window.__drop.snapshot().phase === "kept", "KEPT", 60_000);
       assert.equal((await snapshot(drop)).kept.sha256, expected);
       const growth = peak - baseline;
-      process.stdout.write(`    ${mebibytes} MiB in ${((Date.now() - started) / 1000).toFixed(1)} s, the phone page's memory rose by ${(growth / 1048576).toFixed(0)} MiB at most\n`);
+      const seconds = (Date.now() - started) / 1000;
+      process.stdout.write(`    ${mebibytes} MiB in ${seconds.toFixed(1)} s, the phone page's memory rose by ${(growth / 1048576).toFixed(0)} MiB at most\n`);
+      // A direct pair is not paced: far faster than the 400,000 bytes a second a relayed send is held to.
+      if (mebibytes >= 96) assert.ok(size / seconds > 1_200_000, `A direct send of ${mebibytes} MiB averaged ${Math.round(size / seconds)} bytes a second.`);
       await phone.context.close();
       await drop.context.close();
       return growth;
@@ -870,7 +952,7 @@ try {
     shim.close();
   });
 
-  if (coturnBinary) {
+  if (relayAvailable) {
     await step("journey: both ends hide their addresses, so every packet goes through the TURN server", async () => {
       const session = await newSession({ hide: true });
       const phone = await openPhone(session.link);
@@ -878,17 +960,25 @@ try {
       await toChoose(session, phone, drop);
       await phone.page.locator("#hide").check();
       assert.match(await phone.page.locator("#view").innerText(), /hiding their own internet address/u);
-      const bytes = sample(2 * 1024 * 1024 + 5, 11);
+      const bytes = sample(3 * 1024 * 1024 + 5, 11);
       await chooseFile(phone.page, { name: "relayed.bin", mimeType: "application/octet-stream", buffer: bytes });
       await waitDrop(drop, () => window.__drop.snapshot().phase === "manifest", "the manifest");
       const phonePath = watchPath(phone.page);
       const dropPath = watchPath(drop.page);
+      const rate = watchRate(drop);
       await drop.page.evaluate(() => window.__drop.accept());
-      await expectTitle(phone.page, "Sent", 120_000);
+      await expectTitle(phone.page, "Sent", 180_000);
       phonePath.stop();
       dropPath.stop();
       await waitDrop(drop, () => window.__drop.snapshot().phase === "kept", "KEPT");
+      const { average, busiest } = ratesOf(rate.stop());
+      process.stdout.write(`    relayed: ${Math.round(average)} bytes a second on average, ${Math.round(busiest)} at the busiest second, through a cap of ${TURN_MAX_BPS}\n`);
       assert.equal((await snapshot(drop)).kept.sha256, sha256(bytes));
+      // The pair is relayed, so the sender holds itself to 400,000 bytes a second (a little over, for the clock and the burst),
+      // and the send neither stalls nor collapses under the server's cap.
+      assert.ok(average <= 400_000 * 1.12, `A relayed send averaged ${Math.round(average)} bytes a second.`);
+      assert.ok(busiest <= 400_000 + 65_536 + 60_000, `A relayed send carried ${Math.round(busiest)} bytes in one second.`);
+      assert.ok(average >= 100_000, `A relayed send averaged only ${Math.round(average)} bytes a second.`);
       for (const [label, page, watched] of [["phone", phone.page, phonePath], ["receiver", drop.page, dropPath]]) {
         const [config] = await rtcConfigs(page);
         assert.equal(config.policy, "relay", `${label} uses the relay-only policy.`);
@@ -900,7 +990,7 @@ try {
     });
   } else {
     skipped.push("relay-only through TURN");
-    process.stdout.write("SKIP journey: both ends hide their addresses (relay-only). coturn (turnserver) is not installed here; set COTURN_BIN or install it. CI runs this case.\n");
+    process.stdout.write("SKIP journey: both ends hide their addresses (relay-only). coturn is not installed here (no turnserver, and no coturn image for Docker); set COTURN_BIN or install it. CI runs this case.\n");
   }
 
   assert.deepEqual(violations, [], "No request left the fixture origins.");
@@ -912,5 +1002,6 @@ try {
   for (const socket of sockets) try { socket.close(); } catch { /* closed */ }
   for (const server of servers) await closeControlledServer(server).catch(() => undefined);
   for (const child of children) await stopChild(child).catch(() => undefined);
+  for (const name of dockerContainers) { try { execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" }); } catch { /* gone */ } }
   rmSync(temporary, { recursive: true, force: true });
 }
