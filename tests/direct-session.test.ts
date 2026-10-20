@@ -26,7 +26,7 @@ interface Rig {
   readonly sender: SenderSession;
 }
 
-function rig(options: { restartAfterMs?: number; giveUpMs?: number; connectMs?: number; hide?: boolean } = {}): Rig {
+function rig(options: { restartAfterMs?: number; giveUpMs?: number; connectMs?: number; hide?: boolean; rate?: { bytesPerSecond?: number; burstBytes?: number }; pathWatch?: { retryMs?: number; settleMs?: number[] } } = {}): Rig {
   const [dropExchange, pageExchange] = exchangePair();
   const network = new FakeNetwork();
   const receiver = new ReceiverSession({
@@ -42,6 +42,8 @@ function rig(options: { restartAfterMs?: number; giveUpMs?: number; connectMs?: 
     createPeer: network.factory("answerer"),
     giveUpMs: options.giveUpMs ?? 300,
     connectMs: options.connectMs ?? 2000,
+    ...(options.rate ? { rate: options.rate } : {}),
+    ...(options.pathWatch ? { pathWatch: options.pathWatch } : {}),
   });
   return { network, dropExchange, pageExchange, receiver, sender };
 }
@@ -393,6 +395,70 @@ describe("reconnection", () => {
     await Promise.all([sending, receiving]);
     expect(held.current?.file?.size).toBe(file.size);
   }, 30_000);
+});
+
+describe("pacing a relayed send", () => {
+  async function run(r: Rig, size: number, hooks: { onPath?: (relayed: boolean | undefined) => void; onProgress?: (acknowledged: number) => void } = {}): Promise<number> {
+    const file = new File([sample(size)], "paced.bin", { type: "application/octet-stream" });
+    const { decision } = await negotiate(r, file);
+    const receiving = accept(r, receiverHooks());
+    await decision;
+    const started = Date.now();
+    await Promise.all([send(r, file, { hide: false, ...hooks }), receiving]);
+    return Date.now() - started;
+  }
+
+  it("holds the send to the rate when the selected pair is relayed, and says what it found", async () => {
+    const r = rig({ rate: { bytesPerSecond: 8_000_000, burstBytes: 65_536 } });
+    r.network.relayedPath = true;
+    const seen: (boolean | undefined)[] = [];
+    const elapsed = await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
+    expect(seen[0]).toBe(true);
+    // 3 MiB and its padding at 8 MB/s cannot take less than this.
+    expect(elapsed).toBeGreaterThanOrEqual(((3 * MiB - 65_536) / 8_000_000) * 1000 * 0.9);
+  }, 30_000);
+
+  it("does not pace a direct pair", async () => {
+    // At this rate a paced send of 3 MiB would take half a minute.
+    const r = rig({ rate: { bytesPerSecond: 100_000, burstBytes: 65_536 } });
+    r.network.relayedPath = false;
+    const seen: (boolean | undefined)[] = [];
+    const elapsed = await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
+    expect(seen).toContain(false);
+    expect(seen).not.toContain(true);
+    expect(elapsed).toBeLessThan(10_000);
+  }, 30_000);
+
+  it("is paced until the pair is known, then follows what it finds", async () => {
+    const r = rig({ rate: { bytesPerSecond: 100_000, burstBytes: 65_536 }, pathWatch: { retryMs: 20 } });
+    r.network.relayedPath = undefined;
+    const seen: (boolean | undefined)[] = [];
+    setTimeout(() => { r.network.relayedPath = false; }, 150);
+    const elapsed = await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
+    // Nothing was reported while the pair was unknown; then it was found to be direct and the send ran free.
+    expect(seen).toEqual([false]);
+    expect(elapsed).toBeLessThan(10_000);
+  }, 30_000);
+
+  it("reads the pair again after an ICE restart and paces if the send moved onto a relay", async () => {
+    const r = rig({ rate: { bytesPerSecond: 4_000_000, burstBytes: 65_536 }, pathWatch: { retryMs: 20, settleMs: [10, 40] } });
+    r.network.relayedPath = false;
+    const seen: (boolean | undefined)[] = [];
+    let broke = false;
+    await run(r, 6 * MiB, {
+      onPath: (relayed) => seen.push(relayed),
+      onProgress: (acknowledged) => {
+        if (broke || acknowledged === 0) return;
+        broke = true;
+        // The network changes under the send: when it comes back it is on a relay.
+        r.network.relayedPath = true;
+        r.network.breakPath("failed");
+      },
+    });
+    expect(seen[0]).toBe(false);
+    expect(seen.at(-1)).toBe(true);
+    expect(r.receiver.restarts).toBeGreaterThanOrEqual(1);
+  }, 60_000);
 });
 
 describe("stopping", () => {

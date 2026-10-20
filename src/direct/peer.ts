@@ -135,6 +135,36 @@ function stateOf(connection: RTCPeerConnection): PeerState {
   }
 }
 
+/** The kinds of the two candidates of the selected pair. */
+export interface PathKinds {
+  readonly local: string;
+  readonly remote: string;
+}
+
+type StatsReports = { forEach(callback: (report: Record<string, unknown> & { id: string }) => void): void };
+
+/**
+ * Reads the selected candidate pair out of `getStats()`, in Chrome's and Safari's shape (the transport
+ * names it) and Firefox's (the pair says it is selected). Undefined while there is none.
+ */
+export function selectedPath(stats: StatsReports): PathKinds | undefined {
+  const reports = new Map<string, Record<string, unknown>>();
+  stats.forEach((report) => reports.set(report.id, report));
+  let pair: Record<string, unknown> | undefined;
+  for (const report of reports.values()) {
+    if (report.type === "transport" && typeof report.selectedCandidatePairId === "string") pair = reports.get(report.selectedCandidatePairId);
+  }
+  pair ??= [...reports.values()].find((report) => report.type === "candidate-pair" && (report.selected === true || (report.nominated === true && report.state === "succeeded")));
+  if (!pair) return undefined;
+  const kind = (id: unknown): string => String(reports.get(String(id))?.candidateType ?? "unknown");
+  return { local: kind(pair.localCandidateId), remote: kind(pair.remoteCandidateId) };
+}
+
+/** True when either end of the pair is a relay candidate; undefined when there is no pair to judge. */
+export function isRelayed(path: PathKinds | undefined): boolean | undefined {
+  return path === undefined ? undefined : path.local === "relay" || path.remote === "relay";
+}
+
 export class DirectPeer {
   /** Resolves with the open data channel; rejects if the peer is closed first. */
   readonly channel: Promise<FrameChannel>;
@@ -201,19 +231,17 @@ export class DirectPeer {
     await this.connection.setRemoteDescription({ type: "answer", sdp: answerSdp });
   }
 
-  /** The kinds of the selected candidate pair, e.g. `{ local: "relay", remote: "relay" }`. For tests and diagnostics only. */
-  async path(): Promise<{ readonly local: string; readonly remote: string } | undefined> {
-    const stats = await this.connection.getStats();
-    const reports = new Map<string, Record<string, unknown>>();
-    stats.forEach((report: Record<string, unknown> & { id: string }) => reports.set(report.id, report));
-    let pair: Record<string, unknown> | undefined;
-    for (const report of reports.values()) {
-      if (report.type === "transport" && typeof report.selectedCandidatePairId === "string") pair = reports.get(report.selectedCandidatePairId);
-    }
-    pair ??= [...reports.values()].find((report) => report.type === "candidate-pair" && (report.selected === true || (report.nominated === true && report.state === "succeeded")));
-    if (!pair) return undefined;
-    const kind = (id: unknown): string => String(reports.get(String(id))?.candidateType ?? "unknown");
-    return { local: kind(pair.localCandidateId), remote: kind(pair.remoteCandidateId) };
+  /** The kinds of the selected candidate pair, e.g. `{ local: "relay", remote: "relay" }`. */
+  async path(): Promise<PathKinds | undefined> {
+    return selectedPath(await this.connection.getStats());
+  }
+
+  /**
+   * Whether the selected pair has a relay candidate at either end, which is when a TURN server's
+   * rate limit applies to the send. Undefined while no pair is selected.
+   */
+  async relayed(): Promise<boolean | undefined> {
+    return isRelayed(await this.path());
   }
 
   close(): void {

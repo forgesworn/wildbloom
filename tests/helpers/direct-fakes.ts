@@ -345,6 +345,8 @@ export const FAKE_SDP = (tag: string): string =>
 export class FakePeer implements PeerLike {
   state: PeerState = "new";
   readonly calls: string[] = [];
+  /** How many times the sender asked which kind of pair it was on. */
+  relayedReads = 0;
   private readonly listeners = new Set<(state: PeerState, violation: boolean) => void>();
   readonly channel: Promise<FakeChannel>;
   private resolveChannel!: (channel: FakeChannel) => void;
@@ -370,6 +372,11 @@ export class FakePeer implements PeerLike {
     expectSdp(answerSdp);
     this.calls.push("apply");
     this.network.answerApplied(this);
+  }
+
+  async relayed(): Promise<boolean | undefined> {
+    this.relayedReads += 1;
+    return this.network.relayedPath;
   }
 
   onState(listener: (state: PeerState, violation: boolean) => void): () => void {
@@ -404,6 +411,8 @@ export class FakeNetwork {
   readonly offerer: { channel: FakeChannel; peer?: FakePeer };
   readonly answerer: { channel: FakeChannel; peer?: FakePeer };
   readonly created: PeerOptions[] = [];
+  /** What `getStats()` would say about the selected pair: relayed, direct, or not yet known. */
+  relayedPath: boolean | undefined = false;
   /** When set, the next `createPeer` for that role throws it, as the real peer does for a hide with nothing to hide behind. */
   failNextCreate: Error | undefined;
   private applied = 0;

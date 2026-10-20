@@ -127,6 +127,10 @@ export interface PacingState {
   readonly buffered: number;
   /** The send buffer passed the high-water mark and has not yet drained to the low-water mark. */
   readonly paused: boolean;
+  /** Envelope bytes sent so far, in all. A rule that spends a budget learns what was spent from the change in this. */
+  readonly sent: number;
+  /** What the next frame would carry if nothing held it back: at most one frame's payload. */
+  readonly wanted: number;
 }
 
 /**
@@ -256,16 +260,6 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
     prefetch();
 
     while (sent < total) {
-      // Ask the pacing rule; if it says none, wait for an ACK, the buffer to drain, or its own retry time.
-      let allowed = 0;
-      for (;;) {
-        if (failure) throw failure;
-        const verdict = pacing({ inFlight: sent - acknowledged, buffered: channel.bufferedAmount, paused });
-        // The protocol's own window is a ceiling no pacing rule can lift.
-        allowed = Math.min(verdict.bytes, LIMITS.unacknowledgedBytes - (sent - acknowledged));
-        if (allowed > 0) break;
-        await waiter.wait(verdict.retryMs);
-      }
       if (position === current.length) {
         let record: Uint8Array | undefined;
         try {
@@ -286,7 +280,20 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
         prefetch();
       }
       if (failure) throw failure;
-      const take = Math.min(room, current.length - position, total - sent, allowed);
+      // What would go in the next frame if nothing held it back.
+      const wanted = Math.min(room, current.length - position, total - sent);
+      // Ask the pacing rule; if it says none, wait for an ACK, the buffer to drain, or its own retry time.
+      let allowed = 0;
+      for (;;) {
+        if (failure) throw failure;
+        const verdict = pacing({ inFlight: sent - acknowledged, buffered: channel.bufferedAmount, paused, sent, wanted });
+        // The protocol's own window is a ceiling no pacing rule can lift.
+        allowed = Math.min(verdict.bytes, LIMITS.unacknowledgedBytes - (sent - acknowledged));
+        if (allowed > 0) break;
+        await waiter.wait(verdict.retryMs);
+      }
+      if (failure) throw failure;
+      const take = Math.min(wanted, allowed);
       try {
         channel.send(encodeData(sent, current.subarray(position, position + take)));
       } catch {

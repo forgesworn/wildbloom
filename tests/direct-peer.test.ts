@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DirectPeer, NoRelayError, buildRtcConfiguration, wrapDataChannel } from "../src/direct/peer.js";
+import { DirectPeer, NoRelayError, buildRtcConfiguration, isRelayed, selectedPath, wrapDataChannel } from "../src/direct/peer.js";
 import type { IceServer } from "../src/direct/messages.js";
 import { FakeDataChannel, FakeRtc, installFakeRtc, settle } from "./helpers/direct-fakes.js";
 
@@ -197,6 +197,51 @@ describe("a peer connection", () => {
     expect(await peer.path()).toEqual({ local: "srflx", remote: "relay" });
     fake.stats = {};
     expect(await peer.path()).toBeUndefined();
+  });
+});
+
+describe("whether the selected pair is relayed", () => {
+  const stats = (local: string, remote: string) => {
+    const reports = [
+      { id: "T", type: "transport", selectedCandidatePairId: "P" },
+      { id: "P", type: "candidate-pair", localCandidateId: "L", remoteCandidateId: "R" },
+      { id: "L", type: "local-candidate", candidateType: local },
+      { id: "R", type: "remote-candidate", candidateType: remote },
+    ];
+    return { forEach: (callback: (report: (typeof reports)[number]) => void) => reports.forEach(callback) };
+  };
+
+  it("is true when either end is a relay candidate, false when neither is, and unknown with no pair", () => {
+    expect(isRelayed(selectedPath(stats("relay", "host")))).toBe(true);
+    expect(isRelayed(selectedPath(stats("host", "relay")))).toBe(true);
+    expect(isRelayed(selectedPath(stats("relay", "relay")))).toBe(true);
+    expect(isRelayed(selectedPath(stats("host", "host")))).toBe(false);
+    expect(isRelayed(selectedPath(stats("srflx", "prflx")))).toBe(false);
+    expect(isRelayed(selectedPath({ forEach: () => undefined }))).toBeUndefined();
+    expect(isRelayed(undefined)).toBeUndefined();
+  });
+
+  it("reads Firefox's shape, where the pair says it is selected", () => {
+    const reports = [
+      { id: "P", type: "candidate-pair", selected: true, localCandidateId: "L", remoteCandidateId: "R" },
+      { id: "L", type: "local-candidate", candidateType: "host" },
+      { id: "R", type: "remote-candidate", candidateType: "relay" },
+    ];
+    expect(isRelayed(selectedPath({ forEach: (callback) => reports.forEach(callback) }))).toBe(true);
+  });
+
+  it("is what the peer reports from its own statistics", async () => {
+    const rtc = installFakeRtc();
+    const peer = new DirectPeer({ iceServers: servers, hide: false, rtc });
+    FakeRtc.last().stats = {
+      T: { type: "transport", selectedCandidatePairId: "P" },
+      P: { type: "candidate-pair", localCandidateId: "L", remoteCandidateId: "R" },
+      L: { type: "local-candidate", candidateType: "relay" },
+      R: { type: "remote-candidate", candidateType: "host" },
+    };
+    expect(await peer.relayed()).toBe(true);
+    FakeRtc.last().stats = {};
+    expect(await peer.relayed()).toBeUndefined();
   });
 });
 

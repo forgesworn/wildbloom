@@ -104,6 +104,7 @@ function shimmed(inner: PeerLike): PeerLike {
     offer: async (restart) => throughShim(await inner.offer(restart), "drop"),
     answer: (sdp) => inner.answer(sdp),
     applyAnswer: async (sdp) => inner.applyAnswer(await throughShim(sdp, "phone")),
+    relayed: () => inner.relayed(),
     onState: (listener) => inner.onState(listener),
     close: () => inner.close(),
   };

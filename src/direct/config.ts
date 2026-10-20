@@ -31,6 +31,9 @@ export const LIMITS = Object.freeze({
   ackEveryBytes: 1_048_576,
   highWaterBytes: 1_048_576,
   lowWaterBytes: 262_144,
+  // A relayed send is paced: TURN servers drop what exceeds their per-allocation rate, and SCTP recovers from the drops too slowly.
+  relayBytesPerSecond: 400_000,
+  relayBurstBytes: 65_536,
 });
 
 /** Description gathering waits at most this long before the description is sent as it stands. */

@@ -11,6 +11,7 @@ import {
   type Side,
   type StopReason,
 } from "./messages.js";
+import { createPathPacing, stricter, watchPath, type PathWatch, type PathWatchOptions, type RatePacerOptions } from "./pacing.js";
 import { DirectPeer, NoRelayError, type PeerOptions, type PeerState } from "./peer.js";
 import { receiveEnvelope, sendEnvelope, TransferError, type DirectSink, type FrameChannel, type Pacing } from "./transfer.js";
 
@@ -98,6 +99,8 @@ export interface PeerLike {
   offer(restart?: boolean): Promise<string>;
   answer(offerSdp: string): Promise<string>;
   applyAnswer(answerSdp: string): Promise<void>;
+  /** Whether the selected candidate pair has a relay candidate at either end; undefined while none is selected. */
+  relayed(): Promise<boolean | undefined>;
   onState(listener: (state: PeerState, violation: boolean) => void): () => void;
   close(): void;
 }
@@ -299,6 +302,10 @@ export interface SenderSessionOptions {
   readonly connectMs?: number;
   /** How long a failed connection gets to come back. */
   readonly giveUpMs?: number;
+  /** Overrides the relayed-send rate, burst or clock; tests use it. */
+  readonly rate?: RatePacerOptions;
+  /** Overrides how the selected pair is re-read; tests use it. */
+  readonly pathWatch?: PathWatchOptions;
 }
 
 export interface SendHooks {
@@ -312,8 +319,10 @@ export interface SendHooks {
   readonly onProgress?: (acknowledged: number, total: number) => void;
   /** The connection dropped (true) or came back (false). */
   readonly onReconnecting?: (on: boolean) => void;
-  /** A stricter pacing rule than the protocol's, if one is wanted. */
+  /** A stricter pacing rule than the protocol's and the relay's, if one is wanted. */
   readonly pacing?: Pacing;
+  /** The selected pair was read: relayed (so the send is paced), direct, or not known yet. */
+  readonly onPath?: (relayed: boolean | undefined) => void;
 }
 
 export interface ManifestInput {
@@ -347,6 +356,9 @@ export class SenderSession {
   private readonly createPeer: PeerFactory;
   private readonly connectMs: number;
   private readonly giveUpMs: number;
+  private readonly rate: RatePacerOptions;
+  private readonly pathOptions: PathWatchOptions;
+  private path: PathWatch | undefined;
   private invite: Invite | undefined;
   private manifest: ManifestInput | undefined;
   private offerSdp: string | undefined;
@@ -363,6 +375,8 @@ export class SenderSession {
     this.createPeer = options.createPeer ?? browserPeer;
     this.connectMs = options.connectMs ?? CONNECT_GIVE_UP_MS;
     this.giveUpMs = options.giveUpMs ?? RECONNECT_GIVE_UP_MS;
+    this.rate = options.rate ?? {};
+    this.pathOptions = options.pathWatch ?? {};
   }
 
   /** Reads Drop's invitation (message 0). Throws `unsupported` or `protocol` after telling Drop. */
@@ -426,11 +440,20 @@ export class SenderSession {
         throw error instanceof NoRelayError ? new DirectError("no-relay") : error;
       }
       this.peer = peer;
+      // A relayed pair is paced; the pair is read once connected and again after each ICE restart.
+      const pathPacing = createPathPacing(this.rate);
+      const path = watchPath(() => peer.relayed(), (relayed) => {
+        pathPacing.setRelayed(relayed);
+        hooks.onPath?.(relayed);
+      }, this.pathOptions);
+      this.path = path;
       const watch = watchConnection(peer, {
         connectMs: this.connectMs,
         reconnectMs: this.giveUpMs,
         onReconnecting: hooks.onReconnecting,
         onGiveUp: (error) => this.giveUp(error),
+        // Coming back after a drop may be on another path.
+        onState: (state) => { if (state === "connected") void path.refresh(); },
       });
       this.watch = watch;
       const answerSdp = await peer.answer(offerSdp);
@@ -440,6 +463,8 @@ export class SenderSession {
 
       const channel = await Promise.race([peer.channel, watch.failed]);
       this.channel = channel;
+      // Know the path before the first byte, so a relayed send never starts unpaced.
+      await Promise.race([path.refresh(), watch.failed]);
       hooks.onConnected?.();
       await Promise.race([
         sendEnvelope({
@@ -447,7 +472,7 @@ export class SenderSession {
           encoder,
           signal: run.signal,
           ...(hooks.onProgress ? { onProgress: hooks.onProgress } : {}),
-          ...(hooks.pacing ? { pacing: hooks.pacing } : {}),
+          pacing: hooks.pacing ? stricter(pathPacing.pacing, hooks.pacing) : pathPacing.pacing,
         }),
         watch.failed,
       ]);
@@ -456,6 +481,7 @@ export class SenderSession {
       throw this.end(this.failure ?? error);
     } finally {
       this.watch?.stop();
+      this.path?.stop();
       encoder?.dispose();
       await drained(this.channel, FLUSH_MS * 4);
       this.close();
@@ -523,6 +549,8 @@ export class SenderSession {
       try {
         const sdp = await peer.answer(message.sdp);
         await this.link.send({ event: "restart-answer", sdp });
+        // The restart may have moved the send to another pair.
+        this.path?.afterRestart();
       } catch (error) {
         const failure = exchangeFailure(error);
         if (failure.kind === "network" || failure.kind === "expired") this.noMoreRestarts();
