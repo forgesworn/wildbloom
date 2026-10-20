@@ -583,6 +583,36 @@ describe("stopping", () => {
     // Whether the STOP got out before the connection closed or the close alone told Drop, nothing is kept.
     expect(["peer-cancelled", "lost"]).toContain(await kind(receiving));
     expect(held.current?.file).toBeUndefined();
+    // Closing in the same turn does not cancel the stop message: Drop can tell a closed page from a lost connection.
+    await settle(20);
+    expect(decodeAll(r.pageExchange, "page").at(-1)).toEqual({ event: "stop", reason: "cancelled" });
+  }, 30_000);
+
+  it("keeps the exchange open until the page's stop has gone, since closing it would cancel the request", async () => {
+    const r = rig();
+    const file = new File([sample(8 * MiB)], "a.bin", { type: "application/octet-stream" });
+    const { decision } = await negotiate(r, file);
+    const receiving = accept(r, receiverHooks());
+    receiving.catch(() => undefined);
+    await decision;
+    let stopped = false;
+    const sending = send(r, file, {
+      hide: false,
+      onProgress: (acknowledged) => {
+        if (stopped || acknowledged === 0) return;
+        stopped = true;
+        // A slow relay: the stop's request is still on its way when the session closes.
+        r.pageExchange.slow = true;
+        r.sender.stop("cancelled", { immediate: true });
+      },
+    });
+    expect(await kind(sending)).toBe("cancelled");
+    await waitUntil(() => r.pageExchange.sending === 1, "the stop to be on its way");
+    await settle(20);
+    expect(r.pageExchange.isEnded).toBe(false);
+    r.pageExchange.flush();
+    await waitUntil(() => r.pageExchange.isEnded, "the exchange to close");
+    expect(decodeAll(r.pageExchange, "page").at(-1)).toEqual({ event: "stop", reason: "cancelled" });
   }, 30_000);
 
   it("sends a stop message in place of the next one when cancelled before the file moves", async () => {
