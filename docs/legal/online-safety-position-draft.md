@@ -62,32 +62,36 @@ exchange one file with one person they choose. On `/get` that person
 downloads a file the owner shared; on `/send` they send a file to the owner's
 computer. Each exchange starts from a link and four words the owner passes
 on, and both people compare check words before any file moves. Unlike the
-client above, these pages have servers built in. They are the maintainer's
-own, run for the maintainer's own Drop and offered to no one else:
+client above, these pages have servers built in. They are a private
+deployment run for the maintainer's own Drop, not a public service:
 
 - a Foregather pairing relay at shelter.forgesworn.dev, which holds the
   encrypted pairing messages until the session is deleted or expires;
 - for `/get`, a Wildbloom Node at the same address, from which the recipient
   downloads the shared file as an encrypted envelope. The node stores only
   what the maintainer's own devices put there and accepts no other uploader;
-- for `/send`, the maintainer's STUN and TURN server at
-  kithmoot.forgesworn.dev. When the two ends cannot connect directly, or the
-  maintainer hides their address, it relays the encrypted transfer. It sees
-  both addresses, byte counts and timing, cannot read the file, and stores
-  nothing.
+- for `/send`, the STUN and TURN server at kithmoot.forgesworn.dev, which
+  KithMoot also uses with credentials of its own. When the two ends cannot
+  connect directly, or the maintainer hides their address, it relays the
+  encrypted transfer. It sees both addresses, byte counts and timing, cannot
+  read the file, and stores nothing.
 
-ForgeSworn offers these servers to no one as a service, and the code holds
-to that. Only a device holding a grant from the maintainer's node, which
-only the maintainer's key can issue, can open a session on the pairing relay
-or obtain TURN credentials, and the node accepts uploads from the
-maintainer's key and devices only. The pages take their pairing relay and
-TURN servers from the build, never from a link, so another Drop owner cannot
-use them, and nobody can use the relay or the TURN server unless the
-maintainer opened the session. Each exchange is between the maintainer and
-one person the maintainer invited, and a file sent with `/send` never rests
-on a server. `[LEGAL REVIEW: confirm that a person exchanging one file with
-the maintainer, through the maintainer's own servers, does not make
-ForgeSworn the provider of a user-to-user service.]`
+For Wildbloom, ForgeSworn offers these servers to no one as a service, and
+the code holds to that. Only a device holding a grant from the maintainer's
+node, which only the maintainer's key can issue, can open a session on the
+pairing relay or obtain Wildbloom's TURN credentials, and the node accepts
+uploads from the maintainer's key and devices only. The pages take their
+pairing relay and TURN servers from the build, never from a link, so another
+Drop owner cannot use them, and no Wildbloom exchange can use the relay or
+the TURN server unless the maintainer opened the session. Each exchange is
+between the maintainer and one person the maintainer invited, and a file
+sent with `/send` never rests on a server. `[LEGAL REVIEW: two questions.
+First, whether an exchange whose only other party is the provider, an
+individual who is not a user under section 227(3), falls outside section 3.
+Second, whether serving these pages from the public wildbloom.forgesworn.dev
+site breaks "closed means closed", given that a visitor counts as a user
+(section 227(2)). See jurisdiction-kit law/gb/online-services.md sections
+2.2 and 2.10.]`
 <!-- src/get/config.ts:9; src/direct/config.ts:54-61; wildbloom-node
 docs/PROTOCOL.md "Direct send", "TURN credential issuer" and "What servers
 learn". -->
@@ -98,13 +102,14 @@ learn". -->
 sections 1 and 2.2. -->
 
 ForgeSworn publishes software: this static client, and the Wildbloom Node
-binaries and source. It offers no service: it runs no public relay, no
-public Blossom server, no public node and no managed storage tier, and hosts
-no content but the maintainer's own. The only servers it runs for Wildbloom
-are the maintainer's own Wildbloom Node, pairing relay and STUN/TURN server,
-described under "Share and direct send" above, and nobody else can use them:
-a person exchanging a file with the maintainer takes part only in a session
-the maintainer opened. Its intended
+binaries and source. For Wildbloom it runs no public service: no public
+relay, Blossom server or node, and no managed storage tier, and it hosts no
+Wildbloom content but the maintainer's own. The only servers it runs for
+Wildbloom are the maintainer's private deployment described under "Share and
+direct send" above, and a person exchanging a file with the maintainer takes
+part only in a session the maintainer opened. Other ForgeSworn deployments,
+such as KithMoot's, are outside this document and are assessed separately.
+Its intended
 income is support, sponsorship, a paid app, or a deploy kit that customers
 run in their own cloud account; none of these has ForgeSworn running a node.
 

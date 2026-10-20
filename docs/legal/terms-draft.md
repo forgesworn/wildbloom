@@ -19,9 +19,9 @@ do not store or review it. We publish this software as-is and do not run or
 host Wildbloom Nodes for other people. If you run a node or any other server,
 or offer one to other people, you do so at your own responsibility, and you
 should take your own legal advice. The Share and direct send pages (`/get`,
-`/send`) use the maintainer's own node, pairing relay and TURN server, on
-which only the maintainer's devices can open a session; we offer them to no
-one as a service.
+`/send`) use a private deployment for the maintainer's own Drop: a node, a
+pairing relay and a TURN server. Only the maintainer's devices can open an
+exchange on it, and we offer it to no one as a service.
 
 By using the service you agree to these terms. If we change them, we will say
 so on the service. These terms do not take away any rights you have by law.
