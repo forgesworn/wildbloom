@@ -102,6 +102,25 @@ export function wrapDataChannel(channel: RTCDataChannel, connection: { readonly 
   };
 }
 
+/** Some browsers refuse a URL spelled `?transport=tcp`; the same server's other URLs still work. */
+const TCP_SPELLING = /\?transport=tcp$/iu;
+
+/**
+ * Makes the connection from the invitation's servers. If the browser refuses the configuration as
+ * malformed, it is made again without the URLs in the spelling some browsers reject: a server that is
+ * left with none is dropped, so this can only take servers away, never add one.
+ */
+function openConnection(Constructor: typeof RTCPeerConnection, servers: readonly IceServer[], hide: boolean): RTCPeerConnection {
+  const configuration = buildRtcConfiguration(servers, hide);
+  try {
+    return new Constructor(configuration);
+  } catch (error) {
+    if (!(error instanceof Error) || error.name !== "SyntaxError") throw error;
+    const trimmed = servers.map((server) => ({ ...server, urls: server.urls.filter((url) => !TCP_SPELLING.test(url)) }));
+    return new Constructor(buildRtcConfiguration(trimmed, hide));
+  }
+}
+
 function stateOf(connection: RTCPeerConnection): PeerState {
   if (connection.connectionState !== undefined) return connection.connectionState;
   // Firefox before 113 has only the ICE state.
@@ -130,7 +149,7 @@ export class DirectPeer {
   constructor(options: PeerOptions) {
     const Constructor = options.rtc ?? RTCPeerConnection;
     this.gatherMs = options.gatherMs ?? GATHER_MS;
-    this.connection = new Constructor(buildRtcConfiguration(options.iceServers, options.hide));
+    this.connection = openConnection(Constructor, options.iceServers, options.hide);
     // Negotiated on both sides, so no ondatachannel event ever carries the protocol's channel.
     this.dataChannel = this.connection.createDataChannel(DATA_CHANNEL_LABEL, { negotiated: true, id: 0, ordered: true });
     this.dataChannel.binaryType = "arraybuffer";

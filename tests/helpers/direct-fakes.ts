@@ -164,8 +164,15 @@ export class FakeRtc extends Target {
   stats: FakeStats = {};
   private round = 0;
 
+  /** When true, a configuration with a `?transport=tcp` URL is refused as malformed, as WebKit does. */
+  static rejectTcpSpelling = false;
+
   constructor(readonly configuration: Record<string, unknown>) {
     super();
+    const urls = ((configuration.iceServers as { urls: string[] }[] | undefined) ?? []).flatMap((server) => server.urls);
+    if (FakeRtc.rejectTcpSpelling && urls.some((url) => /\?transport=tcp$/iu.test(url))) {
+      throw Object.assign(new Error("Malformed URL"), { name: "SyntaxError" });
+    }
     FakeRtc.instances.push(this);
   }
 
@@ -220,6 +227,7 @@ export class FakeRtc extends Target {
 
 export function installFakeRtc(): typeof RTCPeerConnection {
   FakeRtc.instances = [];
+  FakeRtc.rejectTcpSpelling = false;
   return FakeRtc as unknown as typeof RTCPeerConnection;
 }
 

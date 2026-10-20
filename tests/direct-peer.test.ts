@@ -57,6 +57,20 @@ describe("a peer connection", () => {
     return { peer, fake: FakeRtc.last() };
   };
 
+  it("tries again without the ?transport=tcp spelling where the browser refuses it, and never adds a server", () => {
+    const rtc = installFakeRtc();
+    FakeRtc.rejectTcpSpelling = true;
+    const withTcp: IceServer[] = [{ username: "u", credential: "c", urls: ["turn:turn.example.net:3478?transport=udp", "turn:turn.example.net:3478?transport=tcp", "turns:turn.example.net:5349?transport=tcp"] }];
+    const peer = new DirectPeer({ iceServers: withTcp, hide: false, rtc });
+    expect(FakeRtc.last().configuration.iceServers).toEqual([{ urls: ["turn:turn.example.net:3478?transport=udp"], username: "u", credential: "c" }]);
+    peer.close();
+    // Hiding needs a TURN URL that is left; a server whose only URL was refused is dropped, and with none left the peer will not start.
+    const onlyTcp: IceServer[] = [{ username: "u", credential: "c", urls: ["turn:turn.example.net:3478?transport=tcp"] }];
+    expect(() => new DirectPeer({ iceServers: onlyTcp, hide: true, rtc })).toThrow(NoRelayError);
+    // Another failure is not hidden.
+    expect(() => new DirectPeer({ iceServers: withTcp, hide: false, rtc: class { constructor() { throw new TypeError("no"); } } as unknown as typeof RTCPeerConnection })).toThrow(TypeError);
+  });
+
   it("opens exactly one pre-negotiated, ordered, reliable data channel", () => {
     const { fake } = make();
     expect(fake.channels).toHaveLength(1);
