@@ -46,6 +46,7 @@
     "ci": "npm run check && npm run audit",
     "acceptance:recovery": "node scripts/recovery-acceptance.mjs",
     "acceptance:get": "node scripts/get-acceptance.mjs",
+    "acceptance:direct": "node scripts/direct-acceptance.mjs",
     "acceptance:pool": "node scripts/pool-acceptance.mjs",
     "acceptance:pool:quick": "node scripts/pool-acceptance.mjs --quick",
     "acceptance:services": "node scripts/services-acceptance.mjs",
@@ -55,7 +56,7 @@
     "test:checkout-preflight": "node --test scripts/test-checkout-preflight.mjs"
   },
   "dependencies": {
-    "@forgesworn/foregather-kit": "https://github.com/forgesworn/foregather-kit/releases/download/v0.5.0/forgesworn-foregather-kit-0.5.0.tgz",
+    "@forgesworn/foregather-kit": "https://github.com/forgesworn/foregather-kit/releases/download/v0.6.0/forgesworn-foregather-kit-0.6.0.tgz",
     "@noble/hashes": "2.4.0",
     "402-announce": "2.3.0",
     "create-torrent": "6.1.3",

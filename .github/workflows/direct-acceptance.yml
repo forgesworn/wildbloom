@@ -1,0 +1,57 @@
+name: Direct send acceptance
+
+# Two real Chromium browsers send a file to each other through a real pairing
+# service, and the relay-only case runs through a real coturn. The phone page
+# uses foregather-kit 0.6.0 (flow.exchange()), which package.json pins.
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      kit_commit:
+        description: Full reviewed foregather-kit commit SHA whose foregather-server serves live sessions
+        required: false
+        default: "5f184490af4b5ba0f705685a5138ce9db7c8528b"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  direct:
+    name: direct send (two Chromium browsers and coturn on ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require an immutable relay revision
+        env:
+          KIT_COMMIT: ${{ inputs.kit_commit || '5f184490af4b5ba0f705685a5138ce9db7c8528b' }}
+        shell: bash
+        run: '[[ "$KIT_COMMIT" =~ ^[a-f0-9]{40}$ ]]'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: forgesworn/foregather-kit
+          ref: ${{ inputs.kit_commit || '5f184490af4b5ba0f705685a5138ce9db7c8528b' }}
+          path: .artifacts/foregather-kit
+      - run: rustup toolchain install 1.94.1 --profile minimal
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm exec --offline -- playwright-core install --with-deps chromium
+      - name: Install coturn
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends coturn
+          # The package may start a service on the default ports. The acceptance script runs its own server on a free one.
+          sudo systemctl stop coturn || true
+          command -v turnserver
+      - run: cargo +1.94.1 build --locked --manifest-path .artifacts/foregather-kit/Cargo.toml -p foregather-server
+      - name: Direct send acceptance, including relay-only through coturn
+        env:
+          FOREGATHER_SERVER_BIN: ${{ github.workspace }}/.artifacts/foregather-kit/target/debug/foregather-server
+          DIRECT_REQUIRE_TURN: "1"
+        run: npm run acceptance:direct

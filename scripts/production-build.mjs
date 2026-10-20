@@ -7,8 +7,8 @@ export const MAX_PRODUCTION_FILES = 64;
 export const MAX_PRODUCTION_FILE_BYTES = 32 * 1024 * 1024;
 export const MAX_PRODUCTION_BUILD_BYTES = 64 * 1024 * 1024;
 
-/** HTML entries served without caching. get.html is the recipient page at /get. */
-export const PRODUCTION_DOCUMENTS = Object.freeze(["get.html", "index.html"]);
+/** HTML entries served without caching. get.html is the recipient page at /get and send.html the sender page at /send. */
+export const PRODUCTION_DOCUMENTS = Object.freeze(["get.html", "index.html", "send.html"]);
 
 export function isProductionDocumentPath(relative) {
   return PRODUCTION_DOCUMENTS.includes(relative);

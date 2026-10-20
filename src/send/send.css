@@ -1,0 +1,22 @@
+/* The sender page adds one control to the recipient page's styles: a checkbox row. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  margin: var(--space-4) 0 var(--space-1);
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0.125rem 0 0;
+  accent-color: var(--accent);
+}
+
+.check input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}

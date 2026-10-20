@@ -47,27 +47,33 @@ export function entryReachesWebTorrent(bundle: Rollup.OutputBundle, entryName: s
   return false;
 }
 
+/** The standalone pairing pages: `/get` receives a file, `/send` sends one. Each is its own HTML entry. */
+const PAIRING_PAGES = ["get", "send"] as const;
+
 /**
- * Serve the recipient page at /get in dev and preview. Without this the SPA
- * fallback answers with the main client, and /get/ would break relative assets.
+ * Serve the pairing pages at /get and /send in dev and preview. Without this
+ * the SPA fallback answers with the main client, and a trailing slash would
+ * break relative assets.
  */
-function serveRecipientRoute(): Plugin {
+function servePairingRoutes(): Plugin {
   const middleware: Connect.NextHandleFunction = (request, response, next) => {
     const url = request.url ?? "";
     const queryStart = url.indexOf("?");
     const path = (queryStart < 0 ? url : url.slice(0, queryStart)).split("#")[0];
     const query = queryStart < 0 ? "" : url.slice(queryStart);
-    if (path === "/get/") {
-      response.statusCode = 301;
-      response.setHeader("Location", `/get${query}`);
-      response.end();
-      return;
+    for (const page of PAIRING_PAGES) {
+      if (path === `/${page}/`) {
+        response.statusCode = 301;
+        response.setHeader("Location", `/${page}${query}`);
+        response.end();
+        return;
+      }
+      if (path === `/${page}`) request.url = `/${page}.html${query}`;
     }
-    if (path === "/get") request.url = `/get.html${query}`;
     next();
   };
   return {
-    name: "wildbloom-recipient-route",
+    name: "wildbloom-pairing-routes",
     configureServer(server) { server.middlewares.use(middleware); },
     configurePreviewServer(server) { server.middlewares.use(middleware); },
   };
@@ -85,7 +91,9 @@ function enforceBrowserWebTorrentBoundary(): Plugin {
     },
     generateBundle(_options, bundle) {
       if (!browserBundleLoaded) this.error("Production did not include the expected WebTorrent browser bundle.");
-      if (entryReachesWebTorrent(bundle, "get")) this.error("The recipient page must never include WebTorrent.");
+      for (const page of PAIRING_PAGES) {
+        if (entryReachesWebTorrent(bundle, page)) this.error(`The /${page} page must never include WebTorrent.`);
+      }
       for (const output of Object.values(bundle)) {
         if (output.type === "chunk" && productionChunkContainsNodeIp(output.code)) {
           this.error(`Production chunk ${output.fileName} contains the vulnerable Node ip implementation.`);
@@ -97,7 +105,7 @@ function enforceBrowserWebTorrentBoundary(): Plugin {
 
 export default defineConfig({
   base: "./",
-  plugins: [serveRecipientRoute(), enforceBrowserWebTorrentBoundary()],
+  plugins: [servePairingRoutes(), enforceBrowserWebTorrentBoundary()],
   resolve: {
     // create-torrent and parse-torrent expose browser implementations for
     // filesystem access but still use POSIX path operations for metadata.
@@ -105,7 +113,7 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
-    rollupOptions: { input: { main: "index.html", get: "get.html" } },
+    rollupOptions: { input: { main: "index.html", get: "get.html", send: "send.html" } },
   },
   test: {
     coverage: {

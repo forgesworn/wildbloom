@@ -12,6 +12,8 @@ import {
   GET_CONTENT_SECURITY_POLICY,
   DENIED_PERMISSION_FEATURES,
   PERMISSIONS_POLICY,
+  SEND_CONTENT_SECURITY_POLICY,
+  SEND_PERMISSIONS_POLICY,
 } from "./http-security.mjs";
 
 const HOST = "127.0.0.1";
@@ -258,7 +260,12 @@ function expectDeploymentVerificationCli(evidence, port) {
   }
 }
 
-function expectSecurityHeaders(response, label, expectedPolicy = CONTENT_SECURITY_POLICY) {
+/**
+ * `allowedPermissions` lists the Permissions-Policy features a path may use for
+ * its own origin. Only /send has one, screen-wake-lock; every other feature,
+ * and that one everywhere else, stays denied.
+ */
+function expectSecurityHeaders(response, label, expectedPolicy = CONTENT_SECURITY_POLICY, allowedPermissions = []) {
   const csp = response.headers["content-security-policy"] ?? "";
   expect(csp === expectedPolicy, `${label} changed the exact production CSP.`);
   for (const directive of [
@@ -289,9 +296,11 @@ function expectSecurityHeaders(response, label, expectedPolicy = CONTENT_SECURIT
   expect(response.headers["x-content-type-options"] === "nosniff", `${label} permitted MIME sniffing.`);
   expect(response.headers["x-frame-options"] === "DENY", `${label} permitted framing.`);
   const permissions = response.headers["permissions-policy"] ?? "";
-  expect(permissions === PERMISSIONS_POLICY, `${label} changed the exact production Permissions-Policy.`);
+  const expectedPermissions = allowedPermissions.length === 0 ? PERMISSIONS_POLICY : SEND_PERMISSIONS_POLICY;
+  expect(permissions === expectedPermissions, `${label} changed the exact production Permissions-Policy.`);
   for (const feature of DENIED_PERMISSION_FEATURES) {
-    expect(permissions.includes(`${feature}=()`), `${label} did not disable ${feature}.`);
+    const expected = allowedPermissions.includes(feature) ? `${feature}=(self)` : `${feature}=()`;
+    expect(permissions.includes(expected), `${label} did not set ${expected}.`);
   }
 }
 
@@ -385,6 +394,24 @@ try {
   expect(recipientSlash.status === 301 && recipientSlash.headers.location === "/get", "Production /get/ did not redirect to /get.");
   const recipientFile = await exchange(port, { path: "/get.html" });
   expect(recipientFile.status === 404, "Production exposed get.html by file name.");
+  expect(!recipientPage.headers["permissions-policy"].includes("screen-wake-lock=(self)"), "The recipient page was allowed to keep the screen on.");
+
+  const senderPage = await exchange(port, { path: "/send" });
+  const expectedSender = expectedFiles.get("send.html");
+  expect(senderPage.status === 200 && senderPage.body.equals(expectedSender), "Production /send did not return exact built sender bytes.");
+  expect(senderPage.headers["cache-control"] === "no-store", "Sender page was cacheable.");
+  expect(senderPage.headers["content-type"] === "text/html; charset=utf-8", "Sender page MIME type was not exact.");
+  expectSecurityHeaders(senderPage, "Sender page", SEND_CONTENT_SECURITY_POLICY, ["screen-wake-lock"]);
+  const senderHead = await exchange(port, { method: "HEAD", path: "/send" });
+  expect(senderHead.status === 200 && senderHead.body.length === 0, "HEAD returned sender page bytes.");
+  expect(senderHead.headers["content-length"] === String(expectedSender.length), "HEAD did not report the exact sender page length.");
+  expectSecurityHeaders(senderHead, "HEAD sender page", SEND_CONTENT_SECURITY_POLICY, ["screen-wake-lock"]);
+  const senderSlash = await exchange(port, { path: "/send/" });
+  expect(senderSlash.status === 301 && senderSlash.headers.location === "/send", "Production /send/ did not redirect to /send.");
+  const senderFile = await exchange(port, { path: "/send.html" });
+  expect(senderFile.status === 404, "Production exposed send.html by file name.");
+  const senderQuery = await exchange(port, { path: "/send?private-query-marker" });
+  expect(senderQuery.status === 400, "Production /send accepted a query string.");
 
   for (const file of evidence.files.filter((item) => !PRODUCTION_DOCUMENTS.includes(item.path))) {
     const response = await exchange(port, { path: `/${file.path}` });
@@ -427,7 +454,7 @@ try {
   }
   writeFileSync(join(deploymentRoot, "dist", "assets", "injected-abcdefgh.js"), "injected after startup");
   for (const file of evidence.files) {
-    const response = await exchange(port, { path: file.path === "index.html" ? "/" : file.path === "get.html" ? "/get" : `/${file.path}` });
+    const response = await exchange(port, { path: file.path === "index.html" ? "/" : file.path === "get.html" ? "/get" : file.path === "send.html" ? "/send" : `/${file.path}` });
     expect(response.status === 200 && response.body.equals(expectedFiles.get(file.path)), `Production server did not retain its startup snapshot: ${file.path}`);
     expect(createHash("sha256").update(response.body).digest("hex") === file.sha256, `Startup snapshot hash drifted: ${file.path}`);
   }

@@ -20,6 +20,7 @@ function buildFixture() {
   mkdirSync(join(root, "assets"));
   writeFileSync(join(root, "index.html"), "index-v1");
   writeFileSync(join(root, "get.html"), "get-v1");
+  writeFileSync(join(root, "send.html"), "send-v1");
   writeFileSync(join(root, "assets", "app-abcdefgh.js"), "app-v1");
   return root;
 }
