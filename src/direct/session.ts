@@ -321,7 +321,7 @@ export interface SendHooks {
   readonly onReconnecting?: (on: boolean) => void;
   /** A stricter pacing rule than the protocol's and the relay's, if one is wanted. */
   readonly pacing?: Pacing;
-  /** The selected pair was read: relayed (so the send is paced), direct, or not known yet. */
+  /** The selected pair is relayed (so the send is paced) or direct. Called when that answer changes. */
   readonly onPath?: (relayed: boolean | undefined) => void;
 }
 
@@ -442,9 +442,14 @@ export class SenderSession {
       this.peer = peer;
       // A relayed pair is paced; the pair is read once connected and again after each ICE restart.
       const pathPacing = createPathPacing(this.rate);
+      let reported: boolean | undefined;
       const path = watchPath(() => peer.relayed(), (relayed) => {
         pathPacing.setRelayed(relayed);
-        hooks.onPath?.(relayed);
+        // Tell the page when the answer changes, not each time the pair is read again.
+        if (relayed !== reported) {
+          reported = relayed;
+          hooks.onPath?.(relayed);
+        }
       }, this.pathOptions);
       this.path = path;
       const watch = watchConnection(peer, {

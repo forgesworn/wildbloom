@@ -42,11 +42,22 @@ function simulate(pacing: Pacing, clock: { t: number }, options: { wanted?: numb
 }
 
 const total = (sends: readonly Send[]): number => sends.reduce((sum, send) => sum + send.bytes, 0);
-/** The most sent inside any window of this many milliseconds. */
+/** The most sent inside any window of this many milliseconds, by a sliding window over the sends in time order. */
 function busiestWindow(sends: readonly Send[], windowMs: number): number {
   let most = 0;
-  for (const start of sends) {
-    most = Math.max(most, total(sends.filter((send) => send.time >= start.time && send.time < start.time + windowMs)));
+  let inside = 0;
+  let end = 0;
+  for (let start = 0; start < sends.length; start += 1) {
+    if (end < start) {
+      end = start;
+      inside = 0;
+    }
+    while (end < sends.length && sends[end]!.time < sends[start]!.time + windowMs) {
+      inside += sends[end]!.bytes;
+      end += 1;
+    }
+    most = Math.max(most, inside);
+    inside -= sends[start]!.bytes;
   }
   return most;
 }
@@ -141,6 +152,21 @@ describe("pacing that follows the path", () => {
       expect(total(sends)).toBeLessThanOrEqual(LIMITS.relayBurstBytes + 400_000 * 20);
       expect(busiestWindow(sends, 1000)).toBeLessThanOrEqual(400_000 + 65_536);
     }
+  });
+
+  it("asks again soon while the pair is unknown, since nothing else would tell the sender it is known", () => {
+    const clock = { t: 0 };
+    const path = createPathPacing({ now: () => clock.t });
+    expect(path.relayed).toBeUndefined();
+    // The bucket holds one frame; once it is spent the wait for the next would be 164 ms at the real rate,
+    // so use a slow rate to see the cap.
+    const slow = createPathPacing({ bytesPerSecond: 1_000, burstBytes: 65_536, now: () => clock.t });
+    expect(slow.pacing(state({ sent: 0 })).bytes).toBeGreaterThan(0);
+    const wait = slow.pacing(state({ sent: FRAME }));
+    expect(wait).toEqual({ bytes: 0, retryMs: 250 });
+    // A relayed pair is not capped this way: it waits as long as the rate says.
+    slow.setRelayed(true);
+    expect(slow.pacing(state({ sent: FRAME })).retryMs).toBeGreaterThan(250);
   });
 
   it("does not pace a direct pair: only the protocol's window and buffer rules apply", () => {

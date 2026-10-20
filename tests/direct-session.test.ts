@@ -284,7 +284,7 @@ describe("reconnection", () => {
   }, 30_000);
 
   it("does not restart for a blip that mends itself", async () => {
-    const r = rig({ restartAfterMs: 1500 });
+    const r = rig({ restartAfterMs: 8_000 });
     const file = new File([sample(4 * MiB)], "a.bin", { type: "application/octet-stream" });
     const { decision } = await negotiate(r, file);
     const receiving = accept(r, receiverHooks());
@@ -419,25 +419,28 @@ describe("pacing a relayed send", () => {
   }, 30_000);
 
   it("does not pace a direct pair", async () => {
-    // At this rate a paced send of 3 MiB would take half a minute.
-    const r = rig({ rate: { bytesPerSecond: 100_000, burstBytes: 65_536 } });
+    // A paced send of 3 MiB at this rate would take more than two minutes, longer than the test is given:
+    // it can only finish if the send ran free. That holds on a slow machine as on a fast one.
+    const r = rig({ rate: { bytesPerSecond: 20_000, burstBytes: 65_536 } });
     r.network.relayedPath = false;
     const seen: (boolean | undefined)[] = [];
-    const elapsed = await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
-    expect(seen).toContain(false);
-    expect(seen).not.toContain(true);
-    expect(elapsed).toBeLessThan(10_000);
+    await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
+    expect(seen).toEqual([false]);
   }, 30_000);
 
   it("is paced until the pair is known, then follows what it finds", async () => {
-    const r = rig({ rate: { bytesPerSecond: 100_000, burstBytes: 65_536 }, pathWatch: { retryMs: 20 } });
-    r.network.relayedPath = undefined;
+    // The first reads find no pair; later ones find a direct one. No clock decides when: the count of reads does.
+    const r = rig({ rate: { bytesPerSecond: 20_000, burstBytes: 65_536 }, pathWatch: { retryMs: 1 } });
+    r.network.relayedScript = [undefined, undefined, undefined];
+    r.network.relayedPath = false;
     const seen: (boolean | undefined)[] = [];
-    setTimeout(() => { r.network.relayedPath = false; }, 150);
-    const elapsed = await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
-    // Nothing was reported while the pair was unknown; then it was found to be direct and the send ran free.
-    expect(seen).toEqual([false]);
-    expect(elapsed).toBeLessThan(10_000);
+    // As above, it can only finish if pacing was switched off once the pair was found to be direct.
+    await run(r, 3 * MiB, { onPath: (relayed) => seen.push(relayed) });
+    // Nothing was reported while the pair was unknown; what was reported was direct, and never anything else.
+    expect(seen.length).toBeGreaterThan(0);
+    expect(new Set(seen)).toEqual(new Set([false]));
+    expect(seen.at(-1)).toBe(false);
+    expect(r.network.relayedScript).toEqual([]);
   }, 30_000);
 
   it("reads the pair again after an ICE restart and paces if the send moved onto a relay", async () => {

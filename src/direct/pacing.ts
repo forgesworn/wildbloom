@@ -74,6 +74,9 @@ export function createRatePacer(options: RatePacerOptions = {}): RatePacer {
   };
 }
 
+/** While the pair is unknown, a sender with nothing to send asks again at least this often. */
+const UNKNOWN_RETRY_MS = 250;
+
 export interface PathPacing {
   /** The protocol's rules always, and the relay rate while the path is relayed or not yet known. */
   readonly pacing: Pacing;
@@ -101,7 +104,10 @@ export function createPathPacing(options: RatePacerOptions = {}): PathPacing {
     },
     pacing(state) {
       if (relayed === false) return protocolPacing(state);
-      return relayedRule(state);
+      const verdict = relayedRule(state);
+      // While the pair is unknown nothing tells the sender when it becomes known, so it asks again soon.
+      if (relayed === undefined && verdict.bytes === 0) return { bytes: 0, retryMs: Math.min(verdict.retryMs ?? UNKNOWN_RETRY_MS, UNKNOWN_RETRY_MS) };
+      return verdict;
     },
   };
 }

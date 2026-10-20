@@ -376,7 +376,7 @@ export class FakePeer implements PeerLike {
 
   async relayed(): Promise<boolean | undefined> {
     this.relayedReads += 1;
-    return this.network.relayedPath;
+    return this.network.readRelayed();
   }
 
   onState(listener: (state: PeerState, violation: boolean) => void): () => void {
@@ -413,6 +413,12 @@ export class FakeNetwork {
   readonly created: PeerOptions[] = [];
   /** What `getStats()` would say about the selected pair: relayed, direct, or not yet known. */
   relayedPath: boolean | undefined = false;
+  /** Answers for the next reads, in order, before `relayedPath` takes over: "unknown twice, then direct" with no clock. */
+  relayedScript: (boolean | undefined)[] = [];
+
+  readRelayed(): boolean | undefined {
+    return this.relayedScript.length > 0 ? this.relayedScript.shift() : this.relayedPath;
+  }
   /** When set, the next `createPeer` for that role throws it, as the real peer does for a hide with nothing to hide behind. */
   failNextCreate: Error | undefined;
   private applied = 0;
