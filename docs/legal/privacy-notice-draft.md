@@ -16,7 +16,7 @@ wildbloom.forgesworn.dev, run by `[Operator]`. Contact us at
 
 - Wildbloom runs in your browser. We do not run a server that receives your
   files, your recovery keys, your Nostr private key, or the Nostr events you
-  sign.
+  sign. `[LEGAL REVIEW: not true of /get and /send; see open point 5.]`
 - We do not operate accounts, and there is nothing to sign in to.
 - We run no analytics and no advertising on this site.
 - Loading the page runs no network action. Publishing, looking something up
@@ -164,3 +164,9 @@ history.
 3. Confirm the exact browser storage keys in use (section 6).
 4. The complaint route under section 8, and the wording of its order
    relative to the ICO.
+5. `[LEGAL REVIEW]` This notice does not cover the Share and direct send
+   pages (`/get`, `/send`). They use a pairing relay, a Wildbloom Node and a
+   STUN/TURN server that ForgeSworn runs, which see the IP addresses of both
+   people, and the TURN server relays the encrypted file when the two ends
+   cannot connect directly. See "Share and direct send" in
+   `docs/legal/online-safety-position-draft.md`.

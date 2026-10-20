@@ -24,10 +24,11 @@ When someone publishes a file with it, the browser:
 - optionally seeds the file over WebTorrent to trackers **the user names**.
 
 There is no default relay, no default Blossom server and no default tracker
-baked into the app. The user supplies every endpoint the app talks to. The
-operator of wildbloom.forgesworn.dev runs no relay, no Blossom server and no
-tracker, and receives no copy of any file, key or event: Cloudflare Pages
-serves only the static build.
+baked into the app. The user supplies every endpoint the app talks to. For
+this publishing flow, the operator of wildbloom.forgesworn.dev runs no relay,
+no Blossom server and no tracker, and receives no copy of any file, key or
+event: Cloudflare Pages serves only the static build. The Share and direct
+send pages described below are different.
 
 **How the site presents itself (3 October 2026).** The landing page explains
 the software and offers no file, upload or download controls.  The client is
@@ -55,14 +56,52 @@ and keys leaves it unchanged.]`
 <!-- index.html:303-332; src/core/discovery.ts:165-186;
 src/services-ui.ts:268-286, 333; src/core/services-http.ts:76-83. -->
 
+**Share and direct send (20 October 2026, from `main` 57c0c5b).** Two further
+pages, `/get` and `/send`, let the owner of the Wildbloom Drop desktop app
+exchange one file with one person they choose. On `/get` that person
+downloads a file the owner shared; on `/send` they send a file to the owner's
+computer. Each exchange starts from a link and four words the owner passes
+on, and both people compare check words before any file moves. Unlike the
+client above, these pages have servers built in, and ForgeSworn runs them:
+
+- a Foregather pairing relay at shelter.forgesworn.dev, which holds the
+  encrypted pairing messages until the session is deleted or expires;
+- for `/get`, a Wildbloom Node at the same address, from which the recipient
+  downloads the shared file as an encrypted envelope. The node stores only
+  what the maintainer's own devices put there and accepts no other uploader;
+- for `/send`, a STUN and TURN server at kithmoot.forgesworn.dev, the coturn
+  server ForgeSworn also runs for KithMoot. When the two ends cannot connect
+  directly, or the owner hides their address, it relays the encrypted
+  transfer. It sees both addresses, byte counts and timing, cannot read the
+  file, and stores nothing.
+
+Only a device holding a grant from the maintainer's node can open a session
+on the pairing relay or obtain TURN credentials, so as deployed these pages
+serve the maintainer's own Drop. A file sent with `/send` never rests on a
+ForgeSworn server. `[LEGAL REVIEW: these pages ship default servers that
+ForgeSworn runs and set up a connection between two people, which items 1
+and 2 under "Where this argument is weaker" treat as reasons to re-open this
+position. Assess whether a word-verified, one-to-one transfer between a Drop
+owner and a person they invite makes the pages, the pairing relay or the
+TURN server a user-to-user service.]`
+<!-- src/get/config.ts:9; src/direct/config.ts:54-61; wildbloom-node
+docs/PROTOCOL.md "Direct send", "TURN credential issuer" and "What servers
+learn". -->
+
 ## What ForgeSworn runs
 
 <!-- Law: jurisdiction-kit law/gb/online-services.md, verified 2026-09-28,
 sections 1 and 2.2. -->
 
 ForgeSworn publishes software: this static client, and the Wildbloom Node
-binaries and source. It does not host user content. It runs no relay, no
-Blossom server, no public node and no managed storage tier. Its intended
+binaries and source. It runs no public relay, no public Blossom server, no
+public node and no managed storage tier, and hosts no content but the
+maintainer's own. It does run, for the maintainer's own Drop, the Wildbloom
+Node, pairing relay and STUN/TURN server described under "Share and direct
+send" above; the people the maintainer exchanges files with reach them
+through the hosted `/get` and `/send` pages. `[DECISION: how ForgeSworn
+describes this deployment: the maintainer's own node, or a service
+ForgeSworn provides.]` Its intended
 income is support, sponsorship, a paid app, or a deploy kit that customers
 run in their own cloud account; none of these has ForgeSworn running a node.
 
@@ -128,11 +167,13 @@ to a user-to-user service, and section 3 does not bite.
    the user already has. If that changes, the search-service limb of the Act
    would need separate consideration.
 
-**Conclusion (provisional).** As built today, the hosted web app is best read
-as software rather than a user-to-user service, because the operator hosts no
-user content, runs no relay, runs no Blossom server, and brokers no encounter
-between users. This is a considered position, not a certainty, and it should
-be re-checked whenever the facts above change. `[DECISION: the maintainer
+**Conclusion (provisional).** As built today, the hosted publishing client is
+best read as software rather than a user-to-user service, because for it the
+operator hosts no user content, runs no relay, runs no Blossom server, and
+brokers no encounter between users. This conclusion does not yet cover `/get`
+and `/send` (see the `[LEGAL REVIEW]` under "Share and direct send"). It is a
+considered position, not a certainty, and it should be re-checked whenever
+the facts above change. `[DECISION: the maintainer
 should confirm this reading, ideally with a lawyer, before treating it as
 settled, and should keep this document under version control as the record of
 that reasoning, per Ofcom's general record-keeping expectations for services
@@ -144,6 +185,11 @@ The hosted app collects no personal data on the operator's side: there is no
 account, no server-side storage of files, keys or events, and no server-side
 analytics (see `docs/legal/privacy-notice-draft.md` for the full position,
 including what Cloudflare may log as the hosting provider).
+
+The `/get` and `/send` pages are an exception: the pairing relay and the
+STUN/TURN server that ForgeSworn runs see the IP addresses of both people.
+`[LEGAL REVIEW: cover /get and /send in the privacy notice, including what
+the pairing relay and the TURN server log and for how long.]`
 
 ## What would change this position
 

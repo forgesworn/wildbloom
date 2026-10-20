@@ -16,9 +16,13 @@ Nostr and Blossom, and optionally seeding it over WebTorrent, using servers,
 relays and trackers you choose. We do not run those servers, relays or
 trackers, and what you publish does not pass through or stay with us, so we
 do not store or review it. We publish this software as-is and do not run or
-host Wildbloom Nodes. If you run a node or any other server, or offer one to
-other people, you do so at your own responsibility, and you should take your
-own legal advice.
+host Wildbloom Nodes for other people. If you run a node or any other server,
+or offer one to other people, you do so at your own responsibility, and you
+should take your own legal advice. `[DECISION: the Share and direct send
+pages (/get, /send) use a node, pairing relay and TURN server that ForgeSworn
+runs for the maintainer's own Drop; reword this once that deployment's
+description is settled. See "Share and direct send" in
+docs/legal/online-safety-position-draft.md.]`
 
 By using the service you agree to these terms. If we change them, we will say
 so on the service. These terms do not take away any rights you have by law.
@@ -83,7 +87,8 @@ Wildbloom is illegal:
 - report it to the Blossom server or relay that is hosting or carrying it,
   using that operator's own reporting route; or
 - if it is on a Wildbloom Node, report it to that node's operator.
-  ForgeSworn does not run or host Wildbloom Nodes; or
+  ForgeSworn's only Wildbloom Node holds the maintainer's own files and
+  accepts no one else's uploads `[DECISION: as in section 1]`; or
 - write to us at `[contact address]` if you are unsure who to contact, and we
   will help direct your report.
 
