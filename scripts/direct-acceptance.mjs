@@ -975,9 +975,16 @@ try {
     await dropAccepts(drop);
     await waitDrop(drop, () => window.__drop.snapshot().written > 2 * 1024 * 1024, "the transfer to be under way", 60_000);
     // Leaving the page fires pagehide as closing a tab does, and keeps the browser context alive to watch the relay.
+    // The page asks before it is left mid-send; the person chooses to leave.
     const pagePuts = () => relayLog.filter((line) => /^PUT \/pair\/v1\/live-sessions\/[^/]+\/messages\/recipient\/packet-/u.test(line)).length;
     const putsBefore = pagePuts();
+    const asked = [];
+    phone.page.on("dialog", (dialog) => {
+      asked.push(dialog.type());
+      void dialog.accept();
+    });
     await phone.page.goto("about:blank");
+    assert.deepEqual(asked, ["beforeunload"], "The page asked before it was left mid-send.");
     const deadline = Date.now() + 15_000;
     while (pagePuts() === putsBefore && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(pagePuts(), putsBefore + 1, "The page's stop reached the relay after it left.");
