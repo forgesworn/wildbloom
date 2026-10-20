@@ -11,7 +11,7 @@ on:
       kit_commit:
         description: Full reviewed foregather-kit commit SHA whose foregather-server serves live sessions
         required: false
-        default: "ec0694b65ead3bfe7a8cfcf7dd118f1a3247a04a"
+        default: "5f184490af4b5ba0f705685a5138ce9db7c8528b"
         type: string
 
 permissions:
@@ -26,13 +26,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Require an immutable relay revision
         env:
-          KIT_COMMIT: ${{ inputs.kit_commit || 'ec0694b65ead3bfe7a8cfcf7dd118f1a3247a04a' }}
+          KIT_COMMIT: ${{ inputs.kit_commit || '5f184490af4b5ba0f705685a5138ce9db7c8528b' }}
         shell: bash
         run: '[[ "$KIT_COMMIT" =~ ^[a-f0-9]{40}$ ]]'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: forgesworn/foregather-kit
-          ref: ${{ inputs.kit_commit || 'ec0694b65ead3bfe7a8cfcf7dd118f1a3247a04a' }}
+          ref: ${{ inputs.kit_commit || '5f184490af4b5ba0f705685a5138ce9db7c8528b' }}
           path: .artifacts/foregather-kit
       - run: rustup toolchain install 1.94.1 --profile minimal
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
