@@ -983,6 +983,10 @@ try {
       asked.push(dialog.type());
       void dialog.accept();
     });
+    // Playwright's request routing drops a keepalive request that needs a CORS preflight once its page has gone,
+    // which the stop does (the relay is another origin). Chrome itself delivers it, so stop routing before leaving.
+    // The origin audit still covers everything the page asked for before this point.
+    await phone.context.unroute("**/*");
     await phone.page.goto("about:blank");
     assert.deepEqual(asked, ["beforeunload"], "The page asked before it was left mid-send.");
     const deadline = Date.now() + 15_000;
