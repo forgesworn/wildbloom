@@ -964,7 +964,7 @@ try {
     shim.close();
   });
 
-  await step("journey: the page is closed mid-transfer and the receiver keeps nothing", async () => {
+  await step("journey: the page is left mid-transfer, its stop still reaches the relay, and the receiver keeps nothing", async () => {
     const shim = new PathShim();
     shim.bytesPerSecond = 3 * 1024 * 1024;
     const session = await newSession({ shim });
@@ -974,7 +974,13 @@ try {
     await chooseFile(phone.page, { name: "closing.bin", mimeType: "application/octet-stream", buffer: sample(24 * 1024 * 1024, 9) });
     await dropAccepts(drop);
     await waitDrop(drop, () => window.__drop.snapshot().written > 2 * 1024 * 1024, "the transfer to be under way", 60_000);
-    await phone.page.close({ runBeforeUnload: false });
+    // Leaving the page fires pagehide as closing a tab does, and keeps the browser context alive to watch the relay.
+    const pagePuts = () => relayLog.filter((line) => /^PUT \/pair\/v1\/live-sessions\/[^/]+\/messages\/recipient\/packet-/u.test(line)).length;
+    const putsBefore = pagePuts();
+    await phone.page.goto("about:blank");
+    const deadline = Date.now() + 15_000;
+    while (pagePuts() === putsBefore && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(pagePuts(), putsBefore + 1, "The page's stop reached the relay after it left.");
     await waitDrop(drop, () => ["ended", "kept"].includes(window.__drop.snapshot().phase), "the receiver to notice", 90_000);
     const after = await snapshot(drop);
     assert.equal(after.phase, "ended");

@@ -337,7 +337,13 @@ function onContinue(): void {
 
 // --------------------------------------------------------------- pairing flow
 
-const relay = createLiveRelayClient({ apiUrl: PAIRING_SERVICE, allowLoopbackHttp: allowsLoopbackHttp(PAIRING_SERVICE) });
+/** Set while the page is being hidden: the requests it starts then, such as the stop, are allowed to outlive it. */
+let leaving = false;
+const relay = createLiveRelayClient({
+  apiUrl: PAIRING_SERVICE,
+  allowLoopbackHttp: allowsLoopbackHttp(PAIRING_SERVICE),
+  fetch: (input, init) => fetch(input, leaving ? { ...init, keepalive: true } : init),
+});
 
 function stopFlow(): void {
   clearTimeout(slowTimer);
@@ -620,13 +626,18 @@ async function start(): Promise<void> {
   window.addEventListener("online", () => dispatch({ type: "online", online: true }));
   window.addEventListener("offline", () => dispatch({ type: "online", online: false }));
   window.addEventListener("pagehide", () => {
+    leaving = true;
     stopFlow();
     // Tell the other end at once and close the connection in this turn: there may be no later one.
+    // The stop's request starts in the microtasks straight after this handler, before the page goes, and the
+    // session keeps its exchange open until that request has gone.
     const active = session;
     session = undefined;
     active?.stop("cancelled", { immediate: true });
     screenLock.release();
   });
+  // A page brought back from the back-forward cache is no longer leaving.
+  window.addEventListener("pageshow", () => { leaving = false; });
   dispatch({ type: "online", online: navigator.onLine });
   if (!supported()) {
     dispatch({ type: "unsupported" });

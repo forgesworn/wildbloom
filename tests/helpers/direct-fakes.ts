@@ -275,13 +275,35 @@ export class MemoryExchange implements MessageExchange {
   /** Hold back everything this end sends until `release()`. */
   holding = false;
   private held: Uint8Array[] = [];
+  /** Keep each send in flight until `flush()`. Ending this end meanwhile cancels it, as it does a relay request. */
+  slow = false;
+  private inFlight: { copy: Uint8Array; resolve: () => void; reject: (error: Error) => void }[] = [];
 
   async send(payload: Uint8Array): Promise<void> {
     if (this.ended) throw transportError(this.ended);
     const copy = payload.slice();
+    if (this.slow) {
+      await new Promise<void>((resolve, reject) => this.inFlight.push({ copy, resolve, reject }));
+      return;
+    }
     this.sent.push(copy);
     if (this.holding) this.held.push(copy);
     else this.peer.deliver(copy);
+  }
+
+  /** Lets every send in flight arrive. */
+  flush(): void {
+    this.slow = false;
+    for (const { copy, resolve } of this.inFlight.splice(0)) {
+      this.sent.push(copy);
+      this.peer.deliver(copy);
+      resolve();
+    }
+  }
+
+  /** How many sends are in flight. */
+  get sending(): number {
+    return this.inFlight.length;
   }
 
   release(): void {
@@ -323,6 +345,7 @@ export class MemoryExchange implements MessageExchange {
     const waiting = this.waiting;
     this.waiting = undefined;
     waiting?.reject(transportError(kind));
+    for (const { reject } of this.inFlight.splice(0)) reject(transportError(kind));
   }
 
   get isEnded(): boolean {

@@ -146,12 +146,20 @@ class Link {
   private chain: Promise<void> = Promise.resolve();
   private stopped = false;
   private ended = false;
+  /** Settles once the stop this end sent has gone, or failed to. */
+  private stopping: Promise<void> | undefined;
+  /** Rejects when the link ends, so reads end then even while the exchange stays open for a stop. */
+  private readonly endedReads: Promise<never>;
+  private endReads!: (error: DirectError) => void;
 
   constructor(
     private readonly exchange: MessageExchange,
     private readonly us: Side,
     private readonly iceAllowlist: readonly string[],
-  ) {}
+  ) {
+    this.endedReads = new Promise<never>((_resolve, reject) => { this.endReads = reject; });
+    this.endedReads.catch(() => undefined);
+  }
 
   get sent(): number {
     return this.sentCount;
@@ -181,7 +189,8 @@ class Link {
   async read(options: { max?: number } = {}): Promise<{ message: DirectMessage; index: number }> {
     let bytes: Uint8Array;
     try {
-      bytes = await this.exchange.receive();
+      if (this.ended) throw new DirectError("network", "The exchange has ended.");
+      bytes = await Promise.race([this.exchange.receive(), this.endedReads]);
     } catch (error) {
       throw exchangeFailure(error);
     }
@@ -205,13 +214,22 @@ class Link {
   async stop(reason: StopReason): Promise<void> {
     if (this.stopped || this.ended || this.sentCount >= LIMITS.messagesPerSide) return;
     this.stopped = true;
-    await this.send({ event: "stop", reason });
+    const sending = this.send({ event: "stop", reason });
+    this.stopping = sending.then(() => undefined, () => undefined);
+    await sending;
   }
 
+  /**
+   * Ends the link. Reads end now; the exchange itself closes once a stop still
+   * on its way has gone, because closing it would cancel the request carrying
+   * that stop. A page being hidden relies on this to tell the other end.
+   */
   end(): void {
     if (this.ended) return;
     this.ended = true;
-    this.exchange.close();
+    this.endReads(new DirectError("network", "The exchange has ended."));
+    if (this.stopping) void this.stopping.then(() => this.exchange.close());
+    else this.exchange.close();
   }
 }
 
@@ -522,8 +540,9 @@ export class SenderSession {
   /**
    * Ends the session now: STOP on the channel, `stop` on the exchange, and the
    * connection closed so the other end learns at once. A deliberate stop gives
-   * those a moment to leave first; `immediate` (a page being hidden) does not.
-   * Safe to repeat.
+   * those a moment to leave first; `immediate` (a page being hidden) closes the
+   * connection in this turn. Either way the exchange stays open until the stop
+   * message has gone. Safe to repeat.
    */
   stop(reason: Exclude<StopReason, "unsupported"> = "cancelled", options: { immediate?: boolean } = {}): void {
     if (this.finished) return;
@@ -534,7 +553,7 @@ export class SenderSession {
     else void Promise.race([told, drained(this.channel, FLUSH_MS)]).finally(() => this.close());
   }
 
-  /** Closes the peer and the exchange without telling anyone. */
+  /** Closes the peer and ends the exchange without telling anyone (a stop already on its way still goes). */
   close(): void {
     this.peer?.close();
     this.link.end();
