@@ -32,7 +32,7 @@ export const COPY = {
   },
   hide: {
     label: "Don't show them my internet address",
-    hint: "This can make sending slower. The server that passes the file on can still see your address, but they can't.",
+    hint: "Their computer won't show it, and sending can be slower. The server that passes the file on is theirs, so they could still find it.",
     theirs: "They're hiding their own internet address from you too.",
   },
   timeLeft: RECIPIENT.timeLeft,

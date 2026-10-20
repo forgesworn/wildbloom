@@ -91,6 +91,18 @@ describe("sender copy", () => {
     }
   });
 
+  it("says honestly what hiding the address does, and promises nothing it cannot keep", () => {
+    // The only server that passes the file on is the receiver's own, so hiding does not hide the address from them.
+    expect(COPY.hide.hint).toMatch(/the server that passes the file on is theirs/iu);
+    expect(COPY.hide.hint).toMatch(/could still find it/iu);
+    expect(COPY.hide.hint).toMatch(/won't show it/iu);
+    for (const text of [COPY.hide.label, COPY.hide.hint, COPY.hide.theirs]) {
+      expect(text).not.toMatch(/\b(?:can't|cannot|won't|will not) (?:see|find|tell|learn|know)\b|anonymous|invisible|untraceable|private|safe from|completely|guarantee/iu);
+    }
+    // Short enough to read at the choose screen.
+    expect(COPY.hide.hint.length).toBeLessThan(160);
+  });
+
   it("never mentions a share or a request, which are other flows", () => {
     for (const key of ["expired", "used", "wrongWords", "mismatch", "invalid", "cancelled", "incomplete", "failed"] as const) {
       const { h1, body } = COPY.screens[key];
