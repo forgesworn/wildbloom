@@ -12,7 +12,7 @@ import {
   type DirectSink,
   type TransferFailure,
 } from "../src/direct/transfer.js";
-import { channelPair, FakeChannel, settle } from "./helpers/direct-fakes.js";
+import { channelPair, FakeChannel, settle, waitStable, waitUntil } from "./helpers/direct-fakes.js";
 
 const sample = (length: number, seed = 1): Uint8Array<ArrayBuffer> =>
   Uint8Array.from({ length }, (_, index) => (index * 31 + seed * 17 + (index >> 8)) & 0xff);
@@ -136,23 +136,19 @@ describe("back-pressure", () => {
     const sink = createMemorySink({ key, manifest, envelopeBytes: total });
     const receive = receiveEnvelope({ channel: receiverChannel, envelopeBytes: total, plaintextBytes: manifest.size, sink });
     const sending = sendEnvelope({ channel: senderChannel, encoder });
-    await settle(50);
+    const paused = await waitStable(() => senderChannel.sent.length, "the sender to pause");
     expect(senderChannel.bufferedAmountLowThreshold).toBe(LIMITS.lowWaterBytes);
     expect(senderChannel.bufferedAmount).toBeGreaterThan(LIMITS.highWaterBytes);
     expect(senderChannel.bufferedAmount).toBeLessThanOrEqual(LIMITS.highWaterBytes + LIMITS.frameBytes);
-    const paused = senderChannel.sent.length;
-    await settle(50);
-    expect(senderChannel.sent.length).toBe(paused);
 
     // Draining part of the way is not enough: it waits for the low-water mark.
     senderChannel.flush(Math.ceil(paused / 2));
-    await settle(30);
+    await settle(60);
     expect(senderChannel.bufferedAmount).toBeGreaterThan(LIMITS.lowWaterBytes);
     expect(senderChannel.sent.length).toBe(paused);
 
     senderChannel.flush();
-    await settle(50);
-    expect(senderChannel.sent.length).toBeGreaterThan(paused);
+    await waitUntil(() => senderChannel.sent.length > paused, "the sender to resume");
 
     let finished = false;
     const both = Promise.all([sending, receive]).then(() => { finished = true; });
@@ -169,18 +165,15 @@ describe("back-pressure", () => {
     const { encoder } = await prepare(12 * MiB);
     const [senderChannel, receiverChannel] = channelPair();
     const sending = sendEnvelope({ channel: senderChannel, encoder }).catch((error: unknown) => error);
-    await settle(400);
-    const dataBytes = (): number => framesOf(senderChannel, "sender").reduce((sum, frame) => sum + (frame.type === "data" ? frame.bytes.length : 0), 0);
-    const stalledAt = dataBytes();
-    // Nothing was acknowledged, so it stops at 8 MiB (to within one frame).
+    const dataBytes = (): number => senderChannel.sent.reduce((sum, frame) => sum + (frame[0] === 1 ? frame.length - 9 : 0), 0);
+    // Nothing is acknowledged, so it stops at 8 MiB exactly and stays there.
+    const stalledAt = await waitStable(dataBytes, "the sender to stop at the window");
     expect(stalledAt).toBe(LIMITS.unacknowledgedBytes);
-    await settle(100);
-    expect(dataBytes()).toBe(stalledAt);
 
     // An ACK of 4 MiB lets it send 4 MiB more, and no further.
     receiverChannel.send(encodeAck(4 * MiB));
-    await settle(400);
-    expect(dataBytes()).toBe(4 * MiB + LIMITS.unacknowledgedBytes);
+    await waitUntil(() => dataBytes() > stalledAt, "the sender to use the room");
+    expect(await waitStable(dataBytes, "the sender to stop again")).toBe(4 * MiB + LIMITS.unacknowledgedBytes);
     senderChannel.close();
     expect((await sending as TransferError).kind).toBe("closed");
   }, 30_000);

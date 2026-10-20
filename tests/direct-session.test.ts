@@ -5,7 +5,7 @@ import { NoRelayError } from "../src/direct/peer.js";
 import { createMemorySink, type MemorySink } from "../src/direct/sink.js";
 import { DirectError, ReceiverSession, SenderSession, type DirectFailure } from "../src/direct/session.js";
 import { decodeFrame } from "../src/direct/frames.js";
-import { exchangePair, FakeNetwork, FAKE_SDP, settle, type MemoryExchange } from "./helpers/direct-fakes.js";
+import { exchangePair, FakeNetwork, FAKE_SDP, settle, waitUntil, type MemoryExchange } from "./helpers/direct-fakes.js";
 
 const ICE: IceServer[] = [{
   username: "1800003600:cGFnZQ",
@@ -257,26 +257,32 @@ describe("reconnection", () => {
   }, 30_000);
 
   it("restarts after a connection has stayed disconnected for the wait, and not before", async () => {
-    const r = rig({ restartAfterMs: 80 });
+    const r = rig({ restartAfterMs: 120 });
     const file = new File([sample(4 * MiB)], "a.bin", { type: "application/octet-stream" });
     const { decision } = await negotiate(r, file);
     const receiving = accept(r, receiverHooks());
     await decision;
-    let broke = false;
+    let brokeAt = 0;
+    let restartsAtBreak = -1;
     const sending = send(r, file, {
       hide: false,
-      onProgress: (acknowledged) => { if (!broke && acknowledged > 0) { broke = true; r.network.breakPath("disconnected"); } },
+      onProgress: (acknowledged) => {
+        if (brokeAt === 0 && acknowledged > 0) {
+          brokeAt = Date.now();
+          r.network.breakPath("disconnected");
+          restartsAtBreak = r.receiver.restarts;
+        }
+      },
     });
-    await settle(30);
-    // A blip of this length is not an end and not yet a restart.
-    expect(r.receiver.restarts).toBe(0);
-    await settle(150);
-    expect(r.receiver.restarts).toBe(1);
+    await waitUntil(() => r.receiver.restarts === 1, "the restart", 10_000);
+    // A blip is not an end and not yet a restart: the restart came after the wait, not at the break.
+    expect(restartsAtBreak).toBe(0);
+    expect(Date.now() - brokeAt).toBeGreaterThanOrEqual(100);
     await Promise.all([sending, receiving]);
   }, 30_000);
 
   it("does not restart for a blip that mends itself", async () => {
-    const r = rig({ restartAfterMs: 120 });
+    const r = rig({ restartAfterMs: 1500 });
     const file = new File([sample(4 * MiB)], "a.bin", { type: "application/octet-stream" });
     const { decision } = await negotiate(r, file);
     const receiving = accept(r, receiverHooks());

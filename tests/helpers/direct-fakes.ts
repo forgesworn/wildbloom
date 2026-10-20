@@ -97,6 +97,32 @@ export function channelPair(options: { maxMessageSize?: number; auto?: boolean }
 /** Lets timers and promise chains run. */
 export const settle = (ms = 5): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Waits until the condition holds, however slowly the machine (or coverage instrumentation) runs. */
+export async function waitUntil(condition: () => boolean, description: string, limitMs = 20_000): Promise<void> {
+  const deadline = Date.now() + limitMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${description}.`);
+    await settle(5);
+  }
+}
+
+/** Waits until the value has not changed for `quietMs`, and returns it: the point where something has stopped. */
+export async function waitStable(read: () => number, description: string, quietMs = 150, limitMs = 20_000): Promise<number> {
+  const deadline = Date.now() + limitMs;
+  let last = read();
+  let since = Date.now();
+  while (Date.now() - since < quietMs) {
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${description} to settle.`);
+    await settle(10);
+    const now = read();
+    if (now !== last) {
+      last = now;
+      since = Date.now();
+    }
+  }
+  return last;
+}
+
 export const MAX_FRAME = LIMITS.frameBytes;
 
 // ---------------------------------------------------------------- fake WebRTC
