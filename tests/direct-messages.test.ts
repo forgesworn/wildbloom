@@ -1,6 +1,6 @@
 // Shared vectors for wildbloom-direct/1, copied unedited from the protocol work:
-//   source repository  forgesworn/wildbloom-node, branch docs/direct-send-protocol
-//   source commit      fba5bbb43974582a9a2e10dbd6b559c4f4d7729a
+//   source repository  forgesworn/wildbloom-node, branch main
+//   source commit      022df8d7ba7eecebf857caf6c13e1215cc0b2329
 //   source path        vectors/wildbloom-direct-v1.json
 //   copied to          test-vectors/wildbloom-direct-v1.json (never edit it; copy it again)
 // The protocol text is docs/PROTOCOL.md, section "Direct send", on the same branch.
@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_DIRECT_ICE_URLS, parseIceAllowlist } from "../src/direct/config.js";
 import { canonicalJson, checkSdp, decodeMessage, encodeMessage, type DirectMessage, type Side } from "../src/direct/messages.js";
 
-const VECTOR_SHA256 = "7f80cd7fddf17f79ed639e1789e4e45a428090c355227eb706e0606f7cee4a1f";
+const VECTOR_SHA256 = "9332184fa6a3716cceae5e6fc15444b36c9110d18b9c1a1a501498d8a0c7e97f";
 const raw = readFileSync(new URL("../test-vectors/wildbloom-direct-v1.json", import.meta.url));
 
 interface Vectors {
