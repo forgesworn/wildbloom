@@ -845,17 +845,10 @@ try {
     await drop.context.close();
   });
 
-  await step("journey: the phone's memory does not grow with the size of the file it sends", async () => {
-    const cdp = await phoneBrowser.newBrowserCDPSession();
-    const rendererMemory = async () => {
-      const { processInfo } = await cdp.send("SystemInfo.getProcessInfo");
-      let total = 0;
-      for (const info of processInfo.filter((entry) => entry.type === "renderer")) {
-        try { total += Number(execFileSync("ps", ["-o", "rss=", "-p", String(info.id)]).toString().trim()) * 1024; } catch { /* gone */ }
-      }
-      return total;
-    };
-    // Sends a file of this many MiB from a file on disk and returns how far the page's memory rose above where it began.
+  await step("journey: the phone holds a few records, whatever the size of the file it sends", async () => {
+    // Sends a file of this many MiB from a file on disk and returns the most the page kept alive. The page's memory
+    // is collected as it goes, so what is measured is what it holds, not what it has yet to throw away: its
+    // JavaScript heap and its ArrayBuffer backing stores, where a file read into memory would show.
     async function sendLarge(mebibytes) {
       const session = await newSession();
       const phone = await openPhone(session.link);
@@ -867,19 +860,32 @@ try {
       for (let offset = 0; offset < size; offset += 4 * 1024 * 1024) writeFileSync(descriptor, sample(4 * 1024 * 1024, offset / (4 * 1024 * 1024) + 3));
       closeSync(descriptor);
       const expected = sha256(readFileSync(path));
-      const baseline = await rendererMemory();
+      const cdp = await phone.context.newCDPSession(phone.page);
+      const held = async () => {
+        await cdp.send("HeapProfiler.collectGarbage");
+        const usage = await cdp.send("Runtime.getHeapUsage");
+        return usage.usedSize + (usage.backingStorageSize ?? 0);
+      };
+      const baseline = await held();
       let peak = baseline;
-      const sampler = setInterval(() => { rendererMemory().then((value) => { peak = Math.max(peak, value); }, () => undefined); }, 200);
+      let sampling = true;
+      const sampler = (async () => {
+        while (sampling) {
+          peak = Math.max(peak, await held().catch(() => 0));
+          await sleep(150);
+        }
+      })();
       await chooseFile(phone.page, path);
       await dropAccepts(drop);
       const started = Date.now();
       await expectTitle(phone.page, "Sent", 240_000);
-      clearInterval(sampler);
+      sampling = false;
+      await sampler;
       await waitDrop(drop, () => window.__drop.snapshot().phase === "kept", "KEPT", 60_000);
       assert.equal((await snapshot(drop)).kept.sha256, expected);
-      const growth = peak - baseline;
       const seconds = (Date.now() - started) / 1000;
-      process.stdout.write(`    ${mebibytes} MiB in ${seconds.toFixed(1)} s, the phone page's memory rose by ${(growth / 1048576).toFixed(0)} MiB at most\n`);
+      const growth = peak - baseline;
+      process.stdout.write(`    ${mebibytes} MiB in ${seconds.toFixed(1)} s, the phone page held ${(growth / 1048576).toFixed(0)} MiB more than before at most\n`);
       // A direct pair is not paced: far faster than the 400,000 bytes a second a relayed send is held to.
       if (mebibytes >= 96) assert.ok(size / seconds > 1_200_000, `A direct send of ${mebibytes} MiB averaged ${Math.round(size / seconds)} bytes a second.`);
       await phone.context.close();
@@ -888,10 +894,10 @@ try {
     }
     const small = await sendLarge(24);
     const large = await sendLarge(96);
-    await cdp.detach();
-    // Streaming holds a few records whatever the size. Four times the data must not cost four times the memory:
-    // holding the file or its envelope would add the extra 72 MiB, and more.
-    assert.ok(large - small < 40 * 1024 * 1024, `Memory rose by ${small} bytes for 24 MiB and ${large} bytes for 96 MiB.`);
+    // A few records are in hand at once, whatever the file: four times the data must not cost four times the memory,
+    // and a file read whole would hold more than its own size.
+    assert.ok(large < 48 * 1024 * 1024, `The page held ${Math.round(large / 1048576)} MiB more sending 96 MiB.`);
+    assert.ok(large - small < 24 * 1024 * 1024, `The page held ${Math.round(small / 1048576)} MiB more for 24 MiB and ${Math.round(large / 1048576)} MiB for 96 MiB.`);
   });
 
   await step("journey: the connection is cut mid-transfer and the send resumes by an ICE restart", async () => {

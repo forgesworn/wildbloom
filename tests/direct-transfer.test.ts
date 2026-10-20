@@ -136,6 +136,8 @@ describe("back-pressure", () => {
     const sink = createMemorySink({ key, manifest, envelopeBytes: total });
     const receive = receiveEnvelope({ channel: receiverChannel, envelopeBytes: total, plaintextBytes: manifest.size, sink });
     const sending = sendEnvelope({ channel: senderChannel, encoder });
+    // The encoder may be slow to make the first record, so wait for the buffer to fill before asking if it has stopped.
+    await waitUntil(() => senderChannel.bufferedAmount > LIMITS.highWaterBytes, "the buffer to pass its high-water mark");
     const paused = await waitStable(() => senderChannel.sent.length, "the sender to pause");
     expect(senderChannel.bufferedAmountLowThreshold).toBe(LIMITS.lowWaterBytes);
     expect(senderChannel.bufferedAmount).toBeGreaterThan(LIMITS.highWaterBytes);
@@ -166,7 +168,9 @@ describe("back-pressure", () => {
     const [senderChannel, receiverChannel] = channelPair();
     const sending = sendEnvelope({ channel: senderChannel, encoder }).catch((error: unknown) => error);
     const dataBytes = (): number => senderChannel.sent.reduce((sum, frame) => sum + (frame[0] === 1 ? frame.length - 9 : 0), 0);
-    // Nothing is acknowledged, so it stops at 8 MiB exactly and stays there.
+    // Nothing is acknowledged, so it stops at 8 MiB exactly and stays there. The encoder may be slow to start,
+    // so wait for the send to be well under way before asking whether it has stopped.
+    await waitUntil(() => dataBytes() > 4 * MiB, "the send to get under way");
     const stalledAt = await waitStable(dataBytes, "the sender to stop at the window");
     expect(stalledAt).toBe(LIMITS.unacknowledgedBytes);
 
