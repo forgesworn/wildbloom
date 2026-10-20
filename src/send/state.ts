@@ -5,7 +5,7 @@ export type ScreenId =
   | "unsupported" | "incomplete" | "expired" | "words" | "connecting" | "waiting" | "wrong-words" | "used" | "network"
   | "check" | "mismatch" | "confirming"
   | "choose" | "too-big" | "empty" | "unreadable"
-  | "asking" | "declined" | "linking" | "sending" | "sent"
+  | "asking" | "declined" | "linking" | "sending" | "finishing" | "sent"
   | "no-relay" | "no-room" | "connect-failed" | "lost" | "they-stopped" | "failed"
   | "cancelled" | "invalid";
 
@@ -28,6 +28,11 @@ export interface ViewState {
   readonly hide: boolean;
   /** Whether the receiver hides its address from this phone. */
   readonly theirHidden: boolean;
+  /**
+   * The end of the file has been sent, so the receiver may already be keeping it. From then on the only ending
+   * that says it arrived is the receiver's own "kept"; every other ending must say the outcome is not known.
+   */
+  readonly endSent: boolean;
 }
 
 export type ViewEvent =
@@ -53,6 +58,7 @@ export type ViewEvent =
   | { readonly type: "declined" }
   | { readonly type: "linking" }
   | { readonly type: "sending"; readonly total: number }
+  | { readonly type: "end-sent" }
   | { readonly type: "progress"; readonly sent: number }
   | { readonly type: "reconnecting"; readonly on: boolean }
   | { readonly type: "sent" }
@@ -77,6 +83,7 @@ export const INITIAL_STATE: ViewState = Object.freeze({
   reconnecting: false,
   hide: false,
   theirHidden: false,
+  endSent: false,
 });
 
 const PAIRING: readonly ScreenId[] = ["connecting", "waiting"];
@@ -85,7 +92,7 @@ const BEFORE_FILE: readonly ScreenId[] = ["words", "connecting", "waiting", "net
 /** Screens where a file can be picked. */
 const PICKING: readonly ScreenId[] = ["choose", "too-big", "empty", "unreadable"];
 /** Screens after the file was offered, where the session can still end under the sender. */
-const AFTER_OFFER: readonly ScreenId[] = ["asking", "linking", "sending"];
+const AFTER_OFFER: readonly ScreenId[] = ["asking", "linking", "sending", "finishing"];
 
 function go(state: ViewState, screen: ScreenId, extra: Partial<ViewState> = {}): ViewState {
   return { ...state, ...extra, screen };
@@ -133,7 +140,7 @@ export function reduce(state: ViewState, event: ViewEvent): ViewState {
     case "unreadable":
       return PICKING.includes(at) ? go(state, "unreadable") : state;
     case "asking":
-      return PICKING.includes(at) ? go(state, "asking", { fileName: event.name, fileSize: event.size, sent: 0, total: 0, reconnecting: false }) : state;
+      return PICKING.includes(at) ? go(state, "asking", { fileName: event.name, fileSize: event.size, sent: 0, total: 0, reconnecting: false, endSent: false }) : state;
     case "declined":
       return at === "asking" ? go(state, "declined") : state;
     case "linking":
@@ -142,10 +149,13 @@ export function reduce(state: ViewState, event: ViewEvent): ViewState {
       return at === "asking" || at === "linking" ? go(state, "sending", { total: event.total, sent: 0, reconnecting: false }) : state;
     case "progress":
       return at === "sending" ? { ...state, sent: event.sent } : state;
+    case "end-sent":
+      // The last byte and the end marker have gone: waiting for the receiver to say it has kept the file.
+      return at === "sending" ? go(state, "finishing", { endSent: true }) : state;
     case "reconnecting":
-      return (at === "sending" || at === "linking") && state.reconnecting !== event.on ? { ...state, reconnecting: event.on } : state;
+      return (at === "sending" || at === "linking" || at === "finishing") && state.reconnecting !== event.on ? { ...state, reconnecting: event.on } : state;
     case "sent":
-      return at === "sending" || at === "linking" ? go(state, "sent", { reconnecting: false }) : state;
+      return at === "sending" || at === "linking" || at === "finishing" ? go(state, "sent", { reconnecting: false }) : state;
     case "no-relay":
       return AFTER_OFFER.includes(at) ? go(state, "no-relay", { reconnecting: false }) : state;
     case "no-room":

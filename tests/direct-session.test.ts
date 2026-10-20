@@ -464,6 +464,80 @@ describe("pacing a relayed send", () => {
   }, 60_000);
 });
 
+describe("telling the page the end of the file has gone", () => {
+  it("fires once, when the end marker has left and every byte is sent, and before the receiver's word", async () => {
+    const r = rig();
+    const bytes = sample(2 * MiB + 17);
+    const file = new File([bytes], "ended.bin", { type: "application/octet-stream" });
+    const { decision } = await negotiate(r, file);
+    const receiving = accept(r, receiverHooks());
+    await decision;
+    const calls: { lastFrame: number | undefined; dataBytes: number }[] = [];
+    const channel = r.network.answerer.channel;
+    await send(r, file, {
+      hide: false,
+      onEndSent: () => {
+        const frames = channel.sent;
+        calls.push({
+          lastFrame: frames.at(-1)?.[0],
+          dataBytes: frames.reduce((sum, frame) => sum + (frame[0] === 1 ? frame.length - 9 : 0), 0),
+        });
+      },
+    });
+    await receiving;
+    expect(calls).toHaveLength(1);
+    // The last thing handed to the channel was the end marker (type 3), after every byte of the envelope.
+    expect(calls[0]!.lastFrame).toBe(3);
+    expect(calls[0]!.dataBytes).toBeGreaterThan(bytes.length);
+    // And the receiver's own "kept" (type 4) came after it.
+    const receiverFrames = r.network.offerer.channel.sent.map((frame) => frame[0]);
+    expect(receiverFrames.at(-1)).toBe(4);
+  }, 30_000);
+
+  it("does not fire when the send ends before the end marker", async () => {
+    const r = rig();
+    const file = new File([sample(8 * MiB)], "early.bin", { type: "application/octet-stream" });
+    const { decision } = await negotiate(r, file);
+    const receiving = accept(r, receiverHooks());
+    receiving.catch(() => undefined);
+    await decision;
+    let ends = 0;
+    let stopped = false;
+    const sending = send(r, file, {
+      hide: false,
+      onEndSent: () => { ends += 1; },
+      onProgress: (acknowledged) => { if (!stopped && acknowledged > 0) { stopped = true; r.sender.stop("cancelled", { immediate: true }); } },
+    });
+    expect(await kind(sending)).toBe("cancelled");
+    expect(ends).toBe(0);
+  }, 30_000);
+
+  it("fires before an ending that comes while the receiver has not yet said it is kept", async () => {
+    const r = rig();
+    const file = new File([sample(300_000)], "unknown.bin", { type: "application/octet-stream" });
+    const { decision } = await negotiate(r, file);
+    // A receiver that never finishes opening the file: the end has gone, and nothing says whether it was kept.
+    const receiving = accept(r, {
+      ...receiverHooks(),
+      createSink: () => ({ write: async () => undefined, end: () => new Promise<void>(() => undefined), abort: async () => undefined }),
+    });
+    receiving.catch(() => undefined);
+    await decision;
+    const events: string[] = [];
+    const sending = send(r, file, {
+      hide: false,
+      onEndSent: () => {
+        events.push("end");
+        // The person taps Stop on the finishing screen.
+        r.sender.stop("cancelled", { immediate: true });
+      },
+    });
+    expect(await kind(sending)).toBe("cancelled");
+    expect(events).toEqual(["end"]);
+    r.receiver.stop("cancelled", { immediate: true });
+  }, 30_000);
+});
+
 describe("stopping", () => {
   it("tells the other end when the page cancels: STOP on the channel, a stop message, and the connection closed", async () => {
     const r = rig();

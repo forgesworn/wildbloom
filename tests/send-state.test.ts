@@ -64,7 +64,7 @@ describe("sender state reducer", () => {
   it("cancels back to the words before a claim and to a stop screen after one", () => {
     expect(run([{ type: "continue" }, { type: "back" }]).screen).toBe("words");
     expect(run([...toCheck, { type: "cancel" }]).screen).toBe("check");
-    for (const events of [[{ type: "continue" }], [...toCheck, { type: "yes" }], toChoose, [...toChoose, { type: "empty" }], toAsking, toSending] as ViewEvent[][]) {
+    for (const events of [[{ type: "continue" }], [...toCheck, { type: "yes" }], toChoose, [...toChoose, { type: "empty" }], toAsking, toSending, [...toSending, { type: "end-sent" }]] as ViewEvent[][]) {
       expect(run([...events, { type: "cancel" }]).screen).toBe("cancelled");
     }
   });
@@ -99,10 +99,43 @@ describe("sender state reducer", () => {
   });
 
   it.each(["no-relay", "no-room", "connect-failed", "lost", "they-stopped", "failed"] as const)("ends on %s from any step after the file was offered", (type) => {
-    for (const events of [toAsking, [...toAsking, { type: "linking" }], toSending] as ViewEvent[][]) {
+    for (const events of [toAsking, [...toAsking, { type: "linking" }], toSending, [...toSending, { type: "end-sent" }]] as ViewEvent[][]) {
       expect(run([...events, { type }]).screen).toBe(type);
     }
     expect(run([{ type }]).screen).toBe("words");
+  });
+
+  it("moves to finishing when the end of the file is sent, and to sent only on the receiver's word", () => {
+    const finishing = run([...toSending, { type: "end-sent" }]);
+    expect(finishing).toMatchObject({ screen: "finishing", endSent: true });
+    // Progress after the end is not shown, and the screen does not slide back.
+    expect(run([{ type: "progress", sent: 5 }], finishing)).toBe(finishing);
+    expect(run([{ type: "sent" }], finishing).screen).toBe("sent");
+    // The end can only be sent while sending.
+    expect(run([{ type: "end-sent" }])).toBe(INITIAL_STATE);
+    expect(run([...toAsking, { type: "end-sent" }]).screen).toBe("asking");
+    expect(run([...toAsking, { type: "linking" }, { type: "end-sent" }]).screen).toBe("linking");
+    expect(run([{ type: "end-sent" }], run([...toSending, { type: "sent" }])).screen).toBe("sent");
+  });
+
+  it("shows a dropped connection while finishing", () => {
+    const finishing = run([...toSending, { type: "end-sent" }]);
+    expect(run([{ type: "reconnecting", on: true }], finishing)).toMatchObject({ screen: "finishing", reconnecting: true });
+  });
+
+  it.each(["no-room", "lost", "they-stopped", "failed", "cancel"] as const)("remembers that the end was sent when it ends on %s", (type) => {
+    const ended = run([...toSending, { type: "end-sent" }, { type }]);
+    expect(ended.screen).toBe(type === "cancel" ? "cancelled" : type);
+    expect(ended.endSent).toBe(true);
+    // An ending before the end was sent says the opposite.
+    expect(run([...toSending, { type }]).endSent).toBe(false);
+  });
+
+  it("forgets that the end was sent when another file is offered", () => {
+    // Only a file offered afresh, from a screen where one can be chosen, starts the record again.
+    const picking = { ...run(toChoose), endSent: true };
+    expect(run([{ type: "asking", name: "again.bin", size: 5 }], picking).endSent).toBe(false);
+    expect(run([{ type: "asking", name: "again.bin", size: 5 }], run([...toSending, { type: "end-sent" }, { type: "lost" }])).screen).toBe("lost");
   });
 
   it("treats a lost or stopped session before the file was offered as an end too", () => {
@@ -114,7 +147,7 @@ describe("sender state reducer", () => {
 
   it("never lets a finished screen move", () => {
     const sent = run([...toSending, { type: "sent" }]);
-    for (const type of ["lost", "cancel", "declined", "progress", "expired", "failed"] as const) {
+    for (const type of ["lost", "cancel", "declined", "progress", "expired", "failed", "end-sent"] as const) {
       expect(run([{ type, sent: 1 } as ViewEvent], sent)).toBe(sent);
     }
   });
