@@ -10,6 +10,12 @@ import { COPY as RECIPIENT } from "../get/copy.js";
 
 export { formatBytes, formatClock } from "../get/copy.js";
 
+/**
+ * What every ending says once the end of the file has been sent. The receiver may already be keeping it, so the
+ * page cannot say it was not: only the receiver's own "kept" says it arrived.
+ */
+const MAY_HAVE_ARRIVED = "It may have reached them. Check with them.";
+
 export const COPY = {
   brand: RECIPIENT.brand,
   footer: RECIPIENT.footer,
@@ -32,7 +38,7 @@ export const COPY = {
   },
   hide: {
     label: "Don't show them my internet address",
-    hint: "This can make sending slower. The server that passes the file on can still see your address, but they can't.",
+    hint: "Their computer won't show it, and sending can be slower. The server that passes the file on is theirs, so they could still find it.",
     theirs: "They're hiding their own internet address from you too.",
   },
   timeLeft: RECIPIENT.timeLeft,
@@ -43,6 +49,7 @@ export const COPY = {
     asking: (name: string): string => `Asking them to accept ${name}.`,
     sending: (name: string): string => `Sending ${name}.`,
     progress: (percent: number): string => `Sending ${percent}% complete.`,
+    finishing: "Finishing. Waiting for them to confirm it arrived.",
     sent: "Sent.",
   },
   progressLabel: (done: string, total: string): string => `${done} of ${total}`,
@@ -79,6 +86,10 @@ export const COPY = {
     sending: {
       h1: (name: string): string => `Sending ${name}`,
       body: "Keep this page open until it's sent.",
+    },
+    finishing: {
+      h1: "Finishing…",
+      body: "Waiting for them to confirm it arrived. Keep this page open.",
     },
     sent: {
       h1: "Sent",
@@ -118,6 +129,14 @@ export const COPY = {
       body: "Something went wrong and nothing was kept. Ask them to start again with a new link.",
     },
     cancelled: { h1: "You stopped this", body: "Nothing was kept. Ask them to start again if you still want to send the file." },
+    // The same endings once the end of the file has been sent: none of them says it was not kept.
+    afterEnd: {
+      noRoom: { h1: "Their computer can't keep this file", body: MAY_HAVE_ARRIVED },
+      lost: { h1: "The connection was lost", body: MAY_HAVE_ARRIVED },
+      theyStopped: { h1: "They stopped this", body: MAY_HAVE_ARRIVED },
+      failed: { h1: "Sending stopped", body: MAY_HAVE_ARRIVED },
+      cancelled: { h1: "You stopped this", body: MAY_HAVE_ARRIVED },
+    },
     invalid: {
       h1: "This link can't be used",
       body: "The details from them weren't in the form this page expects. Ask them to start again.",

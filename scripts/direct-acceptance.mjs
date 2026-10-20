@@ -815,9 +815,12 @@ try {
     const phone = await openPhone(session.link);
     const drop = await openDrop(session);
     await toChoose(session, phone, drop);
-    await chooseFile(phone.page, { name: "private.pdf", mimeType: "application/pdf", buffer: sample(50_000) });
+    // A name that would be drawn with a different extension (an override character before "fdp") reaches the receiver
+    // as the plain name it is made of.
+    await chooseFile(phone.page, { name: "invoice\u202Efdp.terminal", mimeType: "application/pdf", buffer: sample(50_000) });
     await expectTitle(phone.page, "Waiting for them to accept");
     await waitDrop(drop, () => window.__drop.snapshot().phase === "manifest", "the manifest");
+    assert.equal((await snapshot(drop)).manifest.name, "invoicefdp.terminal", "The disguising character did not reach the receiver.");
     await drop.page.evaluate(() => window.__drop.decline());
     await expectTitle(phone.page, "They said no");
     assert.match(await phone.page.locator("#view").innerText(), /Nothing was sent\./u);

@@ -16,6 +16,7 @@ import { applySuggestion, checkWords, REQUIRED_WORDS, parseWords } from "../get/
 import "../get/get.css";
 import "./send.css";
 import { COPY, formatBytes, formatClock } from "./copy.js";
+import { screenText } from "./screens.js";
 import { prepareSource } from "./source.js";
 import { INITIAL_STATE, reduce, type ScreenId, type ViewEvent, type ViewState } from "./state.js";
 import { createScreenLock } from "./wakelock.js";
@@ -118,43 +119,6 @@ function renderFooter(): void {
   footerEl!.append(link);
 }
 
-/** The heading and lede of a screen. Headings that name the file are written from the state. */
-function screenText(screen: ScreenId): { h1: string; body?: string } {
-  const copy = COPY.screens;
-  const limit = formatBytes(state.maxBytes);
-  switch (screen) {
-    case "unsupported": return copy.unsupported;
-    case "incomplete": return copy.incomplete;
-    case "expired": return copy.expired;
-    case "words": return copy.words;
-    case "connecting": return copy.connecting;
-    case "waiting": return copy.waiting;
-    case "wrong-words": return copy.wrongWords;
-    case "used": return copy.used;
-    case "network": return copy.network;
-    case "check": return copy.check;
-    case "mismatch": return copy.mismatch;
-    case "confirming": return copy.confirming;
-    case "choose": return { h1: copy.choose.h1, body: copy.choose.body(limit) };
-    case "asking": return { h1: copy.asking.h1, body: copy.asking.body(state.fileName) };
-    case "declined": return copy.declined;
-    case "linking": return copy.linking;
-    case "sending": return { h1: copy.sending.h1(state.fileName), body: copy.sending.body };
-    case "sent": return { h1: copy.sent.h1, body: copy.sent.body(state.fileName) };
-    case "too-big": return { h1: copy.tooBig.h1, body: copy.tooBig.body(limit) };
-    case "empty": return copy.empty;
-    case "unreadable": return copy.unreadable;
-    case "no-relay": return copy.cannotHide;
-    case "no-room": return copy.noRoom;
-    case "connect-failed": return copy.connectFailed;
-    case "lost": return copy.lost;
-    case "they-stopped": return copy.theyStopped;
-    case "failed": return copy.failed;
-    case "cancelled": return copy.cancelled;
-    case "invalid": return copy.invalid;
-  }
-}
-
 function timeLeftNote(): HTMLElement {
   countdownEl = el("p", "muted");
   updateCountdown();
@@ -169,7 +133,7 @@ function updateCountdown(): void {
 function render(moveFocus: boolean): void {
   wordsInput = hintEl = errorEl = suggestionHost = countdownEl = progressEl = progressText = reconnectNote = undefined;
   const screen = state.screen;
-  const text = screenText(screen);
+  const text = screenText(state);
   setTitle(text.h1);
   const view = document.createDocumentFragment();
   const addBody = (): void => { if (text.body) view.append(el("p", undefined, text.body)); };
@@ -228,6 +192,16 @@ function render(moveFocus: boolean): void {
       addBody();
       view.append(button(COPY.buttons.stop, onStop, "secondary"));
       updateProgress();
+      updateReconnectNote();
+      break;
+    case "finishing":
+      // The end of the file has gone and the receiver has not yet said it is kept. Stopping is still honest: the page
+      // then says the outcome is not known.
+      reconnectNote = el("p", "muted small");
+      reconnectNote.setAttribute("role", "status");
+      view.append(reconnectNote);
+      addBody();
+      view.append(button(COPY.buttons.stop, onStop, "secondary"));
       updateReconnectNote();
       break;
     default:
@@ -552,6 +526,10 @@ async function onFileChosen(chosen: File): Promise<void> {
         dispatch({ type: "sending", total: totalFor(source) });
         announce(COPY.announce.sending(source.name));
       },
+      onEndSent: () => {
+        dispatch({ type: "end-sent" });
+        announce(COPY.announce.finishing);
+      },
       onProgress: (acknowledged, total) => {
         dispatch({ type: "progress", sent: acknowledged });
         const step = Math.floor((acknowledged / total) * 100 / 25);
@@ -596,7 +574,7 @@ function finish(): void {
 // ------------------------------------------------------------------- guards
 
 function syncUnloadGuard(): void {
-  const busy = state.screen === "asking" || state.screen === "linking" || state.screen === "sending";
+  const busy = state.screen === "asking" || state.screen === "linking" || state.screen === "sending" || state.screen === "finishing";
   window.removeEventListener("beforeunload", beforeUnload);
   if (busy) window.addEventListener("beforeunload", beforeUnload);
 }

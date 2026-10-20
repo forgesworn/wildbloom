@@ -188,10 +188,22 @@ function readInvite(body: Plain, context: DecodeContext): Invite | Bad {
   return { event: "invite", dir: "to-drop", hide, ice, id, max };
 }
 
+/**
+ * Characters that change how a name is drawn, or that cannot be seen at all, which the shared name rule lets
+ * through: the bidirectional controls (so `invoice` + U+202E + `fdp.terminal` is drawn as `invoicelanimret.pdf`),
+ * the zero-width and word-joining characters, the deprecated formatting characters, the tag characters, and the
+ * byte order mark. A direct send's manifest refuses a name that has any of them, and the sending page removes them
+ * from the name of a file it is asked to send. The list is the protocol's, so it is the same in every reader:
+ * U+061C, U+180E, U+200B to U+200F, U+202A to U+202E, U+2060 to U+2064, U+2066 to U+2069, U+206A to U+206F,
+ * U+FEFF and U+E0000 to U+E007F.
+ */
+export const DISGUISING_CHARACTERS = /[\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\u{e0000}-\u{e007f}]/gu;
+
 function readManifest(body: Plain, context: DecodeContext): Manifest | Bad {
   if (!hasExactly(body, ["event", "name", "size", "type", "v"])) return failed("manifest members");
   const { name, size, type } = body;
   if (typeof name !== "string" || sanitiseFileName(name) !== name) return failed("name is not a fixed point of the name rule");
+  if (name.search(DISGUISING_CHARACTERS) >= 0) return failed("name holds a character that disguises it");
   if (typeof type !== "string" || type.length < 1 || type.length > 255 || CONTROL.test(type) || type.toLowerCase() !== type) {
     return failed("type is not a lower-case media type");
   }

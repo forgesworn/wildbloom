@@ -1,4 +1,5 @@
 import { sanitiseFileName } from "../core/security.js";
+import { DISGUISING_CHARACTERS } from "../direct/messages.js";
 
 /**
  * Brings a phone's file name and type within what Drop's reader accepts before
@@ -26,7 +27,16 @@ export function safeMediaType(type: string): string {
   return lowered.length === 0 || lowered.length > 255 || !PRINTABLE_ASCII.test(lowered) ? FALLBACK_TYPE : lowered;
 }
 
+/**
+ * The name without the characters that change how it is drawn or cannot be seen (see `DISGUISING_CHARACTERS`),
+ * so that a name like `invoice` + U+202E + `fdp.terminal`, which is drawn as `invoicelanimret.pdf`, is sent as
+ * the plain name it is made of, and the receiver is never shown an extension that is not the real one.
+ */
+export function plainName(name: string): string {
+  return name.replace(DISGUISING_CHARACTERS, "");
+}
+
 /** The file as it will be encrypted: same bytes (no copy), a name and type Drop will read. */
 export function prepareSource(file: File): File {
-  return new File([file], sanitiseFileName(wellFormed(file.name)), { type: safeMediaType(file.type), lastModified: 0 });
+  return new File([file], sanitiseFileName(wellFormed(plainName(file.name))), { type: safeMediaType(file.type), lastModified: 0 });
 }

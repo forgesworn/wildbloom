@@ -41,7 +41,7 @@ describe("sender copy", () => {
   });
 
   it("uses no em dash anywhere on the sender page", () => {
-    for (const path of ["../src/send/copy.ts", "../src/send/main.ts", "../src/send/state.ts", "../src/send/send.css", "../send.html"]) {
+    for (const path of ["../src/send/copy.ts", "../src/send/main.ts", "../src/send/screens.ts", "../src/send/state.ts", "../src/send/send.css", "../send.html"]) {
       expect(read(path)).not.toContain("—");
     }
     for (const text of allCopy()) expect(text).not.toContain("—");
@@ -50,6 +50,7 @@ describe("sender copy", () => {
   it("keeps user-visible strings out of the page script", () => {
     // A quoted string that starts like a sentence: a capital, then words.
     expect(/"[A-Z][a-z]+ [a-z]/u.exec(read("../src/send/main.ts"))).toBeNull();
+    expect(/"[A-Z][a-z]+ [a-z]/u.exec(read("../src/send/screens.ts"))).toBeNull();
   });
 
   it("uses British spelling and no exclamation marks", () => {
@@ -89,6 +90,31 @@ describe("sender copy", () => {
       const { h1, body } = COPY.screens[key];
       expect(`${h1} ${body}`, h1).toMatch(/nothing was (?:sent|kept)/iu);
     }
+  });
+
+  it("says honestly what hiding the address does, and promises nothing it cannot keep", () => {
+    // The only server that passes the file on is the receiver's own, so hiding does not hide the address from them.
+    expect(COPY.hide.hint).toMatch(/the server that passes the file on is theirs/iu);
+    expect(COPY.hide.hint).toMatch(/could still find it/iu);
+    expect(COPY.hide.hint).toMatch(/won't show it/iu);
+    for (const text of [COPY.hide.label, COPY.hide.hint, COPY.hide.theirs]) {
+      expect(text).not.toMatch(/\b(?:can't|cannot|won't|will not) (?:see|find|tell|learn|know)\b|anonymous|invisible|untraceable|private|safe from|completely|guarantee/iu);
+    }
+    // Short enough to read at the choose screen.
+    expect(COPY.hide.hint.length).toBeLessThan(160);
+  });
+
+  it("says, once the end of the file has gone, that the outcome is not known, and says it in one voice", () => {
+    for (const key of ["noRoom", "lost", "theyStopped", "failed", "cancelled"] as const) {
+      const late = COPY.screens.afterEnd[key];
+      const early = COPY.screens[key];
+      expect(late.body).toBe("It may have reached them. Check with them.");
+      // The heading says what happened, as it did before the end; only the claim about the file changes.
+      expect(late.h1).toBe(early.h1);
+      expect(early.body).toMatch(/nothing was kept/iu);
+      expect(late.body).not.toMatch(/nothing was kept/iu);
+    }
+    expect(COPY.screens.finishing).toEqual({ h1: "Finishing…", body: "Waiting for them to confirm it arrived. Keep this page open." });
   });
 
   it("never mentions a share or a request, which are other flows", () => {

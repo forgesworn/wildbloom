@@ -11,6 +11,7 @@ import {
   type Side,
   type StopReason,
 } from "./messages.js";
+import { FRAME_TYPE } from "./frames.js";
 import { createPathPacing, stricter, watchPath, type PathWatch, type PathWatchOptions, type RatePacerOptions } from "./pacing.js";
 import { DirectPeer, NoRelayError, type PeerOptions, type PeerState } from "./peer.js";
 import { receiveEnvelope, sendEnvelope, TransferError, type DirectSink, type FrameChannel, type Pacing } from "./transfer.js";
@@ -317,6 +318,11 @@ export interface SendHooks {
   readonly onConnected?: () => void;
   /** The bytes the receiver has acknowledged, and the envelope length. */
   readonly onProgress?: (acknowledged: number, total: number) => void;
+  /**
+   * The end marker has left: every byte is sent, and the receiver may already be keeping the file. From here on the
+   * only ending that says it arrived is the receiver's own "kept"; any other ending cannot say it did not.
+   */
+  readonly onEndSent?: () => void;
   /** The connection dropped (true) or came back (false). */
   readonly onReconnecting?: (on: boolean) => void;
   /** A stricter pacing rule than the protocol's and the relay's, if one is wanted. */
@@ -329,6 +335,26 @@ export interface ManifestInput {
   readonly name: string;
   readonly size: number;
   readonly type: string;
+}
+
+/**
+ * The channel, telling `onEnd` once the end marker has been handed to it. The sender's own code is not asked to
+ * report this, so the transfer module stays as it is.
+ */
+function announceEnd(channel: FrameChannel, onEnd: () => void): FrameChannel {
+  return {
+    get open(): boolean { return channel.open; },
+    get bufferedAmount(): number { return channel.bufferedAmount; },
+    get bufferedAmountLowThreshold(): number { return channel.bufferedAmountLowThreshold; },
+    set bufferedAmountLowThreshold(value: number) { channel.bufferedAmountLowThreshold = value; },
+    get maxMessageSize(): number { return channel.maxMessageSize; },
+    send(frame: Uint8Array): void {
+      channel.send(frame);
+      if (frame[0] === FRAME_TYPE.end) onEnd();
+    },
+    close: () => channel.close(),
+    listen: (handlers) => channel.listen(handlers),
+  };
 }
 
 /** How long a deliberate stop waits for its last words to leave before everything closes. */
@@ -473,7 +499,7 @@ export class SenderSession {
       hooks.onConnected?.();
       await Promise.race([
         sendEnvelope({
-          channel,
+          channel: hooks.onEndSent ? announceEnd(channel, hooks.onEndSent) : channel,
           encoder,
           signal: run.signal,
           ...(hooks.onProgress ? { onProgress: hooks.onProgress } : {}),
