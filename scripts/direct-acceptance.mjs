@@ -246,6 +246,8 @@ async function startTurn(binary, port) {
     `static-auth-secret=${TURN_SECRET}`,
     "realm=wildbloom.test",
     "no-tls",
+    // Older coturn starts DTLS listeners, and wants a certificate for them, unless told not to; newer coturn calls this redundant and carries on.
+    "no-dtls",
     "no-tcp-relay",
     // coturn refuses peers on 127.0.0.0/8 unless told otherwise; both browsers here are on loopback.
     "allow-loopback-peers",
@@ -255,6 +257,7 @@ async function startTurn(binary, port) {
     "simple-log",
   ].join("\n"));
   const child = launch(binary, ["-c", configuration], { stdio: ["ignore", "ignore", "pipe"] });
+  child.stderr.resume();
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     assert.equal(child.exitCode, null, "coturn exited before it was ready.");
