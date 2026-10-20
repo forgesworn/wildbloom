@@ -237,8 +237,18 @@ async function stunAnswers(port) {
   }
 }
 
+/** The last lines of a log file, for a failure message: why a server would not start is in its own output. */
+function lastLines(path, count = 40) {
+  try {
+    return readFileSync(path, "utf8").split(/\r?\n/u).filter((line) => line.length > 0).slice(-count).join("\n");
+  } catch {
+    return "(no log was written)";
+  }
+}
+
 async function startTurn(binary, port) {
   const configuration = join(temporary, "turnserver.conf");
+  const log = join(temporary, "turnserver.log");
   writeFileSync(configuration, [
     `listening-port=${port}`,
     "listening-ip=127.0.0.1",
@@ -252,24 +262,33 @@ async function startTurn(binary, port) {
     "no-tls",
     // Older coturn starts DTLS listeners, and wants a certificate for them, unless told not to; newer coturn calls this redundant and carries on.
     "no-dtls",
+    // Without this, older coturn binds a telnet console as well, and exits if another coturn on the machine holds its port.
+    "no-cli",
     "no-tcp-relay",
     // coturn refuses peers on 127.0.0.0/8 unless told otherwise; both browsers here are on loopback.
     "allow-loopback-peers",
     "no-multicast-peers",
     `max-bps=${TURN_MAX_BPS}`,
+    // Every file it writes goes under the temporary directory, so it runs as an ordinary user: its pid file, and its user
+    // database, which older coturn opens at /var/lib/turn even when credentials come from the shared secret.
     `pidfile=${join(temporary, "turn.pid")}`,
+    `userdb=${join(temporary, "turndb")}`,
+    "verbose",
     "log-file=stdout",
     "simple-log",
   ].join("\n"));
-  const child = launch(binary, ["-c", configuration], { stdio: ["ignore", "ignore", "pipe"] });
-  child.stderr.resume();
+  // Its output goes to a file, so that when it will not start the reason is not lost.
+  const descriptor = openSync(log, "w");
+  const child = launch(binary, ["-c", configuration], { stdio: ["ignore", descriptor, descriptor] });
+  closeSync(descriptor);
+  const refuse = (message) => new Error(`${message}\nThe last lines coturn wrote:\n${lastLines(log)}`);
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    assert.equal(child.exitCode, null, "coturn exited before it was ready.");
+    if (child.exitCode !== null || child.signalCode !== null) throw refuse(`coturn exited before it was ready (${child.exitCode ?? child.signalCode}).`);
     if (await stunAnswers(port)) return child;
     await sleep(200);
   }
-  throw new Error("coturn did not answer a STUN request.");
+  throw refuse("coturn did not answer a STUN request.");
 }
 
 const dockerContainers = new Set();
@@ -307,7 +326,13 @@ async function startTurnDocker(port) {
     if (await stunAnswers(port)) return name;
     await sleep(250);
   }
-  throw new Error("The coturn container did not answer a STUN request.");
+  let output = "";
+  try {
+    output = execFileSync("docker", ["logs", "--tail", "40", name], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch {
+    output = "(no log could be read)";
+  }
+  throw new Error(`The coturn container did not answer a STUN request.\nThe last lines it wrote:\n${output}`);
 }
 
 // -------------------------------------------------------------------- UDP shim
