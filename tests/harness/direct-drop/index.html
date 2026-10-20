@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="data:," />
+    <title>Direct send test receiver</title>
+  </head>
+  <body>
+    <!-- Test builds only. This page stands in for Drop: it opens the session as the inviter and receives the file. -->
+    <h1>Direct send test receiver</h1>
+    <p id="phase">idle</p>
+    <p id="words"></p>
+    <p id="manifest"></p>
+    <progress id="progress" value="0" max="1"></progress>
+    <p><a id="save" hidden>Save</a></p>
+    <pre id="log"></pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

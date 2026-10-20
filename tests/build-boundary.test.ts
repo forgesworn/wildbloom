@@ -73,4 +73,13 @@ describe("production WebTorrent build boundary", () => {
     expect(config).toContain("entryReachesWebTorrent(bundle, page)");
     expect(readFileSync(new URL("../send.html", import.meta.url), "utf8")).toContain('src="/src/send/main.ts"');
   });
+
+  it("keeps the direct send test receiver out of the production build", () => {
+    const config = readFileSync(new URL("../vite.config.ts", import.meta.url), "utf8");
+    expect(config).toContain('input: { main: "index.html", get: "get.html", send: "send.html" }');
+    expect(config).not.toMatch(/harness|direct-drop/u);
+    // It has a build of its own, which only the acceptance script runs.
+    expect(readFileSync(new URL("./harness/direct-drop/vite.config.ts", import.meta.url), "utf8")).toContain("direct-acceptance.mjs");
+    expect(readFileSync(new URL("../scripts/direct-acceptance.mjs", import.meta.url), "utf8")).toContain("tests/harness/direct-drop/vite.config.ts");
+  });
 });
