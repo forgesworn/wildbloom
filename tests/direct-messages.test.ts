@@ -1,6 +1,6 @@
 // Shared vectors for wildbloom-direct/1, copied unedited from the protocol work:
 //   source repository  forgesworn/wildbloom-node, branch main
-//   source commit      5899ff274d78c2fe06d8179fbf9826d82300c1f4 (branch feat/direct-stun-protocol; re-copy from the merge commit once it lands)
+//   source commit      8e2549b716a14b606d5bbfbfa1e083c0e22a8f5e
 //   source path        vectors/wildbloom-direct-v1.json
 //   copied to          test-vectors/wildbloom-direct-v1.json (never edit it; copy it again)
 // The protocol text is docs/PROTOCOL.md, section "Direct send", on the same branch.

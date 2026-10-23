@@ -83,7 +83,8 @@ the code holds to that. Only a device holding a grant from the maintainer's
 node, which only the maintainer's key can issue, can open a session on the
 pairing relay or obtain the node's direct-send ICE configuration, and the node accepts
 uploads from the maintainer's key and devices only. The pages take their
-pairing relay and ICE servers from the build, never from a link, so another
+pairing relay from the build, never from a link, and accept only the ICE
+servers the build allows, so another
 Drop owner cannot use the relay, and no Wildbloom exchange can use it unless
 the maintainer opened the session. Each exchange is
 between the maintainer and one person the maintainer invited, and a file
