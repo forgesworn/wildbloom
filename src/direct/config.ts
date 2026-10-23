@@ -4,9 +4,10 @@
  * The page accepts TURN and STUN servers only from this list, fixed when the
  * page is built, never from a link or from the inviter: a paired but hostile
  * inviter must not be able to name a server of its own and learn an address the
- * person asked to hide. Override the list for a build with
- * VITE_WILDBLOOM_DIRECT_ICE (comma-separated, exact URLs); tests point it at
- * loopback. Nothing here contacts a server.
+ * person asked to hide. The default is Cloudflare's public STUN server; a build
+ * may list its own STUN and TURN URLs instead with VITE_WILDBLOOM_DIRECT_ICE
+ * (comma-separated, exact URLs); tests point it at loopback. Nothing here
+ * contacts a server.
  */
 
 export const DIRECT_PROFILE = "wildbloom-direct/1";
@@ -50,15 +51,8 @@ export const CONNECT_GIVE_UP_MS = 90_000;
  */
 export const RECONNECT_GIVE_UP_MS = 45_000;
 
-/** The owner's coturn, as KithMoot's install script spells its URLs, plus the explicit transport forms. */
-export const DEFAULT_DIRECT_ICE_URLS: readonly string[] = Object.freeze([
-  "stun:kithmoot.forgesworn.dev:3478",
-  "turn:kithmoot.forgesworn.dev:3478",
-  "turn:kithmoot.forgesworn.dev:3478?transport=udp",
-  "turn:kithmoot.forgesworn.dev:3478?transport=tcp",
-  "turns:kithmoot.forgesworn.dev:5349",
-  "turns:kithmoot.forgesworn.dev:5349?transport=tcp",
-]);
+/** Cloudflare's free public STUN server, as KithMoot uses. No ForgeSworn server is a default. */
+export const DEFAULT_DIRECT_ICE_URLS: readonly string[] = Object.freeze(["stun:stun.cloudflare.com:3478"]);
 
 const ICE_URL = /^(?:stun|turn|turns):[^\s,]+$/u;
 
@@ -70,9 +64,6 @@ export function parseIceAllowlist(value: string | undefined): readonly string[] 
     if (!ICE_URL.test(url) || new TextEncoder().encode(url).length > LIMITS.urlBytes) {
       throw new Error("VITE_WILDBLOOM_DIRECT_ICE must list stun:, turn: or turns: URLs separated by commas.");
     }
-  }
-  if (!urls.some((url) => url.startsWith("turn:") || url.startsWith("turns:"))) {
-    throw new Error("VITE_WILDBLOOM_DIRECT_ICE must include at least one turn: or turns: URL.");
   }
   return Object.freeze([...new Set(urls)]);
 }

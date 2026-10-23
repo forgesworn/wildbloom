@@ -70,20 +70,22 @@ deployment run for the maintainer's own Drop, not a public service:
 - for `/get`, a Wildbloom Node at the same address, from which the recipient
   downloads the shared file as an encrypted envelope. The node stores only
   what the maintainer's own devices put there and accepts no other uploader;
-- for `/send`, the STUN and TURN server at kithmoot.forgesworn.dev, which
-  KithMoot also uses with credentials of its own. When the two ends cannot
-  connect directly, or the maintainer hides their address, it relays the
-  encrypted transfer. It sees both addresses, byte counts and timing, cannot
-  read the file, and stores nothing.
+- for `/send`, the STUN server named in the page build, by default a public
+  one run by Cloudflare. ForgeSworn runs no STUN or TURN server for this. The
+  configured STUN server learns the public address and port of each end that
+  is not hidden, and when it asked. It carries no file data and cannot read
+  the file. A build that names a TURN server as well would relay the encrypted
+  transfer for an end that hides its address, and that server would see both
+  addresses, byte counts and timing.
 
 For Wildbloom, ForgeSworn offers these servers to no one as a service, and
 the code holds to that. Only a device holding a grant from the maintainer's
 node, which only the maintainer's key can issue, can open a session on the
-pairing relay or obtain Wildbloom's TURN credentials, and the node accepts
+pairing relay or obtain the node's direct-send ICE configuration, and the node accepts
 uploads from the maintainer's key and devices only. The pages take their
-pairing relay and TURN servers from the build, never from a link, so another
-Drop owner cannot use them, and no Wildbloom exchange can use the relay or
-the TURN server unless the maintainer opened the session. Each exchange is
+pairing relay and ICE servers from the build, never from a link, so another
+Drop owner cannot use the relay, and no Wildbloom exchange can use it unless
+the maintainer opened the session. Each exchange is
 between the maintainer and one person the maintainer invited, and a file
 sent with `/send` never rests on a server. `[LEGAL REVIEW: two questions.
 First, whether an exchange whose only other party is the provider, an
@@ -92,9 +94,9 @@ Second, whether serving these pages from the public wildbloom.forgesworn.dev
 site breaks "closed means closed", given that a visitor counts as a user
 (section 227(2)). See jurisdiction-kit law/gb/online-services.md sections
 2.2 and 2.10.]`
-<!-- src/get/config.ts:9; src/direct/config.ts:54-61; wildbloom-node
-docs/PROTOCOL.md "Direct send", "TURN credential issuer" and "What servers
-learn". -->
+<!-- src/get/config.ts:9; src/direct/config.ts (DEFAULT_DIRECT_ICE_URLS);
+wildbloom-node docs/PROTOCOL.md "Direct send", "TURN credential issuer" and
+"What servers learn". -->
 
 ## What ForgeSworn runs
 
@@ -195,10 +197,12 @@ account, no server-side storage of files, keys or events, and no server-side
 analytics (see `docs/legal/privacy-notice-draft.md` for the full position,
 including what Cloudflare may log as the hosting provider).
 
-The `/get` and `/send` pages are an exception: the pairing relay and the
-STUN/TURN server that ForgeSworn runs see the IP addresses of both people.
+The `/get` and `/send` pages are an exception: the pairing relay that
+ForgeSworn runs sees the IP addresses of both people. On `/send`, the
+configured STUN server (by default Cloudflare's public one, not run by
+ForgeSworn) also learns the public address of each end that is not hidden.
 `[LEGAL REVIEW: cover /get and /send in the privacy notice, including what
-the pairing relay and the TURN server log and for how long.]`
+the pairing relay logs and for how long.]`
 
 ## What would change this position
 

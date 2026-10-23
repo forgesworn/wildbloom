@@ -40,6 +40,7 @@ export const COPY = {
     label: "Don't show them my internet address",
     hint: "Their computer won't show it, and sending can be slower. The server that passes the file on is theirs, so they could still find it.",
     theirs: "They're hiding their own internet address from you too.",
+    unavailable: "Their computer can't hide addresses right now, so it will see your internet address.",
   },
   timeLeft: RECIPIENT.timeLeft,
   theyNeed: "They need Wildbloom open while you do this.",
@@ -115,6 +116,10 @@ export const COPY = {
     connectFailed: {
       h1: "Couldn't connect to them",
       body: "Your phone and their computer couldn't find a way to connect. Nothing was sent. Ask them to start again with a new link.",
+    },
+    connectFailedDirect: {
+      h1: "Couldn't connect to them",
+      body: "Your phone and their computer couldn't find a way to connect. Some networks, like mobile data or work Wi-Fi, don't allow it. Nothing was sent. Try again on another network, such as home Wi-Fi.",
     },
     lost: {
       h1: "The connection was lost",

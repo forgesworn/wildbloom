@@ -36,6 +36,7 @@ export function screenText(state: ViewState): { h1: string; body?: string } {
     case "no-relay": return copy.cannotHide;
     case "no-room": return late ? copy.afterEnd.noRoom : copy.noRoom;
     case "connect-failed": return copy.connectFailed;
+    case "connect-failed-direct": return copy.connectFailedDirect;
     case "lost": return late ? copy.afterEnd.lost : copy.lost;
     case "they-stopped": return late ? copy.afterEnd.theyStopped : copy.theyStopped;
     case "failed": return late ? copy.afterEnd.failed : copy.failed;

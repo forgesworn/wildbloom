@@ -1,6 +1,6 @@
 // Shared vectors for wildbloom-direct/1, copied unedited from the protocol work:
 //   source repository  forgesworn/wildbloom-node, branch main
-//   source commit      022df8d7ba7eecebf857caf6c13e1215cc0b2329
+//   source commit      5899ff274d78c2fe06d8179fbf9826d82300c1f4 (branch feat/direct-stun-protocol; re-copy from the merge commit once it lands)
 //   source path        vectors/wildbloom-direct-v1.json
 //   copied to          test-vectors/wildbloom-direct-v1.json (never edit it; copy it again)
 // The protocol text is docs/PROTOCOL.md, section "Direct send", on the same branch.
@@ -9,9 +9,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_DIRECT_ICE_URLS, parseIceAllowlist } from "../src/direct/config.js";
-import { canonicalJson, checkSdp, decodeMessage, encodeMessage, type DirectMessage, type Side } from "../src/direct/messages.js";
+import { canonicalJson, checkSdp, decodeMessage, encodeMessage, hasRelayUrl, type DirectMessage, type Side } from "../src/direct/messages.js";
 
-const VECTOR_SHA256 = "9332184fa6a3716cceae5e6fc15444b36c9110d18b9c1a1a501498d8a0c7e97f";
+const VECTOR_SHA256 = "0ddd40946d9201173b840f7b142eea4d9ee2bd90061c42839ffd287eca426e8b";
 const raw = readFileSync(new URL("../test-vectors/wildbloom-direct-v1.json", import.meta.url));
 
 interface Vectors {
@@ -121,11 +121,15 @@ describe("session description checks", () => {
 });
 
 describe("the build-time ICE allowlist", () => {
-  it("defaults to the owner's coturn, with a TURN URL", () => {
-    expect(DEFAULT_DIRECT_ICE_URLS.some((url) => url.startsWith("turn:"))).toBe(true);
-    expect(DEFAULT_DIRECT_ICE_URLS.every((url) => /^(?:stun|turn|turns):kithmoot\.forgesworn\.dev:\d+/u.test(url))).toBe(true);
+  it("defaults to Cloudflare's public STUN server alone, and names no ForgeSworn server", () => {
+    expect(DEFAULT_DIRECT_ICE_URLS).toEqual(["stun:stun.cloudflare.com:3478"]);
+    expect(DEFAULT_DIRECT_ICE_URLS.some((url) => /forgesworn/iu.test(url))).toBe(false);
     expect(parseIceAllowlist(undefined)).toBe(DEFAULT_DIRECT_ICE_URLS);
     expect(parseIceAllowlist("  ")).toBe(DEFAULT_DIRECT_ICE_URLS);
+  });
+
+  it("accepts an override list with STUN alone", () => {
+    expect(parseIceAllowlist("stun:a.example:3478")).toEqual(["stun:a.example:3478"]);
   });
 
   it("reads a comma-separated override exactly and drops repeats", () => {
@@ -138,9 +142,40 @@ describe("the build-time ICE allowlist", () => {
   it.each([
     ["a URL with another scheme", "https://a.example,turn:a.example:3478"],
     ["a blank entry", "turn:a.example:3478,,stun:a.example:3478"],
-    ["no TURN URL", "stun:a.example:3478"],
     ["an over-long URL", `turn:${"a".repeat(300)}:3478`],
   ])("stops the page loading on %s", (_name, value) => {
     expect(() => parseIceAllowlist(value)).toThrow();
+  });
+});
+
+describe("ICE server entries", () => {
+  const ALLOW = ["stun:s.example:3478", "turn:t.example:3478?transport=udp"];
+  const invite = (ice: unknown): Uint8Array =>
+    bytes(canonicalJson({ dir: "to-drop", event: "invite", hide: false, ice, id: "AAECAwQFBgcICQoLDA0ODw", max: 1000, v: 1 }));
+  const read = (ice: unknown) => decodeMessage(invite(ice), { from: "drop", index: 0, iceAllowlist: ALLOW });
+  const stun = { credential: "", urls: ["stun:s.example:3478"], username: "" };
+  const turn = { credential: "Y3JlZA", urls: ["turn:t.example:3478?transport=udp"], username: "1800003600:dXNlcg" };
+
+  it("accepts a STUN-only entry with empty fields, a TURN entry, and both together", () => {
+    for (const ice of [[stun], [turn], [stun, turn], [{ ...turn, urls: ["stun:s.example:3478", ...turn.urls] }]]) expect(read(ice).ok).toBe(true);
+  });
+
+  it.each<[string, unknown, "failed" | "unsupported"]>([
+    ["a STUN-only entry with a credential", [{ ...stun, credential: "Y3JlZA", username: "dXNlcg" }], "failed"],
+    ["a STUN-only entry with only a username", [{ ...stun, username: "dXNlcg" }], "failed"],
+    ["a STUN-only entry with only a credential", [{ ...stun, credential: "Y3JlZA" }], "failed"],
+    ["a TURN entry with an empty username", [{ ...turn, username: "" }], "failed"],
+    ["a TURN entry with an empty credential", [{ ...turn, credential: "" }], "failed"],
+    ["a mixed entry with empty fields", [{ ...turn, credential: "", username: "", urls: ["stun:s.example:3478", ...turn.urls] }], "failed"],
+    ["a STUN-only entry not on the allowlist", [{ ...stun, urls: ["stun:other.example:3478"] }], "unsupported"],
+  ])("refuses %s", (_name, ice, stop) => {
+    const result = read(ice);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.stop).toBe(stop);
+  });
+
+  it("tells a page whether an invitation offers a relay", () => {
+    expect(hasRelayUrl([stun])).toBe(false);
+    expect(hasRelayUrl([stun, turn])).toBe(true);
   });
 });

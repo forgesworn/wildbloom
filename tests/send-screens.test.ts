@@ -8,7 +8,7 @@ const toSending: ViewEvent[] = [
   { type: "continue" },
   { type: "paired", words: "walk art wisdom" },
   { type: "yes" },
-  { type: "invitation", maxBytes: 250_000_000, theirHidden: false },
+  { type: "invitation", maxBytes: 250_000_000, theirHidden: false, relayOffered: true },
   { type: "asking", name: "holiday.mp4", size: 120_000_000 },
   { type: "linking" },
   { type: "sending", total: 120_588_136 },
@@ -69,6 +69,10 @@ describe("what the page says once the end of the file has been sent", () => {
   it("does not change an ending that cannot come after the end", () => {
     expect(screenText(run([...toSending, { type: "no-relay" }])).h1).toBe(COPY.screens.cannotHide.h1);
     expect(screenText(run([...toSending, { type: "connect-failed" }])).h1).toBe(COPY.screens.connectFailed.h1);
+    // With no relay on offer, the same ending says the networks may not allow a direct connection.
+    const direct = toSending.map((event) => (event.type === "invitation" ? { ...event, relayOffered: false } : event));
+    expect(text([...direct, { type: "connect-failed" }])).toBe(`${COPY.screens.connectFailedDirect.h1} ${COPY.screens.connectFailedDirect.body}`);
+    expect(COPY.screens.connectFailedDirect.body).toMatch(/mobile data or work Wi-Fi/u);
     expect(text([{ type: "continue" }, { type: "wrong-words" }])).toContain("Those words didn't work");
   });
 });

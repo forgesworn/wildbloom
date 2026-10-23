@@ -165,8 +165,9 @@ history.
 4. The complaint route under section 8, and the wording of its order
    relative to the ICO.
 5. `[LEGAL REVIEW]` This notice does not cover the Share and direct send
-   pages (`/get`, `/send`). They use the maintainer's own pairing relay,
-   Wildbloom Node and STUN/TURN server, which see the IP addresses of both
-   people, and the TURN server relays the encrypted file when the two ends
-   cannot connect directly. See "Share and direct send" in
+   pages (`/get`, `/send`). They use the maintainer's own pairing relay and
+   Wildbloom Node, which see the IP addresses of both people. On `/send`, the
+   configured STUN server (by default Cloudflare's public one) learns the
+   public address of each end that is not hidden, and when it asked; it
+   carries no file data. See "Share and direct send" in
    `docs/legal/online-safety-position-draft.md`.
