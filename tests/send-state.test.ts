@@ -6,7 +6,7 @@ function run(events: ViewEvent[], from: ViewState = INITIAL_STATE): ViewState {
 }
 
 const toCheck: ViewEvent[] = [{ type: "continue" }, { type: "paired", words: "walk art wisdom" }];
-const toChoose: ViewEvent[] = [...toCheck, { type: "yes" }, { type: "invitation", maxBytes: 250_000_000, theirHidden: true }];
+const toChoose: ViewEvent[] = [...toCheck, { type: "yes" }, { type: "invitation", maxBytes: 250_000_000, theirHidden: true, relayOffered: true }];
 const toAsking: ViewEvent[] = [...toChoose, { type: "asking", name: "holiday.mp4", size: 120_000_000 }];
 const toSending: ViewEvent[] = [...toAsking, { type: "linking" }, { type: "sending", total: 120_588_136 }];
 
@@ -43,7 +43,7 @@ describe("sender state reducer", () => {
     const checking = run(toCheck);
     expect(checking.checkWords).toBe("walk art wisdom");
     expect(run([{ type: "no" }], checking)).toMatchObject({ screen: "mismatch", checkWords: "" });
-    expect(run([{ type: "yes" }, { type: "invitation", maxBytes: 1, theirHidden: false }], checking).checkWords).toBe("");
+    expect(run([{ type: "yes" }, { type: "invitation", maxBytes: 1, theirHidden: false, relayOffered: true }], checking).checkWords).toBe("");
   });
 
   it("moves to a slow-them notice only while connecting", () => {
@@ -96,6 +96,23 @@ describe("sender state reducer", () => {
     expect(run([{ type: "reconnecting", on: false }], dropped).reconnecting).toBe(false);
     expect(run([{ type: "reconnecting", on: true }], dropped)).toBe(dropped);
     expect(run([{ type: "reconnecting", on: true }])).toBe(INITIAL_STATE);
+  });
+
+  it("offers hiding only when the invitation holds a TURN URL", () => {
+    const toChooseDirect: ViewEvent[] = [...toCheck, { type: "yes" }, { type: "invitation", maxBytes: 250_000_000, theirHidden: false, relayOffered: false }];
+    const direct = run(toChooseDirect);
+    expect(direct).toMatchObject({ screen: "choose", relayOffered: false, hide: false });
+    // A request to hide is ignored, and it cannot be switched on by an earlier choice either.
+    expect(run([{ type: "hide", on: true }], direct)).toBe(direct);
+    expect(run([{ type: "hide", on: true }, ...toChooseDirect.slice(-2)], run(toCheck)).hide).toBe(false);
+    expect(run([{ type: "hide", on: true }], run(toChoose)).hide).toBe(true);
+    expect(INITIAL_STATE.relayOffered).toBe(false);
+  });
+
+  it("ends a connection failure on the direct-only screen when no relay was offered", () => {
+    const withoutRelay = (events: ViewEvent[]): ViewEvent[] => events.map((event) => (event.type === "invitation" ? { ...event, relayOffered: false } : event));
+    expect(run([...withoutRelay(toSending), { type: "connect-failed" }]).screen).toBe("connect-failed-direct");
+    expect(run([...toSending, { type: "connect-failed" }]).screen).toBe("connect-failed");
   });
 
   it.each(["no-relay", "no-room", "connect-failed", "lost", "they-stopped", "failed"] as const)("ends on %s from any step after the file was offered", (type) => {

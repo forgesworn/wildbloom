@@ -13,6 +13,10 @@ export type Side = "drop" | "page";
 /** What a `stop` message and the reader's refusals say. */
 export type StopReason = "cancelled" | "unsupported" | "failed";
 
+/**
+ * One ICE server entry. An entry with any turn: or turns: URL carries a username and a credential. An entry of
+ * stun: URLs only has both empty, so no credential is ever handed to a STUN server.
+ */
 export interface IceServer {
   readonly credential: string;
   readonly urls: readonly string[];
@@ -157,10 +161,12 @@ function readIce(value: unknown, allowlist: readonly string[]): readonly IceServ
     for (const url of urls as unknown[]) {
       if (typeof url !== "string" || !/^(?:stun|turn|turns):[^\s]+$/u.test(url) || utf8Length(url) > LIMITS.urlBytes) return failed("an ice URL is malformed");
     }
+    const relay = (urls as string[]).some(isRelayUrl);
     for (const secret of [username, credential]) {
-      if (typeof secret !== "string" || secret.length === 0 || utf8Length(secret) > LIMITS.credentialBytes || CONTROL.test(secret)) {
-        return failed("a username or credential is malformed");
-      }
+      if (typeof secret !== "string") return failed("a username or credential is malformed");
+      // A TURN entry needs both; a STUN-only entry has neither, so there is one canonical form.
+      const wellFormed = relay ? secret.length > 0 && utf8Length(secret) <= LIMITS.credentialBytes && !CONTROL.test(secret) : secret === "";
+      if (!wellFormed) return failed("a username or credential is malformed");
     }
     servers.push({ credential: credential as string, urls: urls as string[], username: username as string });
   }
@@ -168,10 +174,14 @@ function readIce(value: unknown, allowlist: readonly string[]): readonly IceServ
   for (const server of servers) {
     for (const url of server.urls) if (!allowlist.includes(url)) return unsupported("an ice URL is not on the build-time allowlist");
   }
-  if (!servers.some((server) => server.urls.some((url) => url.startsWith("turn:") || url.startsWith("turns:")))) {
-    return unsupported("no TURN URL");
-  }
   return servers;
+}
+
+const isRelayUrl = (url: string): boolean => url.startsWith("turn:") || url.startsWith("turns:");
+
+/** Whether any server in the list offers a TURN URL, which hiding an address needs. */
+export function hasRelayUrl(servers: readonly IceServer[]): boolean {
+  return servers.some((server) => server.urls.some(isRelayUrl));
 }
 
 function readInvite(body: Plain, context: DecodeContext): Invite | Bad {

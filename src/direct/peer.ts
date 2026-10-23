@@ -44,7 +44,8 @@ export function buildRtcConfiguration(servers: readonly IceServer[], hide: boole
   for (const server of servers) {
     const urls = hide ? server.urls.filter(isRelayUrl) : [...server.urls];
     if (urls.length === 0) continue;
-    iceServers.push({ urls, username: server.username, credential: server.credential });
+    // A STUN-only entry has no credential, and none is ever handed to a STUN server.
+    iceServers.push(server.username === "" ? { urls } : { urls, username: server.username, credential: server.credential });
   }
   if (hide && iceServers.length === 0) throw new NoRelayError();
   return {

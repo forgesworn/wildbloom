@@ -8,6 +8,7 @@ import {
 } from "@forgesworn/foregather-kit";
 import { envelopeBytes } from "../core/crypto.js";
 import { DIRECT_ICE_ALLOWLIST, DIRECT_PURPOSE } from "../direct/config.js";
+import { hasRelayUrl } from "../direct/messages.js";
 import { DirectError, fromPairingExchange, SenderSession, type DirectFailure } from "../direct/session.js";
 import { PAIRING_NAMESPACE, PAIRING_SERVICE, SLOW_SENDER_MS, allowsLoopbackHttp } from "../get/config.js";
 import { classifyPairingFailure } from "../get/failure.js";
@@ -454,7 +455,7 @@ function onYes(): void {
     try {
       const invite = await next.readInvite();
       if (session !== next) return;
-      dispatch({ type: "invitation", maxBytes: invite.max, theirHidden: invite.hide });
+      dispatch({ type: "invitation", maxBytes: invite.max, theirHidden: invite.hide, relayOffered: hasRelayUrl(invite.ice) });
     } catch (error) {
       if (session !== next) return;
       // An invitation this page cannot use is told apart from a session that ran out or a connection that was lost.
@@ -470,13 +471,15 @@ function hideOption(): HTMLElement[] {
   const box = el("input");
   box.type = "checkbox";
   box.id = "hide";
-  box.checked = state.hide;
+  // Hiding needs a TURN URL in the invitation; without one the choice is shown, switched off, and says why.
+  box.disabled = !state.relayOffered;
+  box.checked = state.relayOffered && state.hide;
   box.setAttribute("aria-describedby", "hide-hint");
   box.addEventListener("change", () => dispatch({ type: "hide", on: box.checked }));
   row.append(box, el("span", undefined, COPY.hide.label));
   const hint = el("p", "muted small");
   hint.id = "hide-hint";
-  hint.textContent = state.theirHidden ? `${COPY.hide.hint} ${COPY.hide.theirs}` : COPY.hide.hint;
+  hint.textContent = !state.relayOffered ? COPY.hide.unavailable : state.theirHidden ? `${COPY.hide.hint} ${COPY.hide.theirs}` : COPY.hide.hint;
   return [row, hint];
 }
 

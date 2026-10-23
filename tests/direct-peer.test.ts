@@ -9,7 +9,7 @@ const servers: IceServer[] = [
     credential: "c2VjcmV0",
     urls: ["stun:turn.example.net:3478", "turn:turn.example.net:3478?transport=udp", "turns:turn.example.net:5349?transport=tcp"],
   },
-  { username: "1800003600:b3RoZXI", credential: "b3RoZXI", urls: ["stun:other.example.net:3478"] },
+  { username: "", credential: "", urls: ["stun:other.example.net:3478"] },
 ];
 
 afterEach(() => vi.useRealTimers());
@@ -20,8 +20,10 @@ describe("the RTC configuration", () => {
     expect(configuration.iceTransportPolicy).toBe("all");
     expect(configuration.iceServers).toEqual([
       { urls: servers[0]!.urls, username: servers[0]!.username, credential: servers[0]!.credential },
-      { urls: servers[1]!.urls, username: servers[1]!.username, credential: servers[1]!.credential },
+      { urls: servers[1]!.urls },
     ]);
+    // A STUN-only entry has no credential keys at all.
+    expect(Object.keys(configuration.iceServers![1]!)).toEqual(["urls"]);
     expect(configuration.bundlePolicy).toBe("max-bundle");
     expect(configuration.iceCandidatePoolSize).toBe(0);
   });
@@ -41,6 +43,15 @@ describe("the RTC configuration", () => {
   it("will not hide without a TURN server to hide behind", () => {
     expect(() => buildRtcConfiguration([servers[1]!], true)).toThrow(NoRelayError);
     expect(buildRtcConfiguration([servers[1]!], false).iceServers).toHaveLength(1);
+  });
+
+  it("will not hide with a STUN-only list, and hides behind the TURN URLs of mixed entries with their credentials", () => {
+    expect(() => buildRtcConfiguration([servers[1]!], true)).toThrow(NoRelayError);
+    const stunEntry: IceServer = { username: "", credential: "", urls: ["stun:s.example.net:3478"] };
+    const turnEntry: IceServer = { username: "u", credential: "c", urls: ["turn:t.example.net:3478?transport=udp"] };
+    const hidden = buildRtcConfiguration([stunEntry, turnEntry], true);
+    expect(hidden.iceTransportPolicy).toBe("relay");
+    expect(hidden.iceServers).toEqual([{ urls: turnEntry.urls, username: "u", credential: "c" }]);
   });
 
   it("does not change the list it was given", () => {

@@ -393,10 +393,16 @@ class PathShim {
 
 // ------------------------------------------------------------------- scenarios
 
-let turn; // { port, urls, host }
+let turn; // { port, urls, stunUrl, relay }
+
+/** An ICE entry for the invitation. `ice: "stun"` is STUN only (empty username and credential, as the protocol requires); by default the entry holds every configured URL, with a credential where coturn is running. */
+function iceEntry(ice, credential) {
+  if (ice === "stun" || !turn.relay) return { urls: [turn.stunUrl], username: "", credential: "" };
+  return { urls: turn.urls, username: credential.username, credential: credential.credential };
+}
 
 /** A new session: the words, the link and the test receiver's configuration. */
-async function newSession({ hide = false, max = MAX, lifetime = 600, shim, gatherMs, restartAfterMs, giveUpMs } = {}) {
+async function newSession({ hide = false, ice = "default", max = MAX, lifetime = 600, shim, gatherMs, restartAfterMs, giveUpMs } = {}) {
   const offer = kit.createLiveOffer({ namespace: NAMESPACE, purpose: PURPOSE, lifetime, wordCount: 4, now: now() });
   const grant = await fixtures.grants.issue({ operatorToken, resource: "live", expires: now() + 300, maxUses: 1, maxInvitationLifetime: 600 });
   const room = { session: offer.session, secret_format: "words" };
@@ -404,7 +410,6 @@ async function newSession({ hide = false, max = MAX, lifetime = 600, shim, gathe
   const link = kit.createPairingLink({ baseUrl: `${fixtures.appOrigin}/send/`, room, namespace: NAMESPACE, purpose: PURPOSE, now: now(), allowLoopbackHttp: true });
   const page = turnCredential("page");
   const drop = turnCredential("drop");
-  const server = (credential) => ({ urls: turn.urls, username: credential.username, credential: credential.credential });
   return {
     words: offer.secretWords,
     link,
@@ -415,8 +420,8 @@ async function newSession({ hide = false, max = MAX, lifetime = 600, shim, gathe
       allocation,
       namespace: NAMESPACE,
       purpose: PURPOSE,
-      inviteIce: [server(page)],
-      dropIce: [server(drop)],
+      inviteIce: [iceEntry(ice, page)],
+      dropIce: [iceEntry(ice, drop)],
       hide,
       max,
       id: randomBytes(16).toString("base64url"),
@@ -441,6 +446,8 @@ function installRtcAudit() {
       window.__rtcConfigs.push({
         policy: configuration?.iceTransportPolicy ?? "all",
         urls: (configuration?.iceServers ?? []).flatMap((server) => [].concat(server.urls)),
+        // Whether any server was given a username or a credential member at all; the values are never kept.
+        credentialed: (configuration?.iceServers ?? []).some((server) => "username" in server || "credential" in server),
       });
     }
   };
@@ -695,11 +702,11 @@ try {
     relayHow = `coturn in Docker (${DOCKER_IMAGE})`;
   }
   if (relayAvailable) {
-    turn = { port: turnPort, urls: [`stun:127.0.0.1:${turnPort}`, `turn:127.0.0.1:${turnPort}?transport=udp`] };
+    turn = { port: turnPort, relay: true, stunUrl: `stun:127.0.0.1:${turnPort}`, urls: [`stun:127.0.0.1:${turnPort}`, `turn:127.0.0.1:${turnPort}?transport=udp`] };
     process.stdout.write(`    relay: ${relayHow}, each allocation capped at ${TURN_MAX_BPS} bytes a second\n`);
   } else {
-    // The protocol wants a TURN URL in every invitation. Nothing listens on this port; the host-candidate journeys do not need it.
-    turn = { port: turnPort, urls: [`turn:127.0.0.1:${turnPort}?transport=udp`] };
+    // STUN only, as a default install is. Nothing listens on this port; the host-candidate journeys do not need it.
+    turn = { port: turnPort, relay: false, stunUrl: `stun:127.0.0.1:${turnPort}`, urls: [`stun:127.0.0.1:${turnPort}`] };
     if (process.env.DIRECT_REQUIRE_TURN === "1") throw new Error("DIRECT_REQUIRE_TURN is set but no coturn (turnserver, or the Docker image) was found.");
   }
 
@@ -760,6 +767,7 @@ try {
     const [phoneConfig] = await rtcConfigs(phone.page);
     assert.equal(phoneConfig.policy, "all");
     assert.deepEqual(phoneConfig.urls, turn.urls, "The phone uses the invitation's servers and nothing else.");
+    assert.equal(phoneConfig.credentialed, turn.relay, "A credential reaches the phone's configuration only when the invitation has a TURN URL.");
     const path = phonePath.seen.path;
     assert.ok(path, "The selected path was seen while the file moved.");
     assert.ok(["host", "prflx"].includes(path.local) && ["host", "prflx"].includes(path.remote), `Direct over host candidates, not ${JSON.stringify(path)}.`);
@@ -773,6 +781,54 @@ try {
     assert.deepEqual(phone.consoleProblems, []);
     assert.deepEqual(drop.consoleProblems, []);
     assert.ok(phone.requests.every((request) => /^(?:GET|POST|PUT|DELETE|OPTIONS) (?:http:\/\/127\.0\.0\.1|data:|blob:)/u.test(request)), "The phone contacted only the page host and the pairing service.");
+    await phone.context.close();
+    await drop.context.close();
+  });
+
+  await step("journey: a STUN-only invitation sends over host candidates", async () => {
+    const session = await newSession({ ice: "stun" });
+    const phone = await openPhone(session.link);
+    const drop = await openDrop(session);
+    await toChoose(session, phone, drop);
+    const hide = phone.page.locator("#hide");
+    assert.equal(await hide.isDisabled(), true, "Hiding is not offered without a TURN URL in the invitation.");
+    assert.equal(await hide.isChecked(), false);
+    assert.match(await phone.page.locator("#view").innerText(), /can't hide addresses right now/u);
+    const bytes = sample(2 * 1024 * 1024 + 99, 5);
+    await chooseFile(phone.page, { name: "stun-only.bin", mimeType: "application/octet-stream", buffer: bytes });
+    await waitDrop(drop, () => window.__drop.snapshot().phase === "manifest", "the manifest");
+    const phonePath = watchPath(phone.page);
+    await drop.page.evaluate(() => window.__drop.accept());
+    await expectTitle(phone.page, "Sent", 60_000);
+    phonePath.stop();
+    await waitDrop(drop, () => window.__drop.snapshot().phase === "kept", "KEPT", 30_000);
+    assert.equal((await snapshot(drop)).kept.sha256, sha256(bytes));
+    const [config] = await rtcConfigs(phone.page);
+    assert.equal(config.policy, "all");
+    assert.deepEqual(config.urls, [turn.stunUrl], "Only the STUN URL reaches the phone's configuration.");
+    assert.equal(config.credentialed, false, "No username or credential member is given for a STUN server.");
+    const [dropConfig] = await rtcConfigs(drop.page);
+    assert.equal(dropConfig.credentialed, false, "Nor does the receiver give one.");
+    const path = phonePath.seen.path;
+    assert.ok(path && ["host", "prflx"].includes(path.local) && ["host", "prflx"].includes(path.remote), `Direct over host candidates, not ${JSON.stringify(path)}.`);
+    assert.deepEqual(phone.consoleProblems, []);
+    assert.ok(phone.requests.every((request) => /^(?:GET|POST|PUT|DELETE|OPTIONS) (?:http:\/\/127\.0\.0\.1|data:|blob:)/u.test(request)), "The phone contacted only the page host and the pairing service.");
+    await phone.context.close();
+    await drop.context.close();
+  });
+
+  await step("journey: a receiver that hides cannot with a STUN-only invitation, and the phone makes no peer connection", async () => {
+    const session = await newSession({ ice: "stun", hide: true });
+    const phone = await openPhone(session.link);
+    const drop = await openDrop(session);
+    await toChoose(session, phone, drop);
+    await chooseFile(phone.page, { name: "nothing.bin", mimeType: "application/octet-stream", buffer: sample(4096, 9) });
+    await waitDrop(drop, () => window.__drop.snapshot().phase === "manifest", "the manifest");
+    await drop.page.evaluate(() => window.__drop.accept());
+    await waitDrop(drop, () => window.__drop.snapshot().phase === "ended", "the receiver to refuse", 30_000);
+    assert.equal((await snapshot(drop)).failure, "no-relay");
+    assert.equal(await rtcCount(drop.page), 0, "The receiver built no peer connection.");
+    assert.equal(await rtcCount(phone.page), 0, "The phone built no peer connection.");
     await phone.context.close();
     await drop.context.close();
   });

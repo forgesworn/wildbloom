@@ -6,7 +6,7 @@ export type ScreenId =
   | "check" | "mismatch" | "confirming"
   | "choose" | "too-big" | "empty" | "unreadable"
   | "asking" | "declined" | "linking" | "sending" | "finishing" | "sent"
-  | "no-relay" | "no-room" | "connect-failed" | "lost" | "they-stopped" | "failed"
+  | "no-relay" | "no-room" | "connect-failed" | "connect-failed-direct" | "lost" | "they-stopped" | "failed"
   | "cancelled" | "invalid";
 
 export interface ViewState {
@@ -28,6 +28,8 @@ export interface ViewState {
   readonly hide: boolean;
   /** Whether the receiver hides its address from this phone. */
   readonly theirHidden: boolean;
+  /** Whether the invitation holds a TURN URL, which hiding this phone's address needs. */
+  readonly relayOffered: boolean;
   /**
    * The end of the file has been sent, so the receiver may already be keeping it. From then on the only ending
    * that says it arrived is the receiver's own "kept"; every other ending must say the outcome is not known.
@@ -47,7 +49,7 @@ export type ViewEvent =
   | { readonly type: "paired"; readonly words: string }
   | { readonly type: "yes" }
   | { readonly type: "no" }
-  | { readonly type: "invitation"; readonly maxBytes: number; readonly theirHidden: boolean }
+  | { readonly type: "invitation"; readonly maxBytes: number; readonly theirHidden: boolean; readonly relayOffered: boolean }
   | { readonly type: "invalid-invitation" }
   | { readonly type: "expired" }
   | { readonly type: "hide"; readonly on: boolean }
@@ -83,6 +85,7 @@ export const INITIAL_STATE: ViewState = Object.freeze({
   reconnecting: false,
   hide: false,
   theirHidden: false,
+  relayOffered: false,
   endSent: false,
 });
 
@@ -126,13 +129,14 @@ export function reduce(state: ViewState, event: ViewEvent): ViewState {
     case "no":
       return at === "check" ? go(state, "mismatch", { checkWords: "" }) : state;
     case "invitation":
-      return at === "confirming" ? go(state, "choose", { maxBytes: event.maxBytes, theirHidden: event.theirHidden, checkWords: "" }) : state;
+      return at === "confirming" ? go(state, "choose", { maxBytes: event.maxBytes, theirHidden: event.theirHidden, relayOffered: event.relayOffered, hide: event.relayOffered && state.hide, checkWords: "" }) : state;
     case "invalid-invitation":
       return at === "confirming" ? go(state, "invalid", { checkWords: "" }) : state;
     case "expired":
       return BEFORE_FILE.includes(at) || at === "asking" ? go(state, "expired", { checkWords: "" }) : state;
     case "hide":
-      return state.hide === event.on ? state : { ...state, hide: event.on };
+      // Hiding needs a TURN URL in the invitation; without one the choice is not offered and cannot be turned on.
+      return state.hide === (event.on && state.relayOffered) ? state : { ...state, hide: event.on && state.relayOffered };
     case "too-big":
       return PICKING.includes(at) ? go(state, "too-big") : state;
     case "empty":
@@ -161,7 +165,8 @@ export function reduce(state: ViewState, event: ViewEvent): ViewState {
     case "no-room":
       return AFTER_OFFER.includes(at) ? go(state, "no-room", { reconnecting: false }) : state;
     case "connect-failed":
-      return AFTER_OFFER.includes(at) ? go(state, "connect-failed", { reconnecting: false }) : state;
+      // With no relay on offer the two ends can only meet directly, and some networks do not allow that.
+      return AFTER_OFFER.includes(at) ? go(state, state.relayOffered ? "connect-failed" : "connect-failed-direct", { reconnecting: false }) : state;
     case "lost":
       return AFTER_OFFER.includes(at) || at === "choose" || at === "confirming" ? go(state, "lost", { reconnecting: false, checkWords: "" }) : state;
     case "they-stopped":
