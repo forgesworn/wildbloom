@@ -73,7 +73,7 @@
     "@types/parse-torrent": "11.0.1",
     "@types/path-browserify": "1.0.3",
     "@types/ws": "8.18.2",
-    "@vitest/coverage-v8": "4.1.12",
+    "@vitest/coverage-v8": "5.0.5",
     "bittorrent-tracker": "11.2.3",
     "playwright-core": "1.64.1",
     "typescript": "7.0.2",
