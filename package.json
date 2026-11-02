@@ -58,10 +58,10 @@
   "dependencies": {
     "@forgesworn/foregather-kit": "https://github.com/forgesworn/foregather-kit/releases/download/v0.6.0/forgesworn-foregather-kit-0.6.0.tgz",
     "@noble/hashes": "2.4.0",
-    "402-announce": "2.3.0",
+    "402-announce": "2.3.1",
     "create-torrent": "6.1.3",
     "farrier-kit": "1.1.3",
-    "nostr-tools": "2.25.2",
+    "nostr-tools": "2.25.4",
     "parse-torrent": "11.0.24",
     "path-browserify": "1.0.1",
     "webtorrent": "3.0.21"
