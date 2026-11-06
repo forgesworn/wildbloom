@@ -47,6 +47,8 @@ Linux and macOS. It is not currently a native desktop application; native
 packaging remains conditional on a proven requirement that the browser sandbox
 cannot meet. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+For what Wildbloom talks to and the interface to each, see [`docs/ECOSYSTEM.md`](docs/ECOSYSTEM.md).
+
 No private key enters Wildbloom. Signatures come from an injected NIP-07 signer
 or an exact copy/sign/paste handoff to an external signer. Wildbloom accepts
 only the returned signed event and never contacts that signer. No network action runs on page load. Uploading, relay
