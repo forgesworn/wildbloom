@@ -75,12 +75,12 @@
     "@types/ws": "8.18.2",
     "@vitest/coverage-v8": "4.1.12",
     "bittorrent-tracker": "11.2.3",
-    "playwright-core": "1.64.1",
+    "playwright-core": "1.65.0",
     "typescript": "7.0.2",
-    "vite": "8.3.5",
+    "vite": "8.3.6",
     "vitest": "4.1.12",
-    "wrangler": "4.151.3",
-    "ws": "8.22.0"
+    "wrangler": "4.158.0",
+    "ws": "8.22.1"
   },
   "overrides": {
     "miniflare": {
