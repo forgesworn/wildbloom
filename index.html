@@ -237,6 +237,7 @@
         </label>
         <p id="storage-layout-summary" class="layout-summary" aria-live="polite">One node holds the encrypted file. Keep a separate backup: this layout has no redundancy.</p>
         <div id="pool-settings" hidden>
+          <label class="check"><input id="store-existing-envelope" type="checkbox" /><span>Store an already encrypted file, such as a Signet account collection. I have checked it in the app that made it and kept that app’s recovery words or key. Wildbloom will keep these exact bytes without adding another password.</span></label>
           <p class="privacy-boundary">Pool files are always encrypted. Split mode sends each node only one coded part; reconstruction and repair happen in your browser or an explicitly configured owner repair service. Operators may collude or fetch other parts if they learn their addresses. Encryption protects the contents. Keep the signed pool receipt privately alongside a separate recovery key; pool receipts are not published to relays or swarms.</p>
           <label>Pool nodes <small id="pool-nodes-hint">One URL, failure group and optional capacity weight per line. Nodes at the same site should share a group. Weights are relative allocations, not measured free space.</small>
             <textarea id="pool-nodes" rows="5" maxlength="8192" placeholder="https://a.example site-a 1&#10;https://b.example site-b 1" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" aria-describedby="pool-nodes-hint pool-layout-help"></textarea>
@@ -470,6 +471,7 @@
           Recovery key
           <input id="recovery-key-input" type="password" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="wbk1_…" />
         </label>
+        <label id="encrypted-pool-download-field" class="check" hidden><input id="download-encrypted-pool" type="checkbox" /><span>Download the encrypted file to open in its original app, such as Signet. Do not enter Signet recovery words here.</span></label>
         <div class="actions">
           <button id="resolve-event" type="button">Resolve signed event</button>
         </div>
