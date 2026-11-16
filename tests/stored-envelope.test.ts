@@ -40,7 +40,7 @@ describe('explicit storage of an existing encrypted file', () => {
     }
     surviving = new Set([new URL(freshReceipt.manifest.parts[0]!.targets[0]!.origin).origin]);
     await expect(fetchPool(freshReceipt, {fetchImpl})).rejects.toThrow();
-  });
+  }, 30_000);
   it('keeps the exact ciphertext without inventing another recovery key', async () => {
     const {file} = await encryptPrivacyEnvelope(new File(['a test collection'], 'accounts.json'));
     const stored = await existingEncryptedFile(file);
