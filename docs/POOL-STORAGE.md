@@ -18,6 +18,22 @@ coding is not encryption or threshold secret sharing.
 
 ## Operator journey
 
+An already encrypted FSWNENC2 file, including a Signet `.nstc` account
+collection, can use **Store an already encrypted file** in pool settings.
+Check that file in its originating app first. Wildbloom validates its envelope
+shape and stores the exact ciphertext without creating an additional `wbk1_`
+key. It cannot authenticate that file without its originating key, and does
+not ask for Signet recovery words. Save the private pool receipt independently
+of the encrypted file; keep the originating recovery words or key separately.
+
+For fresh recovery, load the signed receipt and select **Download the encrypted
+file** before fetching. Wildbloom verifies the part hashes and reconstructed
+payload hash, then offers the ciphertext to save. Open it in the originating
+app for authentication and restore. This read needs neither the original
+browser nor the receipt author's signer. Missing receipt/locators cannot be
+reconstructed from the file's decryption words alone. Ordinary Wildbloom files
+can still use their separate recovery key and local decryption as below.
+
 1. Configure nodes to admit the chosen signing identity. Enter one URL, failure
    group and optional positive integer weight per line, e.g.
    `https://a.example site-a 2`. A weight is a relative storage allocation,
@@ -294,3 +310,17 @@ bounded quiescent waits and added UI consent checks.
   build, production browser acceptance and secret scan passed.
 - `npm run acceptance:pool` passed in system Chromium on macOS against a
   locally built debug daemon at commit `3da0293`.
+
+### Existing encrypted-file acceptance — 16 November 2026
+
+`node scripts/pool-acceptance.mjs --existing-envelope` uses a frozen FSWNENC2
+vault fixture with the real browser and disposable local nodes. Set
+`WILDBLOOM_NODE_BIN` to the reviewed daemon. An optional
+`WILDBLOOM_ENCRYPTED_FILE` supplies an already checked application collection
+instead. The test uploads exact existing ciphertext without a new recovery
+key, then recovers the identical bytes in six separate fresh browser
+contexts, one for each 2-of-4 pair. Other nodes are blocked at the browser
+boundary. No original publishing signer is connected for recovery.
+
+This test establishes local software behaviour and does not establish
+independent physical custody, quota admission or long-term retention.

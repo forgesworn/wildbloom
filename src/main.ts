@@ -5,6 +5,7 @@ import { mountNodeServices } from "./services-ui.js";
 import { extendPool, fetchPool, parsePoolNodes, preparePool, preparePoolRepair, resolvePoolReceipt, signPool, uploadPool, type PoolReceipt, type PreparedPool, type PoolReport } from "./core/pool.js";
 import { buildBlossomUri, fetchVerifiedBlob, inspectFile, uploadToBlossom } from "./core/blossom.js";
 import { decryptPrivacyEnvelope, encryptPrivacyEnvelope, type EncryptedEnvelope } from "./core/crypto.js";
+import {existingEncryptedFile} from './core/stored-envelope.js';
 import { buildFileEvent, buildTorrentEvent, MAX_SIGNED_EVENT_JSON_BYTES, parseSignedEventJson, resolveFileEventJson, signEventExactly } from "./core/nostr.js";
 import { publishToRelays, resolveFromRelays } from "./core/relay.js";
 import {
@@ -43,6 +44,8 @@ function element<T extends HTMLElement>(id: string): T {
 }
 
 const storageMode = element<HTMLSelectElement>("storage-mode");
+const storeExistingEnvelope = element<HTMLInputElement>('store-existing-envelope');
+const downloadEncryptedPool = element<HTMLInputElement>('download-encrypted-pool');
 const poolNodes = element<HTMLTextAreaElement>("pool-nodes");
 const poolCopies = element<HTMLInputElement>("pool-copies");
 const poolRequired = element<HTMLInputElement>("pool-required");
@@ -422,6 +425,8 @@ function resetResolution(): void {
   swarmConsent.checked = false;
   recoveryKeyInput.value = "";
   recoveryKeyField.hidden = true;
+  downloadEncryptedPool.checked = false;
+  element<HTMLElement>('encrypted-pool-download-field').hidden = true;
   blossomFetchButton.disabled = true;
   swarmFetchButton.disabled = true;
   resolvedFacts.replaceChildren();
@@ -528,7 +533,7 @@ function applyProfile(): void {
   trackerField.hidden = tor || pool;
   seedGate.hidden = tor || pool;
   if (pool) {
-    uploadConsentCopy.textContent = "I approve signing a private pool receipt, uploading the encrypted layout to its selected nodes and reading back each stored part for verification. I will save the receipt as well as the separate recovery key.";
+    uploadConsentCopy.textContent = "I approve signing a private pool receipt, uploading the encrypted layout to its selected nodes and reading back each stored part for verification. I will save the receipt as well as the recovery key or original app’s recovery words.";
     signEventCopy.textContent = "Pool receipts are signed during upload and saved privately. Relay publication and swarm seeding are unavailable for this layout.";
     return;
   }
@@ -679,6 +684,16 @@ protectFile.addEventListener("change", () => {
   applyProfile();
   setStatus(publishStatus, "Protection choice changed. Inspect the file again before any network action.");
 });
+storeExistingEnvelope.addEventListener('change', () => {
+  resetInspection(); applyProfile();
+  setStatus(publishStatus, 'Encrypted-file storage choice changed. Inspect again and renew upload consent.');
+});
+downloadEncryptedPool.addEventListener('change', () => {
+  downloadController?.abort();
+  clearDownloads(retrieveLinks);
+  recoveryKeyField.hidden = downloadEncryptedPool.checked;
+  updateRetrievalButtons();
+});
 
 acceptExternalSignatureButton.addEventListener("click", () => guard(publishStatus, async () => {
   const pending = externalSigningRequest;
@@ -745,17 +760,22 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
   try {
     const nextSource = await inspectFile(file, "source", controller.signal);
     let nextEnvelope: EncryptedEnvelope | null = null;
+    let existingEnvelope: File | null = null;
     let nextInspected = nextSource;
-    if (protectFile.checked) {
+    if (storageMode.value !== 'single' && storeExistingEnvelope.checked) {
+      existingEnvelope = await existingEncryptedFile(file, controller.signal);
+      nextInspected = await inspectFile(existingEnvelope, 'transfer', controller.signal);
+    } else if (protectFile.checked) {
       setStatus(publishStatus, "Encrypting and padding locally. No bytes have left this browser…");
       nextEnvelope = await encryptPrivacyEnvelope(file, controller.signal);
       nextInspected = await inspectFile(nextEnvelope.file, "transfer", controller.signal);
     }
     let nextPool: PreparedPool | null = null;
     if (storageMode.value !== "single") {
-      if (!nextEnvelope) throw new Error("Pool storage requires encryption.");
+      const encrypted = nextEnvelope?.file ?? existingEnvelope;
+      if (!encrypted) throw new Error("Pool storage requires encryption.");
       setStatus(publishStatus, "Preparing the encrypted pool layout locally…");
-      nextPool = await preparePool(nextEnvelope.file, storageMode.value === "erasure" ? "erasure" : "replicas",
+      nextPool = await preparePool(encrypted, storageMode.value === "erasure" ? "erasure" : "replicas",
         parsePoolNodes(poolNodes.value, profile()), Number(poolRequired.value), Number(poolTotal.value), Number(poolCopies.value), profile(), controller.signal);
     }
     if (controller.signal.aborted
@@ -785,6 +805,9 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
         ["Public SHA-256", nextInspected.sha256],
         ["Protection", nextEnvelope.scheme],
       ]);
+    } else if (existingEnvelope) {
+      showFacts(fileFacts, [['Stored bytes', String(nextInspected.size)], ['Ciphertext SHA-256', nextInspected.sha256],
+        ['Protection', 'Existing FSWNENC2 file. Authentication and recovery must be checked in the original app.']]);
     } else {
       showFacts(fileFacts, [
         ["Name", nextInspected.name],
@@ -796,12 +819,12 @@ element<HTMLButtonElement>("inspect-file").addEventListener("click", () => guard
     }
     if (nextPool) {
       element<HTMLElement>("pool-layout-help").textContent = nextPool.manifest.mode === "erasure"
-        ? `${nextPool.manifest.total} parts on separate failure groups; any ${nextPool.manifest.required} recover the ciphertext. Up to ${nextPool.manifest.total - nextPool.manifest.required} part losses are recoverable. Stored bytes: ${nextPool.manifest.parts.reduce((sum, part) => sum + part.size, 0)} before extra copies. Save both the receipt and the separate key.`
-        : `${nextPool.manifest.copies} complete encrypted copies on separate failure groups. Save the signed receipt and the separate key.`;
+        ? `${nextPool.manifest.total} parts on separate failure groups; any ${nextPool.manifest.required} recover the ciphertext. Up to ${nextPool.manifest.total - nextPool.manifest.required} part losses are recoverable. Stored bytes: ${nextPool.manifest.parts.reduce((sum, part) => sum + part.size, 0)} before extra copies. Save the receipt and the recovery key or original app’s recovery words.`
+        : `${nextPool.manifest.copies} complete encrypted copies on separate failure groups. Save the signed receipt and the recovery key or original app’s recovery words.`;
     }
     applyProfile();
     updateUploadButton();
-    setStatus(publishStatus, nextEnvelope
+    setStatus(publishStatus, existingEnvelope ? 'Existing encrypted file prepared without another key. Save the private pool receipt when uploading, and keep the original app’s recovery words or key.' : nextEnvelope
       ? "Encrypted transfer payload prepared locally. Save the recovery key before enabling upload."
       : "Plaintext inspection complete. No bytes have left this browser.");
   } catch (error) {
@@ -1069,7 +1092,7 @@ resolveButton.addEventListener("click", () => guard(retrieveStatus, async () => 
 function poolReportText(report: PoolReport): string {
   const counts = report.verified.join(", ");
   return report.protected
-    ? `Requested layout verified at ${new Date(report.observedAt).toISOString()}. Verified copies per part: ${counts}. Save the signed pool receipt and separate key. Future retention depends on the nodes.`
+    ? `Requested layout verified at ${new Date(report.observedAt).toISOString()}. Verified copies per part: ${counts}. Save the signed pool receipt and recovery key or original app’s recovery words. Future retention depends on the nodes.`
     : `Storage deficit: verified copies per part ${counts}. ${report.recoverable ? "Enough parts were verified to recover now." : "The recovery threshold has not been verified."} Keep the receipt; retry upload or repair when nodes are available.`;
 }
 
@@ -1088,11 +1111,12 @@ function showResolvedPool(receipt: PoolReceipt): void {
     ["Approved nodes", m.parts.map((part) => `Part ${part.index + 1}: ${part.targets.map((node) => `${node.origin} (${node.failure_group})`).join(", ")}`).join("\n")],
   ]);
   savePoolReceipt(resolvedEventLinks, receipt);
-  recoveryKeyField.hidden = false;
+  recoveryKeyField.hidden = downloadEncryptedPool.checked;
+  element<HTMLElement>('encrypted-pool-download-field').hidden = false;
   replicaInput.disabled = true;
   element<HTMLElement>("pool-repair-panel").hidden = false;
   updateRetrievalButtons();
-  setStatus(retrieveStatus, "Pool receipt verified locally. Check the author and approved nodes above. Fetch will try those nodes only; enter the separate key to decrypt. A receipt is not evidence of current storage.");
+  setStatus(retrieveStatus, "Pool receipt verified locally. Check the author and approved nodes above. Enter its recovery key to decrypt here, or choose an encrypted download to open in the original app. A receipt is not evidence of current storage.");
 }
 
 async function uploadPreparedPool(): Promise<void> {
@@ -1137,7 +1161,8 @@ async function retrievePool(repair: boolean): Promise<void> {
   const revision = resolutionRevision;
   if (repair && (!repairPoolConsent.checked || pubkey !== receipt.event.pubkey)) throw new Error("Connect the receipt author’s signer and approve repair first.");
   const key = recoveryKeyInput.value.trim();
-  if (!repair && !key) throw new Error("Enter the separately received recovery key.");
+  const keepEncrypted = downloadEncryptedPool.checked;
+  if (!repair && !keepEncrypted && !key) throw new Error("Enter the separately received recovery key, or choose to download the encrypted file.");
   const controller = new AbortController();
   downloadController = controller;
   downloadTransport = "blossom";
@@ -1166,6 +1191,12 @@ async function retrievePool(repair: boolean): Promise<void> {
       if (!controller.signal.aborted && resolutionRevision === revision) setStatus(retrieveStatus, poolReportText(result), !result.protected);
     } else {
       const ciphertext = await fetchPool(receipt, options);
+      if (keepEncrypted) {
+        if (controller.signal.aborted || resolutionRevision !== revision) return;
+        addDownload(retrieveLinks, ciphertext, 'recovered-encrypted.fswnenc', 'Save verified encrypted file');
+        setStatus(retrieveStatus, 'Pool parts and reconstructed ciphertext hash verified. Open this encrypted file in the app that made it to authenticate and restore it.');
+        return;
+      }
       const file = await decryptPrivacyEnvelope(ciphertext, key, controller.signal);
       if (controller.signal.aborted || resolutionRevision !== revision) return;
       recoveryKeyInput.value = "";
