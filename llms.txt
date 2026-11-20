@@ -2,6 +2,14 @@
 
 > Wildbloom is a local-first production-candidate browser application, not a library or SDK, that makes one file available through Nostr (signed discovery), Blossom (content-addressed HTTP storage) and optional BitTorrent/WebTorrent peer delivery. No private key ever enters it: signatures come from an injected NIP-07 signer or an exact copy, sign and paste handoff to an external signer. Content, filename and MIME type are encrypted in the browser by default, so Blossom stores only an encrypted envelope and the recovery key never leaves page memory. Nothing touches the network on page load. Files up to 256 MiB. It supplies no Blossom server, relay, tracker or network defaults; bring your own. It is not a general-availability release.
 
+## ForgeSworn ecosystem
+
+- [ForgeSworn library guide](https://forgesworn.dev/llms.txt): Find related libraries, tools and integration guides by task and runtime.
+- [ForgeSworn on GitHub](https://github.com/forgesworn): Browse the organisation’s public repositories.
+- [Project source](https://github.com/forgesworn/wildbloom): Canonical source repository, documentation and release information.
+- [wildbloom-node](https://github.com/forgesworn/wildbloom-node): Run a self-hosted Blossom storage node.
+- [shelter-kit](https://github.com/forgesworn/shelter-kit): Embed the transport-neutral storage core in Rust.
+
 ## Docs
 
 - [README](https://github.com/forgesworn/wildbloom/blob/main/README.md): status, network profiles, first run, verification gates, specifications
